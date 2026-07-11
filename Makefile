@@ -1,4 +1,6 @@
 BEDROCK_GOPHERS_REV := 1b6a7317ff0cf5245550c6744a201d3984707b26
+BEDROCK_GOPHERS_SHORT_REV := $(shell printf '%.12s' $(BEDROCK_GOPHERS_REV))
+GO_FRAMEWORK_REV := $(shell go list -m -f '{{.Version}}' github.com/bedrock-gophers/plugins | sed 's/.*-//')
 CACHE := .cache/bedrock-gophers
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -15,7 +17,10 @@ LIFECYCLE_LIBRARY := liblifecycle_logger.so
 COMMAND_LIBRARY := libhello_command.so
 endif
 
-.PHONY: prepare build run clean
+.PHONY: check-revision prepare build run clean
+
+check-revision:
+	@test "$(GO_FRAMEWORK_REV)" = "$(BEDROCK_GOPHERS_SHORT_REV)" || (printf 'Go framework is pinned to %s, expected %s\n' "$(GO_FRAMEWORK_REV)" "$(BEDROCK_GOPHERS_SHORT_REV)"; exit 1)
 
 $(CACHE)/.git:
 	mkdir -p .cache
@@ -25,7 +30,7 @@ prepare: $(CACHE)/.git
 	git -C $(CACHE) fetch --quiet origin
 	git -C $(CACHE) checkout --quiet $(BEDROCK_GOPHERS_REV)
 
-build: prepare
+build: check-revision prepare
 	cargo build --release --manifest-path plugins/movement-guard/Cargo.toml
 	cargo build --release --manifest-path plugins/chat-filter/Cargo.toml
 	cargo build --release --manifest-path plugins/lifecycle-logger/Cargo.toml
