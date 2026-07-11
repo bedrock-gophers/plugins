@@ -187,9 +187,9 @@ func (e describedEnum) Type() string { return e.typeName }
 func (e describedEnum) Options(source cmd.Source) []string {
 	if e.parameter == nil {
 		if e.players != nil {
-			return e.players.Names()
+			return lowercaseOptions(e.players.Names())
 		}
-		return e.options
+		return lowercaseOptions(e.options)
 	}
 	sourceName := fmt.Sprintf("%T", source)
 	if named, ok := source.(cmd.NamedTarget); ok {
@@ -205,7 +205,15 @@ func (e describedEnum) Options(source cmd.Source) []string {
 	if err != nil {
 		return nil
 	}
-	return options
+	return lowercaseOptions(options)
+}
+
+func lowercaseOptions(options []string) []string {
+	normalized := make([]string, len(options))
+	for index, option := range options {
+		normalized[index] = strings.ToLower(option)
+	}
+	return normalized
 }
 
 func describe(parameters ...pluginParameter) []cmd.ParamInfo {

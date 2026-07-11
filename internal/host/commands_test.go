@@ -78,3 +78,14 @@ func TestStructuredCommandParsesSubcommandAndEnum(t *testing.T) {
 		t.Fatalf("output = %#v", source.output)
 	}
 }
+
+func TestPlayerEnumOptionsAreLowercase(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		players.Register(player, 1)
+		options := (describedEnum{players: players}).Options(&commandSourceStub{})
+		if len(options) != 1 || options[0] != "testplayer" {
+			t.Fatalf("options = %#v", options)
+		}
+	})
+}

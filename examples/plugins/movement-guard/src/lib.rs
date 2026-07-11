@@ -6,7 +6,7 @@ struct MovementGuard;
 #[plugin]
 impl Plugin for MovementGuard {
     fn on_move(&self, event: &mut PlayerMoveEvent<'_>) {
-        if event.new_position().y < 0.0 {
+        if event.new_position().y < -64.0 {
             event.cancel();
         }
     }
