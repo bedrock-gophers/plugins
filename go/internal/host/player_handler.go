@@ -1,0 +1,84 @@
+// Package host adapts Dragonfly lifecycle and handlers to the native runtime.
+package host
+
+import (
+	"log/slog"
+
+	"github.com/bedrock-gophers/plugins/go/internal/native"
+	"github.com/df-mc/dragonfly/server/block/cube"
+	"github.com/df-mc/dragonfly/server/player"
+	"github.com/go-gl/mathgl/mgl64"
+)
+
+type playerRuntime interface {
+	Subscriptions() uint64
+	HandlePlayerMove(native.PlayerMoveInput, bool) (bool, error)
+	HandlePlayerChat(native.PlayerChatInput, bool) (native.PlayerChatOutput, error)
+}
+
+// PlayerHandler forwards supported Dragonfly player events into the native runtime.
+// Unsupported events keep Dragonfly's default behavior through NopHandler.
+type PlayerHandler struct {
+	player.NopHandler
+	runtime    playerRuntime
+	log        *slog.Logger
+	generation uint64
+}
+
+var _ player.Handler = (*PlayerHandler)(nil)
+
+func NewPlayerHandler(runtime playerRuntime, log *slog.Logger, generation uint64) *PlayerHandler {
+	if log == nil {
+		log = slog.Default()
+	}
+	return &PlayerHandler{runtime: runtime, log: log, generation: generation}
+}
+
+func (h *PlayerHandler) HandleMove(ctx *player.Context, newPosition mgl64.Vec3, newRotation cube.Rotation) {
+	if h.runtime.Subscriptions()&native.PlayerMoveSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	oldPosition := p.Position()
+	cancelled, err := h.runtime.HandlePlayerMove(native.PlayerMoveInput{
+		Player:      h.playerID(p),
+		OldPosition: native.Vec3{X: oldPosition.X(), Y: oldPosition.Y(), Z: oldPosition.Z()},
+		NewPosition: native.Vec3{X: newPosition.X(), Y: newPosition.Y(), Z: newPosition.Z()},
+		Rotation:    native.Rotation{Yaw: float32(newRotation.Yaw()), Pitch: float32(newRotation.Pitch())},
+	}, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin movement handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandleChat(ctx *player.Context, message *string) {
+	if h.runtime.Subscriptions()&native.PlayerChatSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	output, err := h.runtime.HandlePlayerChat(native.PlayerChatInput{
+		Player:  h.playerID(p),
+		Message: *message,
+	}, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin chat handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if output.Replacement != nil {
+		*message = *output.Replacement
+	}
+	if output.Cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) playerID(p *player.Player) native.PlayerID {
+	id := native.PlayerID{Generation: h.generation}
+	uuid := p.UUID()
+	copy(id.UUID[:], uuid[:])
+	return id
+}

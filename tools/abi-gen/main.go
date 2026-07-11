@@ -100,7 +100,10 @@ func readEvents(dir string) ([]event, error) {
 }
 
 func validateFields(eventName string, fields []field) error {
-	valid := map[string]bool{"bool": true, "player_id": true, "rotation": true, "vec3": true}
+	valid := map[string]bool{
+		"bool": true, "player_id": true, "rotation": true, "string_buffer": true,
+		"string_view": true, "vec3": true,
+	}
 	seen := map[string]bool{}
 	for _, f := range fields {
 		if f.Name == "" || !valid[f.Type] {
@@ -137,6 +140,7 @@ typedef struct { uint8_t bytes[16]; uint64_t generation; } DfPlayerId;
 typedef struct { double x; double y; double z; } DfVec3;
 typedef struct { float yaw; float pitch; } DfRotation;
 typedef struct { const uint8_t *data; uint64_t len; } DfStringView;
+typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffer;
 
 typedef struct {
     uint32_t abi_version;
@@ -219,6 +223,15 @@ pub struct DfRotation { pub yaw: f32, pub pitch: f32 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfStringView { pub data: *const u8, pub len: u64 }
+impl Default for DfStringView {
+    fn default() -> Self { Self { data: core::ptr::null(), len: 0 } }
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfStringBuffer { pub data: *mut u8, pub len: u64, pub capacity: u64 }
+impl Default for DfStringBuffer {
+    fn default() -> Self { Self { data: core::ptr::null_mut(), len: 0, capacity: 0 } }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfAbiHeader { pub abi_version: u32, pub struct_size: u32, pub subscriptions: u64 }
@@ -263,11 +276,17 @@ unsafe impl Sync for DfPluginApiV1 {}
 }
 
 func cType(t string) string {
-	return map[string]string{"bool": "uint8_t", "player_id": "DfPlayerId", "rotation": "DfRotation", "vec3": "DfVec3"}[t]
+	return map[string]string{
+		"bool": "uint8_t", "player_id": "DfPlayerId", "rotation": "DfRotation",
+		"string_buffer": "DfStringBuffer", "string_view": "DfStringView", "vec3": "DfVec3",
+	}[t]
 }
 
 func rustType(t string) string {
-	return map[string]string{"bool": "u8", "player_id": "DfPlayerId", "rotation": "DfRotation", "vec3": "DfVec3"}[t]
+	return map[string]string{
+		"bool": "u8", "player_id": "DfPlayerId", "rotation": "DfRotation",
+		"string_buffer": "DfStringBuffer", "string_view": "DfStringView", "vec3": "DfVec3",
+	}[t]
 }
 
 func cName(evt event) string    { return "Df" + title(evt.Domain) + title(evt.Name) }

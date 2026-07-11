@@ -4,9 +4,11 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 RUNTIME_LIBRARY := libdragonfly_plugin_runtime.dylib
 PLUGIN_LIBRARY := libmovement_guard_plugin.dylib
+CHAT_PLUGIN_LIBRARY := libchat_filter_plugin.dylib
 else
 RUNTIME_LIBRARY := libdragonfly_plugin_runtime.so
 PLUGIN_LIBRARY := libmovement_guard_plugin.so
+CHAT_PLUGIN_LIBRARY := libchat_filter_plugin.so
 endif
 
 generate:
@@ -18,10 +20,11 @@ check-generated:
 	cargo fmt --all -- --check
 
 build-native: generate
-	cargo build --release -p dragonfly-plugin-runtime -p movement-guard-plugin
+	cargo build --release -p dragonfly-plugin-runtime -p movement-guard-plugin -p chat-filter-plugin
 	mkdir -p build/native build/plugins
 	cp target/release/$(RUNTIME_LIBRARY) build/native/
 	cp target/release/$(PLUGIN_LIBRARY) build/plugins/
+	cp target/release/$(CHAT_PLUGIN_LIBRARY) build/plugins/
 
 test: build-native check-generated
 	cargo test --workspace
@@ -33,4 +36,3 @@ benchmark: build-native
 clean:
 	cargo clean
 	rm -rf build
-

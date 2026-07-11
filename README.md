@@ -31,7 +31,7 @@ use dragonfly_plugin::{PlayerMoveEvent, Plugin, plugin};
 #[derive(Default)]
 struct MovementGuard;
 
-#[plugin(id = "example:movement-guard")]
+#[plugin]
 impl Plugin for MovementGuard {
     fn on_move(&self, event: &mut PlayerMoveEvent<'_>) {
         if event.new_position().y < 0.0 {
@@ -42,6 +42,13 @@ impl Plugin for MovementGuard {
 ```
 
 Events continue by default. Cancellation is monotonic; no `allow()` API exists.
+Plugin identity defaults to Cargo's package name; handler code does not repeat it.
 
 See [native plugin architecture](docs/plans/rust-plugin-architecture.md).
 
+## Examples
+
+- [Movement guard](examples/rust/movement-guard): cancels movement below Y=0.
+- [Chat filter](examples/rust/chat-filter): replaces text and cancels a blocked message.
+
+Both examples compile as native plugin libraries through `make build-native`.

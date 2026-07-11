@@ -9,4 +9,12 @@ events:
       - { name: rotation, type: rotation }
     state:
       - { name: cancelled, type: bool }
-
+  - name: chat
+    id: 2
+    input:
+      - { name: player, type: player_id }
+      - { name: message, type: string_view }
+    state:
+      - { name: cancelled, type: bool }
+      - { name: has_replacement, type: bool }
+      - { name: replacement, type: string_buffer }

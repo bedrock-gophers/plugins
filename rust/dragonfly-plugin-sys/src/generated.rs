@@ -20,6 +20,15 @@ pub struct DfRotation { pub yaw: f32, pub pitch: f32 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfStringView { pub data: *const u8, pub len: u64 }
+impl Default for DfStringView {
+    fn default() -> Self { Self { data: core::ptr::null(), len: 0 } }
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfStringBuffer { pub data: *mut u8, pub len: u64, pub capacity: u64 }
+impl Default for DfStringBuffer {
+    fn default() -> Self { Self { data: core::ptr::null_mut(), len: 0, capacity: 0 } }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfAbiHeader { pub abi_version: u32, pub struct_size: u32, pub subscriptions: u64 }
@@ -38,6 +47,22 @@ pub struct DfPlayerMoveInput {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfPlayerMoveState {
     pub cancelled: u8,
+}
+
+pub const DF_EVENT_PLAYER_CHAT: DfEventId = 2;
+pub const DF_SUBSCRIPTION_PLAYER_CHAT: u64 = 1u64 << 1;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerChatInput {
+    pub player: DfPlayerId,
+    pub message: DfStringView,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerChatState {
+    pub cancelled: u8,
+    pub has_replacement: u8,
+    pub replacement: DfStringBuffer,
 }
 
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;

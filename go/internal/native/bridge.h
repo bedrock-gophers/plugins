@@ -21,6 +21,11 @@ DfStatus bg_runtime_handle_player_move(
     const DfPlayerMoveInput *input,
     DfPlayerMoveState *state
 );
+DfStatus bg_runtime_handle_player_chat(
+    BgRuntimeLibrary *library,
+    const DfPlayerChatInput *input,
+    DfPlayerChatState *state
+);
 uint64_t bg_runtime_handle_player_move_value(
     BgRuntimeLibrary *library,
     DfPlayerMoveInput input,

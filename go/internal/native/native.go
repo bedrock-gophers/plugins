@@ -16,7 +16,11 @@ import (
 	"unsafe"
 )
 
-const PlayerMoveSubscription uint64 = 1
+const (
+	PlayerMoveSubscription  uint64 = 1
+	PlayerChatSubscription  uint64 = 2
+	MaxChatReplacementBytes        = 4096
+)
 
 type PlayerID struct {
 	UUID       [16]byte
@@ -36,6 +40,16 @@ type PlayerMoveInput struct {
 	OldPosition Vec3
 	NewPosition Vec3
 	Rotation    Rotation
+}
+
+type PlayerChatInput struct {
+	Player  PlayerID
+	Message string
+}
+
+type PlayerChatOutput struct {
+	Cancelled   bool
+	Replacement *string
 }
 
 // Runtime owns a loaded Rust runtime and its plugin libraries.
@@ -102,10 +116,7 @@ func (r *Runtime) HandlePlayerMove(input PlayerMoveInput, cancelled bool) (bool,
 		return cancelled, errors.New("native runtime is closed")
 	}
 	var nativeInput C.DfPlayerMoveInput
-	for i, value := range input.Player.UUID {
-		nativeInput.player.bytes[i] = C.uint8_t(value)
-	}
-	nativeInput.player.generation = C.uint64_t(input.Player.Generation)
+	fillPlayerID(&nativeInput.player, input.Player)
 	nativeInput.old_position = C.DfVec3{x: C.double(input.OldPosition.X), y: C.double(input.OldPosition.Y), z: C.double(input.OldPosition.Z)}
 	nativeInput.new_position = C.DfVec3{x: C.double(input.NewPosition.X), y: C.double(input.NewPosition.Y), z: C.double(input.NewPosition.Z)}
 	nativeInput.rotation = C.DfRotation{yaw: C.float(input.Rotation.Yaw), pitch: C.float(input.Rotation.Pitch)}
@@ -120,4 +131,51 @@ func (r *Runtime) HandlePlayerMove(input PlayerMoveInput, cancelled bool) (bool,
 		return finalCancelled, fmt.Errorf("native movement handler failed with status %d", status)
 	}
 	return finalCancelled, nil
+}
+
+func (r *Runtime) HandlePlayerChat(input PlayerChatInput, cancelled bool) (PlayerChatOutput, error) {
+	output := PlayerChatOutput{Cancelled: cancelled}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	message := C.CBytes([]byte(input.Message))
+	defer C.free(message)
+	replacement := C.malloc(MaxChatReplacementBytes)
+	if replacement == nil {
+		return output, errors.New("allocate chat replacement buffer")
+	}
+	defer C.free(replacement)
+
+	var nativeInput C.DfPlayerChatInput
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.message = C.DfStringView{
+		data: (*C.uint8_t)(message),
+		len:  C.uint64_t(len(input.Message)),
+	}
+	state := C.DfPlayerChatState{
+		replacement: C.DfStringBuffer{
+			data:     (*C.uint8_t)(replacement),
+			capacity: MaxChatReplacementBytes,
+		},
+	}
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_player_chat(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+		output.Cancelled = state.cancelled != 0
+		return output, fmt.Errorf("native chat handler failed with status %d", int32(status))
+	}
+	output.Cancelled = state.cancelled != 0
+	if state.has_replacement != 0 {
+		value := string(C.GoBytes(replacement, C.int(state.replacement.len)))
+		output.Replacement = &value
+	}
+	return output, nil
+}
+
+func fillPlayerID(destination *C.DfPlayerId, source PlayerID) {
+	for i, value := range source.UUID {
+		destination.bytes[i] = C.uint8_t(value)
+	}
+	destination.generation = C.uint64_t(source.Generation)
 }

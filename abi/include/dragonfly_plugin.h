@@ -19,6 +19,7 @@ typedef struct { uint8_t bytes[16]; uint64_t generation; } DfPlayerId;
 typedef struct { double x; double y; double z; } DfVec3;
 typedef struct { float yaw; float pitch; } DfRotation;
 typedef struct { const uint8_t *data; uint64_t len; } DfStringView;
+typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffer;
 
 typedef struct {
     uint32_t abi_version;
@@ -38,6 +39,19 @@ typedef struct {
 typedef struct {
     uint8_t cancelled;
 } DfPlayerMoveState;
+
+#define DF_EVENT_PLAYER_CHAT 2u
+
+typedef struct {
+    DfPlayerId player;
+    DfStringView message;
+} DfPlayerChatInput;
+
+typedef struct {
+    uint8_t cancelled;
+    uint8_t has_replacement;
+    DfStringBuffer replacement;
+} DfPlayerChatState;
 
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
@@ -61,6 +75,7 @@ void df_runtime_destroy(DfRuntime *runtime);
 uint64_t df_runtime_plugin_count(const DfRuntime *runtime);
 uint64_t df_runtime_subscriptions(const DfRuntime *runtime);
 DfStatus df_runtime_handle_player_move(DfRuntime *runtime, const DfPlayerMoveInput *input, DfPlayerMoveState *state);
+DfStatus df_runtime_handle_player_chat(DfRuntime *runtime, const DfPlayerChatInput *input, DfPlayerChatState *state);
 
 #ifdef __cplusplus
 }

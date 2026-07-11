@@ -1,6 +1,7 @@
 use dragonfly_plugin_sys::{
-    DF_ABI_VERSION, DF_EVENT_PLAYER_MOVE, DF_STATUS_ERROR, DF_STATUS_OK, DfPlayerMoveInput,
-    DfPlayerMoveState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
+    DF_ABI_VERSION, DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_MOVE, DF_STATUS_ERROR, DF_STATUS_OK,
+    DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_MOVE, DfPlayerChatInput, DfPlayerChatState,
+    DfPlayerMoveInput, DfPlayerMoveState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -67,7 +68,7 @@ impl DfRuntime {
 
     fn handle_move(&self, input: &DfPlayerMoveInput, state: &mut DfPlayerMoveState) -> DfStatus {
         for plugin in &self.plugins {
-            if plugin.api.header.subscriptions & 1 == 0 {
+            if plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_MOVE == 0 {
                 continue;
             }
             let was_cancelled = state.cancelled != 0;
@@ -93,6 +94,57 @@ impl DfRuntime {
         }
         DF_STATUS_OK
     }
+
+    fn handle_chat(&self, input: &DfPlayerChatInput, state: &mut DfPlayerChatState) -> DfStatus {
+        for plugin in &self.plugins {
+            if plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_CHAT == 0 {
+                continue;
+            }
+            let was_cancelled = state.cancelled != 0;
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            // SAFETY: pointers refer to ABI-compatible values for this synchronous callback.
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_CHAT,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if status != DF_STATUS_OK || !valid_chat_state(state) {
+                return DF_STATUS_ERROR;
+            }
+        }
+        DF_STATUS_OK
+    }
+}
+
+fn valid_chat_state(state: &DfPlayerChatState) -> bool {
+    if state.has_replacement == 0 {
+        return true;
+    }
+    if state.replacement.len > state.replacement.capacity {
+        return false;
+    }
+    if state.replacement.len == 0 {
+        return true;
+    }
+    if state.replacement.data.is_null() {
+        return false;
+    }
+    // SAFETY: bounds and pointer were validated above for the caller-owned buffer.
+    let bytes = unsafe {
+        slice::from_raw_parts(
+            state.replacement.data.cast_const(),
+            state.replacement.len as usize,
+        )
+    };
+    std::str::from_utf8(bytes).is_ok()
 }
 
 impl LoadedPlugin {
@@ -280,6 +332,30 @@ pub unsafe extern "C" fn df_runtime_handle_player_move(
     };
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         runtime.handle_move(input, state)
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+#[unsafe(no_mangle)]
+/// Dispatches a player chat event.
+///
+/// # Safety
+/// All pointers must reference live, ABI-compatible values for this synchronous call. The replacement
+/// buffer in `state` must remain writable for its declared capacity.
+pub unsafe extern "C" fn df_runtime_handle_player_chat(
+    runtime: *mut DfRuntime,
+    input: *const DfPlayerChatInput,
+    state: *mut DfPlayerChatState,
+) -> DfStatus {
+    let (Some(runtime), Some(input), Some(state)) = (
+        unsafe { runtime.as_ref() },
+        unsafe { input.as_ref() },
+        unsafe { state.as_mut() },
+    ) else {
+        return DF_STATUS_ERROR;
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.handle_chat(input, state)
     }))
     .unwrap_or(DF_STATUS_ERROR)
 }

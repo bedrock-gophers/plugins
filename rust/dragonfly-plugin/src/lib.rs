@@ -60,8 +60,95 @@ impl<'a> PlayerMoveEvent<'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MessageTooLong {
+    pub length: usize,
+    pub capacity: usize,
+}
+
+impl core::fmt::Display for MessageTooLong {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            formatter,
+            "message uses {} bytes, capacity is {}",
+            self.length, self.capacity
+        )
+    }
+}
+
+impl std::error::Error for MessageTooLong {}
+
+pub struct PlayerChatEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerChatInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerChatState,
+}
+
+impl<'a> PlayerChatEvent<'a> {
+    /// Creates a safe event view over runtime-validated ABI values.
+    ///
+    /// # Safety
+    /// Both references and the state's output buffer must belong to the same active chat callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerChatInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerChatState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn message(&self) -> &str {
+        let (data, len) = if self.state.has_replacement != 0 {
+            (
+                self.state.replacement.data.cast_const(),
+                self.state.replacement.len,
+            )
+        } else {
+            (self.input.message.data, self.input.message.len)
+        };
+        if len == 0 {
+            return "";
+        }
+        // SAFETY: runtime validates UTF-8 and buffer bounds before dispatching each handler.
+        unsafe { core::str::from_utf8_unchecked(core::slice::from_raw_parts(data, len as usize)) }
+    }
+
+    pub fn replace_message(&mut self, message: &str) -> Result<(), MessageTooLong> {
+        let capacity = self.state.replacement.capacity as usize;
+        if message.len() > capacity
+            || (!message.is_empty() && self.state.replacement.data.is_null())
+        {
+            return Err(MessageTooLong {
+                length: message.len(),
+                capacity,
+            });
+        }
+        if !message.is_empty() {
+            // SAFETY: capacity and destination were checked; source and destination do not overlap.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    message.as_ptr(),
+                    self.state.replacement.data,
+                    message.len(),
+                );
+            }
+        }
+        self.state.replacement.len = message.len() as u64;
+        self.state.has_replacement = 1;
+        Ok(())
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
 pub trait Plugin: Default + Send + Sync + 'static {
     fn on_move(&self, _event: &mut PlayerMoveEvent<'_>) {}
+    fn on_chat(&self, _event: &mut PlayerChatEvent<'_>) {}
 }
 
 #[cfg(test)]

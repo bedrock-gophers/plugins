@@ -4,7 +4,8 @@ members = [
     "rust/dragonfly-plugin-macros",
     "rust/dragonfly-plugin-sys",
     "rust/runtime",
-    "rust/fixtures/movement-guard",
+    "examples/rust/chat-filter",
+    "examples/rust/movement-guard",
 ]
 resolver = "3"
 

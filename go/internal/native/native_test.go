@@ -40,8 +40,8 @@ func openTestRuntime(t testing.TB) *Runtime {
 
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 1 {
-		t.Fatalf("plugin count = %d, want 1", runtime.PluginCount())
+	if runtime.PluginCount() != 2 {
+		t.Fatalf("plugin count = %d, want 2", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")
@@ -63,6 +63,32 @@ func TestMovementGuard(t *testing.T) {
 	}
 	if !cancelled {
 		t.Fatal("movement below world was not cancelled")
+	}
+}
+
+func TestChatFilter(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerChatSubscription == 0 {
+		t.Fatal("chat subscription missing")
+	}
+
+	output, err := runtime.HandlePlayerChat(PlayerChatInput{Message: "foo fighters"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Cancelled {
+		t.Fatal("ordinary chat cancelled")
+	}
+	if output.Replacement == nil || *output.Replacement != "bar fighters" {
+		t.Fatalf("replacement = %v, want bar fighters", output.Replacement)
+	}
+
+	output, err = runtime.HandlePlayerChat(PlayerChatInput{Message: "blocked"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !output.Cancelled {
+		t.Fatal("blocked chat was not cancelled")
 	}
 }
 

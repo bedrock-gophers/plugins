@@ -1,48 +1,28 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Expr, ItemImpl, Lit, MetaNameValue, Token, parse::Parser, parse_macro_input};
+use syn::{ItemImpl, parse_macro_input};
 
 #[proc_macro_attribute]
 pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
-    let parser = syn::punctuated::Punctuated::<MetaNameValue, Token![,]>::parse_terminated;
-    let attributes = match parser.parse(attributes) {
-        Ok(attributes) => attributes,
-        Err(error) => return error.into_compile_error().into(),
-    };
-    let mut plugin_id = None;
-    for attribute in attributes {
-        if !attribute.path.is_ident("id") {
-            return syn::Error::new_spanned(attribute.path, "expected `id = \"namespace:name\"`")
-                .into_compile_error()
-                .into();
-        }
-        let Expr::Lit(expression) = attribute.value else {
-            return syn::Error::new_spanned(attribute.value, "plugin ID must be a string literal")
-                .into_compile_error()
-                .into();
-        };
-        let Lit::Str(value) = expression.lit else {
-            return syn::Error::new_spanned(expression, "plugin ID must be a string literal")
-                .into_compile_error()
-                .into();
-        };
-        plugin_id = Some(value);
-    }
-    let Some(plugin_id) = plugin_id else {
+    if !attributes.is_empty() {
         return syn::Error::new(
             proc_macro2::Span::call_site(),
-            "missing `id = \"namespace:name\"`",
+            "`#[plugin]` takes no arguments; identity comes from Cargo package metadata",
         )
         .into_compile_error()
         .into();
-    };
+    }
     let implementation = parse_macro_input!(input as ItemImpl);
     let plugin_type = &implementation.self_ty;
     let handles_move = implementation
         .items
         .iter()
         .any(|item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_move"));
-    let subscriptions = if handles_move { 1u64 } else { 0 };
+    let handles_chat = implementation
+        .items
+        .iter()
+        .any(|item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_chat"));
+    let subscriptions = u64::from(handles_move) | (u64::from(handles_chat) << 1);
 
     quote! {
         #implementation
@@ -52,7 +32,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
             use super::*;
 
             type PluginType = #plugin_type;
-            const PLUGIN_ID: &[u8] = #plugin_id.as_bytes();
+            const PLUGIN_ID: &[u8] = env!("CARGO_PKG_NAME").as_bytes();
 
             unsafe extern "C" fn create() -> *mut ::dragonfly_plugin::__private::c_void {
                 match ::std::panic::catch_unwind(|| <PluginType as ::core::default::Default>::default()) {
@@ -86,6 +66,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerMoveState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerMoveEvent::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_move(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_CHAT => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerChatInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerChatState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerChatEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_chat(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,
