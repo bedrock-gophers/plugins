@@ -6,6 +6,7 @@ require (
 	github.com/df-mc/dragonfly v0.10.15-0.20260711115619-a3fb52159c77
 	github.com/go-gl/mathgl v1.2.0
 	github.com/google/uuid v1.6.0
+	github.com/pelletier/go-toml v1.9.5
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -25,6 +26,7 @@ require (
 	github.com/sandertv/gophertunnel v1.57.0 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
 	golang.org/x/exp v0.0.0-20250103183323-7d7fa50e5329 // indirect
+	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
 	golang.org/x/text v0.23.0 // indirect

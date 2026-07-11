@@ -1,4 +1,4 @@
-.PHONY: generate check-generated build-native test benchmark clean
+.PHONY: generate check-generated build-native build-server build test benchmark clean
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -21,17 +21,23 @@ check-generated:
 
 build-native: generate
 	cargo build --release -p dragonfly-plugin-runtime -p movement-guard-plugin -p chat-filter-plugin
-	mkdir -p build/native build/plugins
-	cp target/release/$(RUNTIME_LIBRARY) build/native/
+	mkdir -p build/lib build/plugins
+	cp target/release/$(RUNTIME_LIBRARY) build/lib/
 	cp target/release/$(PLUGIN_LIBRARY) build/plugins/
 	cp target/release/$(CHAT_PLUGIN_LIBRARY) build/plugins/
+
+build-server:
+	mkdir -p build
+	go build -o build/bedrock-gophers ./cmd/bedrock-gophers
+
+build: build-native build-server
 
 test: build-native check-generated
 	cargo test --workspace
 	go test ./...
 
 benchmark: build-native
-	go test ./go/internal/native -run '^$$' -bench . -benchmem
+	go test ./internal/native -run '^$$' -bench . -benchmem
 
 clean:
 	cargo clean

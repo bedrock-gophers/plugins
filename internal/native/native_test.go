@@ -9,7 +9,7 @@ import (
 
 func nativeArtifacts(t testing.TB) (string, string) {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +19,7 @@ func nativeArtifacts(t testing.TB) (string, string) {
 	} else if runtime.GOOS == "windows" {
 		extension = ".dll"
 	}
-	library := filepath.Join(root, "build", "native", "libdragonfly_plugin_runtime"+extension)
+	library := filepath.Join(root, "build", "lib", "libdragonfly_plugin_runtime"+extension)
 	plugins := filepath.Join(root, "build", "plugins")
 	if _, err := os.Stat(library); err != nil {
 		t.Skipf("native runtime not built: run make build-native (%v)", err)

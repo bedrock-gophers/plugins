@@ -17,6 +17,15 @@ make test
 make benchmark
 ```
 
+Build and run owned server:
+
+```shell
+make build
+./build/bedrock-gophers -config build/server.toml
+```
+
+First run creates configuration. Framework loads native runtime and plugins, creates Dragonfly, installs world/player handlers, owns accept loop, and closes cleanly on `SIGINT`/`SIGTERM`.
+
 Regenerate ABI files after changing `schema/`:
 
 ```shell

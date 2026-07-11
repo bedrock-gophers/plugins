@@ -4,7 +4,7 @@ package host
 import (
 	"log/slog"
 
-	"github.com/bedrock-gophers/plugins/go/internal/native"
+	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/go-gl/mathgl/mgl64"

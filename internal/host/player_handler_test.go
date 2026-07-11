@@ -3,7 +3,7 @@ package host
 import (
 	"testing"
 
-	"github.com/bedrock-gophers/plugins/go/internal/native"
+	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/event"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"

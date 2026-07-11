@@ -548,12 +548,11 @@ Native safety limitations are permanent: no hot unload, no sandboxing, and a nat
 ├── abi/
 │   ├── include/dragonfly_plugin.h
 │   └── ABI.md
-├── go/
-│   ├── cmd/bedrock-gophers/
-│   ├── server/
-│   ├── worlds/
+├── cmd/bedrock-gophers/
+├── framework/
+├── internal/
 │   ├── host/
-│   └── internal/native/
+│   └── native/
 ├── rust/
 │   ├── runtime/
 │   ├── dragonfly-plugin-sys/

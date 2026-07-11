@@ -2,7 +2,7 @@
 package native
 
 /*
-#cgo CFLAGS: -I../../../abi/include
+#cgo CFLAGS: -I../../abi/include
 #cgo linux LDFLAGS: -ldl
 #include <stdlib.h>
 #include "bridge.h"
