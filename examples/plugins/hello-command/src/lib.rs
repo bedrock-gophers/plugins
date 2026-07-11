@@ -1,6 +1,5 @@
 use dragonfly_plugin::{
-    Command, CommandEnum, CommandEvent, CommandSource, Dynamic, DynamicCommandEnum, Player, Plugin,
-    plugin,
+    CommandEnum, CommandEvent, CommandSource, Dynamic, DynamicCommandEnum, Player, Plugin, plugin,
 };
 
 struct GreetingTargets;
@@ -19,62 +18,61 @@ enum Style {
     Excited,
 }
 
-#[derive(Command)]
-#[command(name = "hello", description = "Greets the command source")]
-enum Hello {
-    Say {
-        style: Style,
-        #[command(varargs)]
-        text: String,
-    },
-    Add {
-        left: i64,
-        right: i64,
-    },
-    Toggle {
-        enabled: bool,
-    },
-    Echo {
-        text: String,
-    },
-    About,
-    Greet {
-        target: Dynamic<GreetingTargets>,
-    },
-    Direct {
-        player: Player,
-    },
-}
-
 #[derive(Default)]
 struct HelloCommand;
 
 #[plugin]
 impl Plugin for HelloCommand {
-    #[command]
-    fn hello(&self, event: &mut CommandEvent<'_>, command: Hello) {
-        let message = match command {
-            Hello::Say {
-                style: Style::Plain,
-                text,
-            } => format!("Hello, {}: {text}", event.source()),
-            Hello::Say {
-                style: Style::Excited,
-                text,
-            } => format!(
+    #[command("hello say")]
+    fn say(&self, event: &mut CommandEvent<'_>, style: Style, #[varargs] text: String) {
+        let message = match style {
+            Style::Plain => format!("Hello, {}: {text}", event.source()),
+            Style::Excited => format!(
                 "HELLO, {}! {}",
                 event.source().to_uppercase(),
                 text.to_uppercase()
             ),
-            Hello::Add { left, right } => format!("{}", left + right),
-            Hello::Toggle { enabled } => format!("enabled={enabled}"),
-            Hello::Echo { text } => text,
-            Hello::About => "Hello from a Rust plugin running in Dragonfly.".to_owned(),
-            Hello::Greet { target } => format!("Greetings, {}!", target.value()),
-            Hello::Direct { player } => format!("player generation={}", player.id().generation()),
         };
+        event.reply(&message).expect("command reply fits");
+    }
+
+    #[command("hello add")]
+    fn add(&self, event: &mut CommandEvent<'_>, left: i64, right: i64) {
         event
-            .reply(&message)
-            .expect("command reply fits the runtime output buffer");
+            .reply(&format!("{}", left + right))
+            .expect("reply fits");
+    }
+
+    #[command("hello toggle")]
+    fn toggle(&self, event: &mut CommandEvent<'_>, enabled: bool) {
+        event
+            .reply(&format!("enabled={enabled}"))
+            .expect("reply fits");
+    }
+
+    #[command("hello echo")]
+    fn echo(&self, event: &mut CommandEvent<'_>, text: String) {
+        event.reply(&text).expect("reply fits");
+    }
+
+    #[command("hello about")]
+    fn about(&self, event: &mut CommandEvent<'_>) {
+        event
+            .reply("Hello from a Rust plugin running in Dragonfly.")
+            .expect("reply fits");
+    }
+
+    #[command("hello greet")]
+    fn greet(&self, event: &mut CommandEvent<'_>, target: Dynamic<GreetingTargets>) {
+        event
+            .reply(&format!("Greetings, {}!", target.value()))
+            .expect("reply fits");
+    }
+
+    #[command("hello direct")]
+    fn direct(&self, event: &mut CommandEvent<'_>, player: Player) {
+        event
+            .reply(&format!("player generation={}", player.id().generation()))
+            .expect("reply fits");
     }
 }
