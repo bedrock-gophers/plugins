@@ -14,6 +14,8 @@ type playerRuntime interface {
 	Subscriptions() uint64
 	HandlePlayerMove(native.PlayerMoveInput, bool) (bool, error)
 	HandlePlayerChat(native.PlayerChatInput, bool) (native.PlayerChatOutput, error)
+	HandlePlayerJoin(native.PlayerJoinInput, bool) (bool, error)
+	HandlePlayerQuit(native.PlayerQuitInput) error
 }
 
 // PlayerHandler forwards supported Dragonfly player events into the native runtime.
@@ -81,6 +83,29 @@ func (h *PlayerHandler) playerID(p *player.Player) native.PlayerID {
 	return id
 }
 
+func (h *PlayerHandler) Join(p *player.Player) bool {
+	if h.runtime.Subscriptions()&native.PlayerJoinSubscription == 0 {
+		return false
+	}
+	cancelled, err := h.runtime.HandlePlayerJoin(native.PlayerJoinInput{
+		Player: h.playerID(p),
+		Name:   p.Name(),
+	}, false)
+	if err != nil {
+		h.log.Error("native plugin join handler failed", "player", p.Name(), "error", err)
+		return false
+	}
+	return cancelled
+}
+
 func (h *PlayerHandler) HandleQuit(p *player.Player) {
+	if h.runtime.Subscriptions()&native.PlayerQuitSubscription != 0 {
+		if err := h.runtime.HandlePlayerQuit(native.PlayerQuitInput{
+			Player: h.playerID(p),
+			Name:   p.Name(),
+		}); err != nil {
+			h.log.Error("native plugin quit handler failed", "player", p.Name(), "error", err)
+		}
+	}
 	h.players.Unregister(p)
 }

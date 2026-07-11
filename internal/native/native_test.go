@@ -44,8 +44,8 @@ func openTestRuntime(t testing.TB) *Runtime {
 
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 4 {
-		t.Fatalf("plugin count = %d, want 4", runtime.PluginCount())
+	if runtime.PluginCount() != 5 {
+		t.Fatalf("plugin count = %d, want 5", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")
@@ -76,8 +76,8 @@ func TestCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 1 || commands[0].Name != "hello" {
-		t.Fatalf("commands = %#v, want hello", commands)
+	if len(commands) != 2 || commands[0].Name != "hello" || commands[1].Name != "ping" {
+		t.Fatalf("commands = %#v, want hello and ping", commands)
 	}
 	last := commands[0].Overloads[len(commands[0].Overloads)-1]
 	if len(last.Parameters) != 2 || !last.Parameters[1].Optional {
@@ -91,6 +91,33 @@ func TestCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	if output.Failed || output.Message != "HELLO, DANICK! DRAGONFLY PLUGINS ROCK" {
+		t.Fatalf("output = %#v", output)
+	}
+}
+
+func TestPingCommandUsesPlayerLatency(t *testing.T) {
+	runtime := openTestRuntime(t)
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ping := commands[1]
+	id := PlayerID{Generation: 9}
+	id.UUID[0] = 1
+	input := CommandInput{
+		Source:       "Danick",
+		SourcePlayer: &id,
+		OnlinePlayers: []CommandPlayer{{
+			Player:              id,
+			Name:                "Danick",
+			LatencyMilliseconds: 37,
+		}},
+	}
+	output, err := runtime.HandleCommand(ping.Index, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Failed || output.Message != "Danick's ping: 37ms" {
 		t.Fatalf("output = %#v", output)
 	}
 }
@@ -129,6 +156,24 @@ func TestChatFilter(t *testing.T) {
 	}
 	if !output.Cancelled {
 		t.Fatal("blocked chat was not cancelled")
+	}
+}
+
+func TestPlayerJoinAndQuit(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerJoinSubscription == 0 || runtime.Subscriptions()&PlayerQuitSubscription == 0 {
+		t.Fatal("join or quit subscription missing")
+	}
+	id := PlayerID{Generation: 12}
+	cancelled, err := runtime.HandlePlayerJoin(PlayerJoinInput{Player: id, Name: "Danick"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled {
+		t.Fatal("lifecycle logger cancelled join")
+	}
+	if err := runtime.HandlePlayerQuit(PlayerQuitInput{Player: id, Name: "Danick"}); err != nil {
+		t.Fatal(err)
 	}
 }
 

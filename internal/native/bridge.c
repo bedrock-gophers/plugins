@@ -15,6 +15,8 @@ typedef DfStatus (*RuntimeCommandFn)(DfRuntime *, uint64_t, const DfCommandInput
 typedef DfStatus (*RuntimeCommandEnumFn)(DfRuntime *, uint64_t, uint64_t, uint64_t, const DfCommandEnumContext *, DfStringBuffer *);
 typedef DfStatus (*RuntimeMoveFn)(DfRuntime *, const DfPlayerMoveInput *, DfPlayerMoveState *);
 typedef DfStatus (*RuntimeChatFn)(DfRuntime *, const DfPlayerChatInput *, DfPlayerChatState *);
+typedef DfStatus (*RuntimeJoinFn)(DfRuntime *, const DfPlayerJoinInput *, DfPlayerJoinState *);
+typedef DfStatus (*RuntimeQuitFn)(DfRuntime *, const DfPlayerQuitInput *, DfPlayerQuitState *);
 
 struct BgRuntimeLibrary {
     void *handle;
@@ -30,6 +32,8 @@ struct BgRuntimeLibrary {
     RuntimeCommandEnumFn command_enum_options;
     RuntimeMoveFn handle_move;
     RuntimeChatFn handle_chat;
+    RuntimeJoinFn handle_join;
+    RuntimeQuitFn handle_quit;
 };
 
 static void write_error(uint8_t *error, uint64_t capacity, const char *message) {
@@ -80,7 +84,9 @@ DfStatus bg_runtime_open(
     RuntimeCommandEnumFn command_enum_options = (RuntimeCommandEnumFn) load_symbol(handle, "df_runtime_command_enum_options", error, error_capacity);
     RuntimeMoveFn handle_move = (RuntimeMoveFn) load_symbol(handle, "df_runtime_handle_player_move", error, error_capacity);
     RuntimeChatFn handle_chat = (RuntimeChatFn) load_symbol(handle, "df_runtime_handle_player_chat", error, error_capacity);
-    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_move == NULL || handle_chat == NULL) {
+    RuntimeJoinFn handle_join = (RuntimeJoinFn) load_symbol(handle, "df_runtime_handle_player_join", error, error_capacity);
+    RuntimeQuitFn handle_quit = (RuntimeQuitFn) load_symbol(handle, "df_runtime_handle_player_quit", error, error_capacity);
+    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_move == NULL || handle_chat == NULL || handle_join == NULL || handle_quit == NULL) {
         dlclose(handle);
         return DF_STATUS_ERROR;
     }
@@ -116,6 +122,8 @@ DfStatus bg_runtime_open(
     library->command_enum_options = command_enum_options;
     library->handle_move = handle_move;
     library->handle_chat = handle_chat;
+    library->handle_join = handle_join;
+    library->handle_quit = handle_quit;
     *out = library;
     return DF_STATUS_OK;
 }
@@ -208,6 +216,28 @@ DfStatus bg_runtime_handle_player_chat(
         return DF_STATUS_ERROR;
     }
     return library->handle_chat(library->runtime, input, state);
+}
+
+DfStatus bg_runtime_handle_player_join(
+    BgRuntimeLibrary *library,
+    const DfPlayerJoinInput *input,
+    DfPlayerJoinState *state
+) {
+    if (library == NULL || input == NULL || state == NULL) {
+        return DF_STATUS_ERROR;
+    }
+    return library->handle_join(library->runtime, input, state);
+}
+
+DfStatus bg_runtime_handle_player_quit(
+    BgRuntimeLibrary *library,
+    const DfPlayerQuitInput *input,
+    DfPlayerQuitState *state
+) {
+    if (library == NULL || input == NULL || state == NULL) {
+        return DF_STATUS_ERROR;
+    }
+    return library->handle_quit(library->runtime, input, state);
 }
 
 uint64_t bg_runtime_handle_player_move_value(

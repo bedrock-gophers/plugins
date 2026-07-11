@@ -18,3 +18,16 @@ events:
       - { name: cancelled, type: bool }
       - { name: has_replacement, type: bool }
       - { name: replacement, type: string_buffer }
+  - name: join
+    id: 3
+    input:
+      - { name: player, type: player_id }
+      - { name: name, type: string_view }
+    state:
+      - { name: cancelled, type: bool }
+  - name: quit
+    id: 4
+    input:
+      - { name: player, type: player_id }
+      - { name: name, type: string_view }
+    state: []

@@ -17,6 +17,18 @@ type runtimeStub struct {
 	chatOutput    native.PlayerChatOutput
 	moveInput     native.PlayerMoveInput
 	chatInput     native.PlayerChatInput
+	joinInput     native.PlayerJoinInput
+	quitInput     native.PlayerQuitInput
+	joinCancelled bool
+}
+
+func (r *runtimeStub) HandlePlayerJoin(input native.PlayerJoinInput, _ bool) (bool, error) {
+	r.joinInput = input
+	return r.joinCancelled, nil
+}
+func (r *runtimeStub) HandlePlayerQuit(input native.PlayerQuitInput) error {
+	r.quitInput = input
+	return nil
 }
 
 func (r *runtimeStub) Subscriptions() uint64 { return r.subscriptions }
@@ -78,6 +90,28 @@ func TestPlayerHandlerChat(t *testing.T) {
 		}
 		if runtime.chatInput.Message != "original" || runtime.chatInput.Player.Generation != 9 {
 			t.Fatalf("unexpected chat input: %+v", runtime.chatInput)
+		}
+	})
+}
+
+func TestPlayerHandlerJoinAndQuit(t *testing.T) {
+	runtime := &runtimeStub{
+		subscriptions: native.PlayerJoinSubscription | native.PlayerQuitSubscription,
+		joinCancelled: true,
+	}
+	withPlayer(t, func(p *player.Player) {
+		players := NewPlayers()
+		players.Register(p, 11)
+		handler := NewPlayerHandler(runtime, nil, players)
+		if !handler.Join(p) {
+			t.Fatal("join was not cancelled")
+		}
+		handler.HandleQuit(p)
+		if runtime.joinInput.Player.Generation != 11 || runtime.quitInput.Player.Generation != 11 {
+			t.Fatalf("join=%+v quit=%+v", runtime.joinInput, runtime.quitInput)
+		}
+		if _, ok := players.ID(p); ok {
+			t.Fatal("player remained registered after quit")
 		}
 	})
 }

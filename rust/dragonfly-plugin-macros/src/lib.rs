@@ -79,6 +79,66 @@ fn command_flag(attributes: &[Attribute], key: &str) -> syn::Result<bool> {
     Ok(found)
 }
 
+#[derive(Clone, Copy)]
+enum ContextRestriction {
+    Any,
+    Player,
+    Console,
+}
+
+fn context_restriction(function: &syn::ImplItemFn) -> ContextRestriction {
+    let Some(FnArg::Typed(argument)) = function.sig.inputs.iter().nth(1) else {
+        return ContextRestriction::Any;
+    };
+    let Type::Reference(reference) = argument.ty.as_ref() else {
+        return ContextRestriction::Any;
+    };
+    let Type::Path(path) = reference.elem.as_ref() else {
+        return ContextRestriction::Any;
+    };
+    let Some(segment) = path.path.segments.last() else {
+        return ContextRestriction::Any;
+    };
+    let PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return ContextRestriction::Any;
+    };
+    for argument in &arguments.args {
+        let GenericArgument::Type(Type::Path(path)) = argument else {
+            continue;
+        };
+        if path.path.is_ident("Player") {
+            return ContextRestriction::Player;
+        }
+        if path.path.is_ident("Console") {
+            return ContextRestriction::Console;
+        }
+    }
+    ContextRestriction::Any
+}
+
+fn restricted_call(
+    restriction: ContextRestriction,
+    call: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    match restriction {
+        ContextRestriction::Any => call,
+        ContextRestriction::Player => quote! {
+            if let Some(mut restricted_context) = context.player_context() {
+                #call
+            } else {
+                context.fail("This command can only be used by a player.");
+            }
+        },
+        ContextRestriction::Console => quote! {
+            if let Some(mut restricted_context) = context.console_context() {
+                #call
+            } else {
+                context.fail("This command can only be used by the console.");
+            }
+        },
+    }
+}
+
 fn kebab_case(value: &str) -> String {
     let mut output = String::new();
     for (index, character) in value.chars().enumerate() {
@@ -552,7 +612,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         let Some(FnArg::Typed(arguments)) = function.sig.inputs.iter().nth(2) else {
             return syn::Error::new_spanned(
                 &function.sig,
-                "a #[command] method must take &self, &mut CommandEvent, and a derived command value",
+                "a #[command] method must take &self, &mut Context, and a derived command value",
             )
             .into_compile_error()
             .into();
@@ -567,13 +627,21 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         }
         let command_type = (*arguments.ty).clone();
         let method = function.sig.ident.clone();
+        let restriction = context_restriction(&function);
+        let call = match restriction {
+            ContextRestriction::Any => quote!(self.#method(context, command)),
+            ContextRestriction::Player | ContextRestriction::Console => {
+                quote!(self.#method(&mut restricted_context, command))
+            }
+        };
+        let call = restricted_call(restriction, call);
         let index = command_types.len();
         command_types.push(quote!(#command_type));
         dispatch_arms.push(quote! {
-            #index => match <#command_type as ::dragonfly_plugin::CommandDefinition>::parse(event.arguments()) {
-                Ok(command) => self.#method(event, command),
+            #index => match <#command_type as ::dragonfly_plugin::CommandDefinition>::parse(context.arguments()) {
+                Ok(command) => { #call },
                 Err(error) => {
-                    event.fail(&error.to_string());
+                    context.fail(&error.to_string());
                 }
             },
         });
@@ -591,7 +659,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
             if function.sig.inputs.len() < 2 {
                 return syn::Error::new_spanned(
                     &function.sig,
-                    "a direct #[command] method must take &self and &mut CommandEvent",
+                    "a direct #[command] method must take &self and &mut Context",
                 )
                 .into_compile_error()
                 .into();
@@ -601,6 +669,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 proc_macro2::Span::call_site(),
             );
             let method = function.sig.ident.clone();
+            let restriction = context_restriction(&function);
             let mut fields = Vec::new();
             let mut field_names = Vec::new();
             for argument in function.sig.inputs.iter().skip(2) {
@@ -634,8 +703,15 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 #variant_attribute
                 #variant { #(#fields),* }
             });
+            let call = match restriction {
+                ContextRestriction::Any => quote!(self.#method(context, #(#field_names),*)),
+                ContextRestriction::Player | ContextRestriction::Console => {
+                    quote!(self.#method(&mut restricted_context, #(#field_names),*))
+                }
+            };
+            let call = restricted_call(restriction, call);
             variant_dispatch.push(quote! {
-                #command_type::#variant { #(#field_names),* } => self.#method(event, #(#field_names),*),
+                #command_type::#variant { #(#field_names),* } => { #call },
             });
             inherent_methods.push(function);
         }
@@ -649,12 +725,12 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         let index = command_types.len();
         command_types.push(quote!(#command_type));
         dispatch_arms.push(quote! {
-            #index => match <#command_type as ::dragonfly_plugin::CommandDefinition>::parse(event.arguments()) {
+            #index => match <#command_type as ::dragonfly_plugin::CommandDefinition>::parse(context.arguments()) {
                 Ok(command) => match command {
                     #(#variant_dispatch)*
                 },
                 Err(error) => {
-                    event.fail(&error.to_string());
+                    context.fail(&error.to_string());
                 }
             },
         });
@@ -669,7 +745,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
             }
         });
         implementation.items.push(syn::parse_quote! {
-            fn on_command(&self, command: usize, event: &mut ::dragonfly_plugin::CommandEvent<'_>) {
+            fn on_command(&self, command: usize, context: &mut ::dragonfly_plugin::Context<'_>) {
                 match command {
                     #(#dispatch_arms)*
                     _ => {}
@@ -707,7 +783,18 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         .items
         .iter()
         .any(|item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_chat"));
-    let subscriptions = u64::from(handles_move) | (u64::from(handles_chat) << 1);
+    let handles_join = implementation
+        .items
+        .iter()
+        .any(|item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_join"));
+    let handles_quit = implementation
+        .items
+        .iter()
+        .any(|item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_quit"));
+    let subscriptions = u64::from(handles_move)
+        | (u64::from(handles_chat) << 1)
+        | (u64::from(handles_join) << 2)
+        | (u64::from(handles_quit) << 3);
 
     quote! {
         #(#generated_commands)*
@@ -793,8 +880,8 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     return sys::DF_STATUS_ERROR;
                 }
                 let result = ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
-                    let mut event = unsafe { ::dragonfly_plugin::CommandEvent::from_raw(&*input, &mut *state) };
-                    <PluginType as ::dragonfly_plugin::Plugin>::on_command(plugin, command as usize, &mut event);
+                    let mut context = unsafe { ::dragonfly_plugin::Context::from_raw(&*input, &mut *state) };
+                    <PluginType as ::dragonfly_plugin::Plugin>::on_command(plugin, command as usize, &mut context);
                 }));
                 if result.is_ok() { sys::DF_STATUS_OK } else { sys::DF_STATUS_ERROR }
             }
@@ -874,6 +961,21 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerChatState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerChatEvent::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_chat(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_JOIN => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerJoinInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerJoinState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerJoinEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_join(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_QUIT => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerQuitInput>() };
+                        let event = unsafe { ::dragonfly_plugin::PlayerQuitEvent::from_raw(input) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_quit(plugin, &event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

@@ -53,6 +53,23 @@ func (p *Players) Names() []string {
 	return names
 }
 
+func (p *Players) CommandSnapshots() []native.CommandPlayer {
+	p.mu.RLock()
+	snapshots := make([]native.CommandPlayer, 0, len(p.entries))
+	for connected, id := range p.entries {
+		snapshots = append(snapshots, native.CommandPlayer{
+			Player:              id,
+			Name:                connected.Name(),
+			LatencyMilliseconds: uint64(connected.Latency().Milliseconds()),
+		})
+	}
+	p.mu.RUnlock()
+	slices.SortFunc(snapshots, func(left, right native.CommandPlayer) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+	return snapshots
+}
+
 func (p *Players) ResolveName(name string) (native.PlayerID, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

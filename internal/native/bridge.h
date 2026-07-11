@@ -48,6 +48,16 @@ DfStatus bg_runtime_handle_player_chat(
     const DfPlayerChatInput *input,
     DfPlayerChatState *state
 );
+DfStatus bg_runtime_handle_player_join(
+    BgRuntimeLibrary *library,
+    const DfPlayerJoinInput *input,
+    DfPlayerJoinState *state
+);
+DfStatus bg_runtime_handle_player_quit(
+    BgRuntimeLibrary *library,
+    const DfPlayerQuitInput *input,
+    DfPlayerQuitState *state
+);
 uint64_t bg_runtime_handle_player_move_value(
     BgRuntimeLibrary *library,
     DfPlayerMoveInput input,

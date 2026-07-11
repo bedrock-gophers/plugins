@@ -33,7 +33,11 @@ typedef struct { uint32_t kind; uint8_t optional; DfStringView name; const DfStr
 typedef struct { const DfCommandParameter *parameters; uint64_t parameter_count; } DfCommandOverload;
 typedef struct { DfStringView name; DfStringView description; const DfCommandOverload *overloads; uint64_t overload_count; } DfCommandDescriptor;
 typedef struct { DfStringView source; const DfStringView *online_players; uint64_t online_player_count; } DfCommandEnumContext;
-typedef struct { DfStringView source; DfStringView arguments; } DfCommandInput;
+typedef struct { DfPlayerId player; DfStringView name; uint64_t latency_milliseconds; } DfCommandPlayer;
+#define DF_COMMAND_SOURCE_UNKNOWN 0u
+#define DF_COMMAND_SOURCE_PLAYER 1u
+#define DF_COMMAND_SOURCE_CONSOLE 2u
+typedef struct { DfStringView source; DfStringView arguments; uint32_t source_kind; DfPlayerId source_player; const DfCommandPlayer *online_players; uint64_t online_player_count; } DfCommandInput;
 typedef struct { uint8_t failed; DfStringBuffer output; } DfCommandState;
 
 typedef struct {
@@ -67,6 +71,28 @@ typedef struct {
     uint8_t has_replacement;
     DfStringBuffer replacement;
 } DfPlayerChatState;
+
+#define DF_EVENT_PLAYER_JOIN 3u
+
+typedef struct {
+    DfPlayerId player;
+    DfStringView name;
+} DfPlayerJoinInput;
+
+typedef struct {
+    uint8_t cancelled;
+} DfPlayerJoinState;
+
+#define DF_EVENT_PLAYER_QUIT 4u
+
+typedef struct {
+    DfPlayerId player;
+    DfStringView name;
+} DfPlayerQuitInput;
+
+typedef struct {
+    uint8_t _reserved;
+} DfPlayerQuitState;
 
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
@@ -106,6 +132,8 @@ DfStatus df_runtime_handle_command(DfRuntime *runtime, uint64_t index, const DfC
 DfStatus df_runtime_command_enum_options(DfRuntime *runtime, uint64_t index, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
 DfStatus df_runtime_handle_player_move(DfRuntime *runtime, const DfPlayerMoveInput *input, DfPlayerMoveState *state);
 DfStatus df_runtime_handle_player_chat(DfRuntime *runtime, const DfPlayerChatInput *input, DfPlayerChatState *state);
+DfStatus df_runtime_handle_player_join(DfRuntime *runtime, const DfPlayerJoinInput *input, DfPlayerJoinState *state);
+DfStatus df_runtime_handle_player_quit(DfRuntime *runtime, const DfPlayerQuitInput *input, DfPlayerQuitState *state);
 
 #ifdef __cplusplus
 }

@@ -4,4 +4,4 @@ Each plugin owns its `Cargo.toml`, `Cargo.lock`, source, and target directory. `
 
 Precompiled native plugin libraries may also be placed in this directory. Runtime loads both compiled examples and compatible precompiled plugins.
 
-Included examples cover movement cancellation, chat mutation, lifecycle hooks, and Dragonfly command registration.
+Included examples cover movement cancellation, chat mutation, lifecycle hooks, Dragonfly command registration, and player latency queries.

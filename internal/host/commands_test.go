@@ -32,7 +32,7 @@ func TestPlayerCommandResolvesStableHandle(t *testing.T) {
 			t.Fatal(err)
 		}
 		cmd.New("direct", "", nil, runnables...).Execute("send TestPlayer", &commandSourceStub{}, nil)
-		if !strings.HasPrefix(runtime.input.Arguments, "send ") || !strings.HasSuffix(runtime.input.Arguments, ":77") {
+		if !strings.HasPrefix(runtime.input.Arguments, "send ") || !strings.Contains(runtime.input.Arguments, ":77:") {
 			t.Fatalf("arguments = %q", runtime.input.Arguments)
 		}
 	})

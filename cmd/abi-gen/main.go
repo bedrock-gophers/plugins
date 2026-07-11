@@ -154,7 +154,11 @@ typedef struct { uint32_t kind; uint8_t optional; DfStringView name; const DfStr
 typedef struct { const DfCommandParameter *parameters; uint64_t parameter_count; } DfCommandOverload;
 typedef struct { DfStringView name; DfStringView description; const DfCommandOverload *overloads; uint64_t overload_count; } DfCommandDescriptor;
 typedef struct { DfStringView source; const DfStringView *online_players; uint64_t online_player_count; } DfCommandEnumContext;
-typedef struct { DfStringView source; DfStringView arguments; } DfCommandInput;
+typedef struct { DfPlayerId player; DfStringView name; uint64_t latency_milliseconds; } DfCommandPlayer;
+#define DF_COMMAND_SOURCE_UNKNOWN 0u
+#define DF_COMMAND_SOURCE_PLAYER 1u
+#define DF_COMMAND_SOURCE_CONSOLE 2u
+typedef struct { DfStringView source; DfStringView arguments; uint32_t source_kind; DfPlayerId source_player; const DfCommandPlayer *online_players; uint64_t online_player_count; } DfCommandInput;
 typedef struct { uint8_t failed; DfStringBuffer output; } DfCommandState;
 
 typedef struct {
@@ -169,11 +173,17 @@ typedef struct {
 		name := cName(evt)
 		fmt.Fprintf(&b, "#define DF_EVENT_%s %du\n\n", upper, evt.ID)
 		fmt.Fprintf(&b, "typedef struct {\n")
+		if len(evt.Input) == 0 {
+			fmt.Fprintf(&b, "    uint8_t _reserved;\n")
+		}
 		for _, f := range evt.Input {
 			fmt.Fprintf(&b, "    %s %s;\n", cType(f.Type), f.Name)
 		}
 		fmt.Fprintf(&b, "} %sInput;\n\n", name)
 		fmt.Fprintf(&b, "typedef struct {\n")
+		if len(evt.State) == 0 {
+			fmt.Fprintf(&b, "    uint8_t _reserved;\n")
+		}
 		for _, f := range evt.State {
 			fmt.Fprintf(&b, "    %s %s;\n", cType(f.Type), f.Name)
 		}
@@ -285,7 +295,13 @@ pub struct DfCommandDescriptor { pub name: DfStringView, pub description: DfStri
 pub struct DfCommandEnumContext { pub source: DfStringView, pub online_players: *const DfStringView, pub online_player_count: u64 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfCommandInput { pub source: DfStringView, pub arguments: DfStringView }
+pub struct DfCommandPlayer { pub player: DfPlayerId, pub name: DfStringView, pub latency_milliseconds: u64 }
+pub const DF_COMMAND_SOURCE_UNKNOWN: u32 = 0;
+pub const DF_COMMAND_SOURCE_PLAYER: u32 = 1;
+pub const DF_COMMAND_SOURCE_CONSOLE: u32 = 2;
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandInput { pub source: DfStringView, pub arguments: DfStringView, pub source_kind: u32, pub source_player: DfPlayerId, pub online_players: *const DfCommandPlayer, pub online_player_count: u64 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandState { pub failed: u8, pub output: DfStringBuffer }
@@ -301,12 +317,18 @@ pub struct DfAbiHeader { pub abi_version: u32, pub struct_size: u32, pub subscri
 		fmt.Fprintf(&b, "pub const DF_SUBSCRIPTION_%s: u64 = 1u64 << %d;\n", upper, evt.ID-1)
 		b.WriteString("#[repr(C)]\n#[derive(Clone, Copy, Debug, Default)]\n")
 		fmt.Fprintf(&b, "pub struct %sInput {\n", name)
+		if len(evt.Input) == 0 {
+			b.WriteString("    pub _reserved: u8,\n")
+		}
 		for _, f := range evt.Input {
 			fmt.Fprintf(&b, "    pub %s: %s,\n", f.Name, rustType(f.Type))
 		}
 		b.WriteString("}\n")
 		b.WriteString("#[repr(C)]\n#[derive(Clone, Copy, Debug, Default)]\n")
 		fmt.Fprintf(&b, "pub struct %sState {\n", name)
+		if len(evt.State) == 0 {
+			b.WriteString("    pub _reserved: u8,\n")
+		}
 		for _, f := range evt.State {
 			fmt.Fprintf(&b, "    pub %s: %s,\n", f.Name, rustType(f.Type))
 		}

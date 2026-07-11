@@ -52,7 +52,13 @@ pub struct DfCommandDescriptor { pub name: DfStringView, pub description: DfStri
 pub struct DfCommandEnumContext { pub source: DfStringView, pub online_players: *const DfStringView, pub online_player_count: u64 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfCommandInput { pub source: DfStringView, pub arguments: DfStringView }
+pub struct DfCommandPlayer { pub player: DfPlayerId, pub name: DfStringView, pub latency_milliseconds: u64 }
+pub const DF_COMMAND_SOURCE_UNKNOWN: u32 = 0;
+pub const DF_COMMAND_SOURCE_PLAYER: u32 = 1;
+pub const DF_COMMAND_SOURCE_CONSOLE: u32 = 2;
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandInput { pub source: DfStringView, pub arguments: DfStringView, pub source_kind: u32, pub source_player: DfPlayerId, pub online_players: *const DfCommandPlayer, pub online_player_count: u64 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandState { pub failed: u8, pub output: DfStringBuffer }
@@ -90,6 +96,34 @@ pub struct DfPlayerChatState {
     pub cancelled: u8,
     pub has_replacement: u8,
     pub replacement: DfStringBuffer,
+}
+
+pub const DF_EVENT_PLAYER_JOIN: DfEventId = 3;
+pub const DF_SUBSCRIPTION_PLAYER_JOIN: u64 = 1u64 << 2;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerJoinInput {
+    pub player: DfPlayerId,
+    pub name: DfStringView,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerJoinState {
+    pub cancelled: u8,
+}
+
+pub const DF_EVENT_PLAYER_QUIT: DfEventId = 4;
+pub const DF_SUBSCRIPTION_PLAYER_QUIT: u64 = 1u64 << 3;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerQuitInput {
+    pub player: DfPlayerId,
+    pub name: DfStringView,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerQuitState {
+    pub _reserved: u8,
 }
 
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;

@@ -20,6 +20,8 @@ import (
 const (
 	PlayerMoveSubscription  uint64 = 1
 	PlayerChatSubscription  uint64 = 2
+	PlayerJoinSubscription  uint64 = 4
+	PlayerQuitSubscription  uint64 = 8
 	MaxChatReplacementBytes        = 4096
 	MaxCommandOutputBytes          = 4096
 	MaxCommandEnumBytes            = 4096
@@ -55,6 +57,16 @@ type PlayerChatOutput struct {
 	Replacement *string
 }
 
+type PlayerJoinInput struct {
+	Player PlayerID
+	Name   string
+}
+
+type PlayerQuitInput struct {
+	Player PlayerID
+	Name   string
+}
+
 type Command struct {
 	Index       uint64
 	Name        string
@@ -88,8 +100,25 @@ const (
 )
 
 type CommandInput struct {
-	Source    string
-	Arguments string
+	Source        string
+	Arguments     string
+	SourceKind    CommandSourceKind
+	SourcePlayer  *PlayerID
+	OnlinePlayers []CommandPlayer
+}
+
+type CommandSourceKind uint32
+
+const (
+	CommandSourceUnknown CommandSourceKind = iota
+	CommandSourcePlayer
+	CommandSourceConsole
+)
+
+type CommandPlayer struct {
+	Player              PlayerID
+	Name                string
+	LatencyMilliseconds uint64
 }
 
 type CommandOutput struct {
@@ -236,8 +265,36 @@ func (r *Runtime) HandleCommand(index uint64, input CommandInput) (CommandOutput
 	defer C.free(message)
 
 	nativeInput := C.DfCommandInput{
-		source:    C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))},
-		arguments: C.DfStringView{data: (*C.uint8_t)(arguments), len: C.uint64_t(len(input.Arguments))},
+		source:      C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))},
+		arguments:   C.DfStringView{data: (*C.uint8_t)(arguments), len: C.uint64_t(len(input.Arguments))},
+		source_kind: C.uint32_t(input.SourceKind),
+	}
+	if input.SourcePlayer != nil {
+		fillPlayerID(&nativeInput.source_player, *input.SourcePlayer)
+		nativeInput.source_kind = C.DF_COMMAND_SOURCE_PLAYER
+	}
+	var playerNames []unsafe.Pointer
+	if len(input.OnlinePlayers) != 0 {
+		memory := C.malloc(C.size_t(len(input.OnlinePlayers)) * C.size_t(unsafe.Sizeof(C.DfCommandPlayer{})))
+		if memory == nil {
+			return output, errors.New("allocate command player snapshots")
+		}
+		defer C.free(memory)
+		nativeInput.online_players = (*C.DfCommandPlayer)(memory)
+		nativeInput.online_player_count = C.uint64_t(len(input.OnlinePlayers))
+		players := unsafe.Slice(nativeInput.online_players, len(input.OnlinePlayers))
+		for index, snapshot := range input.OnlinePlayers {
+			name := C.CBytes([]byte(snapshot.Name))
+			playerNames = append(playerNames, name)
+			fillPlayerID(&players[index].player, snapshot.Player)
+			players[index].name = C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(snapshot.Name))}
+			players[index].latency_milliseconds = C.uint64_t(snapshot.LatencyMilliseconds)
+		}
+		defer func() {
+			for _, name := range playerNames {
+				C.free(name)
+			}
+		}()
 	}
 	state := C.DfCommandState{
 		output: C.DfStringBuffer{data: (*C.uint8_t)(message), capacity: MaxCommandOutputBytes},
@@ -365,6 +422,41 @@ func (r *Runtime) HandlePlayerChat(input PlayerChatInput, cancelled bool) (Playe
 		output.Replacement = &value
 	}
 	return output, nil
+}
+
+func (r *Runtime) HandlePlayerJoin(input PlayerJoinInput, cancelled bool) (bool, error) {
+	if r == nil || r.ptr == nil {
+		return cancelled, errors.New("native runtime is closed")
+	}
+	name := C.CBytes([]byte(input.Name))
+	defer C.free(name)
+	var nativeInput C.DfPlayerJoinInput
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.name = C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(input.Name))}
+	var state C.DfPlayerJoinState
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_player_join(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+		return state.cancelled != 0, fmt.Errorf("native join handler failed with status %d", int32(status))
+	}
+	return state.cancelled != 0, nil
+}
+
+func (r *Runtime) HandlePlayerQuit(input PlayerQuitInput) error {
+	if r == nil || r.ptr == nil {
+		return errors.New("native runtime is closed")
+	}
+	name := C.CBytes([]byte(input.Name))
+	defer C.free(name)
+	var nativeInput C.DfPlayerQuitInput
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.name = C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(input.Name))}
+	var state C.DfPlayerQuitState
+	if status := C.bg_runtime_handle_player_quit(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+		return fmt.Errorf("native quit handler failed with status %d", int32(status))
+	}
+	return nil
 }
 
 func fillPlayerID(destination *C.DfPlayerId, source PlayerID) {

@@ -33,9 +33,26 @@ impl PlayerId {
     }
 }
 
+impl From<dragonfly_plugin_sys::DfPlayerId> for PlayerId {
+    fn from(value: dragonfly_plugin_sys::DfPlayerId) -> Self {
+        Self {
+            uuid: value.bytes,
+            generation: value.generation,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Player {
     id: PlayerId,
+    latency_milliseconds: Option<u64>,
+    name: Option<PlayerName>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct PlayerName {
+    bytes: [u8; 64],
+    len: u8,
 }
 
 impl Player {
@@ -43,11 +60,51 @@ impl Player {
         self.id
     }
 
+    pub fn latency(&self) -> Option<std::time::Duration> {
+        self.latency_milliseconds
+            .map(std::time::Duration::from_millis)
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_ref().map(|name| {
+            // Names are copied from runtime-validated UTF-8 or parsed Rust strings.
+            unsafe { core::str::from_utf8_unchecked(&name.bytes[..name.len as usize]) }
+        })
+    }
+
+    fn from_id(id: dragonfly_plugin_sys::DfPlayerId) -> Self {
+        Self {
+            id: id.into(),
+            latency_milliseconds: None,
+            name: None,
+        }
+    }
+
+    fn from_snapshot(id: dragonfly_plugin_sys::DfPlayerId, latency: u64, name: &str) -> Self {
+        let mut player = Self::from_id(id);
+        player.latency_milliseconds = Some(latency);
+        if name.len() <= 64 {
+            let mut bytes = [0; 64];
+            bytes[..name.len()].copy_from_slice(name.as_bytes());
+            player.name = Some(PlayerName {
+                bytes,
+                len: name.len() as u8,
+            });
+        }
+        player
+    }
+
     #[doc(hidden)]
     pub fn from_command_argument(value: &str) -> Result<Self, CommandParseError> {
-        let (uuid, generation) = value
-            .split_once(':')
+        let mut parts = value.split(':');
+        let uuid = parts
+            .next()
             .ok_or_else(|| CommandParseError::new("player is no longer online"))?;
+        let generation = parts
+            .next()
+            .ok_or_else(|| CommandParseError::new("player is no longer online"))?;
+        let latency_milliseconds = parts.next().and_then(|value| value.parse().ok());
+        let name = parts.next();
         if uuid.len() != 32 {
             return Err(CommandParseError::new("player is no longer online"));
         }
@@ -59,12 +116,25 @@ impl Player {
         let generation = generation
             .parse()
             .map_err(|_| CommandParseError::new("player is no longer online"))?;
-        Ok(Self {
+        let mut player = Self {
             id: PlayerId {
                 uuid: bytes,
                 generation,
             },
-        })
+            latency_milliseconds,
+            name: None,
+        };
+        if let Some(name) = name
+            && name.len() <= 64
+        {
+            let mut bytes = [0; 64];
+            bytes[..name.len()].copy_from_slice(name.as_bytes());
+            player.name = Some(PlayerName {
+                bytes,
+                len: name.len() as u8,
+            });
+        }
+        Ok(player)
     }
 }
 
@@ -401,12 +471,16 @@ impl core::fmt::Display for CommandParseError {
 
 impl std::error::Error for CommandParseError {}
 
-pub struct CommandEvent<'a> {
+pub struct Any;
+pub struct Console;
+
+pub struct Context<'a, S = Any> {
     input: &'a dragonfly_plugin_sys::DfCommandInput,
     state: &'a mut dragonfly_plugin_sys::DfCommandState,
+    source: S,
 }
 
-impl<'a> CommandEvent<'a> {
+impl<'a> Context<'a, Any> {
     /// Creates a safe command view over runtime-validated ABI values.
     ///
     /// # Safety
@@ -416,10 +490,35 @@ impl<'a> CommandEvent<'a> {
         input: &'a dragonfly_plugin_sys::DfCommandInput,
         state: &'a mut dragonfly_plugin_sys::DfCommandState,
     ) -> Self {
-        Self { input, state }
+        Self {
+            input,
+            state,
+            source: Any,
+        }
     }
 
-    pub fn source(&self) -> &str {
+    pub fn player_context(&mut self) -> Option<Context<'_, Player>> {
+        let source = self.source_player()?;
+        Some(Context {
+            input: self.input,
+            state: &mut *self.state,
+            source,
+        })
+    }
+
+    pub fn console_context(&mut self) -> Option<Context<'_, Console>> {
+        (self.input.source_kind == dragonfly_plugin_sys::DF_COMMAND_SOURCE_CONSOLE).then_some({
+            Context {
+                input: self.input,
+                state: &mut *self.state,
+                source: Console,
+            }
+        })
+    }
+}
+
+impl<S> Context<'_, S> {
+    pub fn source_name(&self) -> &str {
         unsafe { string_view(self.input.source) }
     }
 
@@ -427,6 +526,44 @@ impl<'a> CommandEvent<'a> {
         unsafe { string_view(self.input.arguments) }
     }
 
+    pub fn source_player(&self) -> Option<Player> {
+        if self.input.source_kind != dragonfly_plugin_sys::DF_COMMAND_SOURCE_PLAYER {
+            return None;
+        }
+        let source = PlayerId::from(self.input.source_player);
+        let snapshot = self
+            .online_players()
+            .iter()
+            .find(|candidate| PlayerId::from(candidate.player) == source)?;
+        Some(Player::from_snapshot(
+            snapshot.player,
+            snapshot.latency_milliseconds,
+            unsafe { string_view(snapshot.name) },
+        ))
+    }
+
+    fn online_players(&self) -> &[dragonfly_plugin_sys::DfCommandPlayer] {
+        if self.input.online_player_count == 0 {
+            &[][..]
+        } else {
+            // SAFETY: runtime validates this array before invoking plugin command handlers.
+            unsafe {
+                core::slice::from_raw_parts(
+                    self.input.online_players,
+                    self.input.online_player_count as usize,
+                )
+            }
+        }
+    }
+}
+
+impl Context<'_, Player> {
+    pub fn source(&self) -> Player {
+        self.source
+    }
+}
+
+impl<S> Context<'_, S> {
     pub fn reply(&mut self, message: &str) {
         if self.try_reply(message).is_err() {
             self.state.failed = 1;
@@ -486,6 +623,60 @@ unsafe fn string_view<'a>(view: dragonfly_plugin_sys::DfStringView) -> &'a str {
 pub struct PlayerChatEvent<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerChatInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerChatState,
+}
+
+pub struct PlayerJoinEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerJoinInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerJoinState,
+}
+
+impl<'a> PlayerJoinEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active join callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerJoinInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerJoinState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+
+    pub fn name(&self) -> &str {
+        unsafe { string_view(self.input.name) }
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
+pub struct PlayerQuitEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerQuitInput,
+}
+
+impl<'a> PlayerQuitEvent<'a> {
+    /// # Safety
+    /// The reference must belong to an active quit callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(input: &'a dragonfly_plugin_sys::DfPlayerQuitInput) -> Self {
+        Self { input }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+
+    pub fn name(&self) -> &str {
+        unsafe { string_view(self.input.name) }
+    }
 }
 
 impl<'a> PlayerChatEvent<'a> {
@@ -556,10 +747,12 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_disable(&self) {}
     fn on_move(&self, _event: &mut PlayerMoveEvent<'_>) {}
     fn on_chat(&self, _event: &mut PlayerChatEvent<'_>) {}
+    fn on_join(&self, _event: &mut PlayerJoinEvent<'_>) {}
+    fn on_quit(&self, _event: &PlayerQuitEvent<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }
-    fn on_command(&self, _command: usize, _event: &mut CommandEvent<'_>) {}
+    fn on_command(&self, _command: usize, _context: &mut Context<'_>) {}
 }
 
 #[cfg(test)]
@@ -646,6 +839,11 @@ mod tests {
         };
         assert_eq!(player.id().generation(), 9);
         assert_eq!(player.id().uuid_bytes()[15], 15);
+        assert_eq!(player.latency(), None);
+        let player =
+            Player::from_command_argument("000102030405060708090a0b0c0d0e0f:9:42:Danick").unwrap();
+        assert_eq!(player.latency(), Some(std::time::Duration::from_millis(42)));
+        assert_eq!(player.name(), Some("Danick"));
         let ModeCommand::Message { text } = ModeCommand::parse("message hello from rust").unwrap()
         else {
             panic!("wrong command variant");

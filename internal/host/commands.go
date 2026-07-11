@@ -9,6 +9,7 @@ import (
 
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/cmd"
+	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"
 )
 
@@ -38,7 +39,7 @@ func RegisterCommands(runtime commandRuntime, players *Players) error {
 }
 
 func commandRunnables(runtime commandRuntime, players *Players, command native.Command) ([]cmd.Runnable, error) {
-	base := pluginCommandBase{runtime: runtime, index: command.Index}
+	base := pluginCommandBase{runtime: runtime, players: players, index: command.Index}
 	if len(command.Overloads) == 0 {
 		return []cmd.Runnable{pluginCommand{pluginCommandBase: base}}, nil
 	}
@@ -81,6 +82,7 @@ func commandRunnables(runtime commandRuntime, players *Players, command native.C
 
 type pluginCommandBase struct {
 	runtime commandRuntime
+	players *Players
 	index   uint64
 }
 
@@ -89,10 +91,18 @@ func (c pluginCommandBase) dispatch(source cmd.Source, output *cmd.Output, argum
 	if named, ok := source.(cmd.NamedTarget); ok {
 		sourceName = named.Name()
 	}
-	result, err := c.runtime.HandleCommand(c.index, native.CommandInput{
-		Source:    sourceName,
-		Arguments: arguments,
-	})
+	input := native.CommandInput{
+		Source:        sourceName,
+		Arguments:     arguments,
+		SourceKind:    native.CommandSourceConsole,
+		OnlinePlayers: c.players.CommandSnapshots(),
+	}
+	if sourcePlayer, ok := source.(*player.Player); ok {
+		if id, found := c.players.ID(sourcePlayer); found {
+			input.SourcePlayer = &id
+		}
+	}
+	result, err := c.runtime.HandleCommand(c.index, input)
 	if err != nil {
 		output.Error(err)
 		return
@@ -159,7 +169,11 @@ func (p pluginParameter) transport() string {
 	if !ok {
 		return "invalid"
 	}
-	return hex.EncodeToString(id.UUID[:]) + ":" + strconv.FormatUint(id.Generation, 10)
+	connected, ok := p.players.ResolveID(id)
+	if !ok {
+		return "invalid"
+	}
+	return hex.EncodeToString(id.UUID[:]) + ":" + strconv.FormatUint(id.Generation, 10) + ":" + strconv.FormatInt(connected.Latency().Milliseconds(), 10) + ":" + connected.Name()
 }
 
 type describedEnum struct {

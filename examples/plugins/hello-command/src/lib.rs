@@ -1,5 +1,5 @@
 use dragonfly_plugin::{
-    CommandEnum, CommandEvent, CommandSource, Dynamic, DynamicCommandEnum, Player, Plugin, Varargs,
+    CommandEnum, CommandSource, Context, Dynamic, DynamicCommandEnum, Player, Plugin, Varargs,
     plugin,
 };
 
@@ -26,55 +26,55 @@ struct HelloCommand;
 #[command("hello")]
 impl Plugin for HelloCommand {
     #[command]
-    fn root(&self, event: &mut CommandEvent<'_>) {
-        event.reply("Use a hello subcommand.");
+    fn root(&self, context: &mut Context<'_>) {
+        context.reply("Use a hello subcommand.");
     }
 
     #[subcommand("say")]
-    fn say(&self, event: &mut CommandEvent<'_>, style: Style, text: Varargs) {
+    fn say(&self, context: &mut Context<'_>, style: Style, text: Varargs) {
         let message = match style {
-            Style::Plain => format!("Hello, {}: {}", event.source(), text.value()),
+            Style::Plain => format!("Hello, {}: {}", context.source_name(), text.value()),
             Style::Excited => format!(
                 "HELLO, {}! {}",
-                event.source().to_uppercase(),
+                context.source_name().to_uppercase(),
                 text.value().to_uppercase()
             ),
         };
-        event.reply(&message);
+        context.reply(&message);
     }
 
     #[subcommand("add")]
-    fn add(&self, event: &mut CommandEvent<'_>, left: i64, right: i64) {
-        event.reply(&format!("{}", left + right));
+    fn add(&self, context: &mut Context<'_>, left: i64, right: i64) {
+        context.reply(&format!("{}", left + right));
     }
 
     #[subcommand("toggle")]
-    fn toggle(&self, event: &mut CommandEvent<'_>, enabled: bool) {
-        event.reply(&format!("enabled={enabled}"));
+    fn toggle(&self, context: &mut Context<'_>, enabled: bool) {
+        context.reply(&format!("enabled={enabled}"));
     }
 
     #[subcommand("echo")]
-    fn echo(&self, event: &mut CommandEvent<'_>, text: String) {
-        event.reply(&text);
+    fn echo(&self, context: &mut Context<'_>, text: String) {
+        context.reply(&text);
     }
 
     #[subcommand("about")]
-    fn about(&self, event: &mut CommandEvent<'_>) {
-        event.reply("Hello from a Rust plugin running in Dragonfly.");
+    fn about(&self, context: &mut Context<'_>) {
+        context.reply("Hello from a Rust plugin running in Dragonfly.");
     }
 
     #[subcommand("greet")]
-    fn greet(&self, event: &mut CommandEvent<'_>, target: Dynamic<GreetingTargets>) {
-        event.reply(&format!("Greetings, {}!", target.value()));
+    fn greet(&self, context: &mut Context<'_>, target: Dynamic<GreetingTargets>) {
+        context.reply(&format!("Greetings, {}!", target.value()));
     }
 
     #[subcommand("direct")]
-    fn direct(&self, event: &mut CommandEvent<'_>, player: Player) {
-        event.reply(&format!("player generation={}", player.id().generation()));
+    fn direct(&self, context: &mut Context<'_>, player: Player) {
+        context.reply(&format!("player generation={}", player.id().generation()));
     }
 
     #[subcommand("maybe")]
-    fn maybe(&self, event: &mut CommandEvent<'_>, value: Option<i64>) {
-        event.reply(&format!("value={value:?}"));
+    fn maybe(&self, context: &mut Context<'_>, value: Option<i64>) {
+        context.reply(&format!("value={value:?}"));
     }
 }
