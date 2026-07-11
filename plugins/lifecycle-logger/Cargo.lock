@@ -27,7 +27,7 @@ version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=6e524b99f993edc278cc0f336ce4e53ee60d279a#6e524b99f993edc278cc0f336ce4e53ee60d279a"
 
 [[package]]
-name = "movement-guard"
+name = "lifecycle-logger"
 version = "0.1.0"
 dependencies = [
  "dragonfly-plugin",

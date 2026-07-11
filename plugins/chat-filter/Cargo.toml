@@ -1,5 +1,5 @@
 [package]
-name = "movement-guard"
+name = "chat-filter"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
@@ -12,3 +12,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 dragonfly-plugin = { git = "https://github.com/bedrock-gophers/plugins", rev = "6e524b99f993edc278cc0f336ce4e53ee60d279a" }
+

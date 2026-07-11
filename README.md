@@ -6,4 +6,4 @@ Consumer-only example. This branch contains no bedrock-gophers framework/runtime
 make run
 ```
 
-One Rust plugin lives under `plugins/movement-guard` and owns its Cargo manifest, lockfile, source, and target. Build fetches pinned bedrock-gophers revision, compiles runtime and plugin, then starts server.
+Examples cover every current SDK area: lifecycle, movement, and mutable chat. Each plugin owns its Cargo manifest, lockfile, source, and target. Build fetches pinned bedrock-gophers revision, compiles runtime and plugins, then starts server.
