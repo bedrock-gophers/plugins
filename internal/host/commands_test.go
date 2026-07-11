@@ -17,6 +17,9 @@ func (r *commandRuntimeStub) HandleCommand(_ uint64, input native.CommandInput) 
 	r.input = input
 	return native.CommandOutput{Message: "ok"}, nil
 }
+func (r *commandRuntimeStub) CommandEnumOptions(_, _, _ uint64, _ string) ([]string, error) {
+	return []string{"one", "two"}, nil
+}
 
 type commandSourceStub struct {
 	output *cmd.Output

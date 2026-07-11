@@ -30,6 +30,14 @@ DfStatus bg_runtime_handle_command(
     const DfCommandInput *input,
     DfCommandState *state
 );
+DfStatus bg_runtime_command_enum_options(
+    BgRuntimeLibrary *library,
+    uint64_t index,
+    uint64_t overload,
+    uint64_t parameter,
+    DfStringView source,
+    DfStringBuffer *output
+);
 DfStatus bg_runtime_handle_player_move(
     BgRuntimeLibrary *library,
     const DfPlayerMoveInput *input,

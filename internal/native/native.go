@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"unsafe"
 )
 
@@ -21,6 +22,7 @@ const (
 	PlayerChatSubscription  uint64 = 2
 	MaxChatReplacementBytes        = 4096
 	MaxCommandOutputBytes          = 4096
+	MaxCommandEnumBytes            = 4096
 )
 
 type PlayerID struct {
@@ -73,12 +75,13 @@ type CommandParameter struct {
 type CommandParameterKind uint32
 
 const (
-	CommandParameterSubcommand CommandParameterKind = 1
-	CommandParameterEnum       CommandParameterKind = 2
-	CommandParameterString     CommandParameterKind = 3
-	CommandParameterInteger    CommandParameterKind = 4
-	CommandParameterFloat      CommandParameterKind = 5
-	CommandParameterBool       CommandParameterKind = 6
+	CommandParameterSubcommand  CommandParameterKind = 1
+	CommandParameterEnum        CommandParameterKind = 2
+	CommandParameterString      CommandParameterKind = 3
+	CommandParameterInteger     CommandParameterKind = 4
+	CommandParameterFloat       CommandParameterKind = 5
+	CommandParameterBool        CommandParameterKind = 6
+	CommandParameterDynamicEnum CommandParameterKind = 7
 )
 
 type CommandInput struct {
@@ -241,6 +244,35 @@ func (r *Runtime) HandleCommand(index uint64, input CommandInput) (CommandOutput
 	output.Failed = state.failed != 0
 	output.Message = string(C.GoBytes(message, C.int(state.output.len)))
 	return output, nil
+}
+
+func (r *Runtime) CommandEnumOptions(index, overload, parameter uint64, sourceName string) ([]string, error) {
+	if r == nil || r.ptr == nil {
+		return nil, errors.New("native runtime is closed")
+	}
+	source := C.CBytes([]byte(sourceName))
+	defer C.free(source)
+	buffer := C.malloc(MaxCommandEnumBytes)
+	if buffer == nil {
+		return nil, errors.New("allocate command enum buffer")
+	}
+	defer C.free(buffer)
+	output := C.DfStringBuffer{data: (*C.uint8_t)(buffer), capacity: MaxCommandEnumBytes}
+	status := C.bg_runtime_command_enum_options(
+		r.ptr,
+		C.uint64_t(index),
+		C.uint64_t(overload),
+		C.uint64_t(parameter),
+		C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(sourceName))},
+		&output,
+	)
+	if status != C.DF_STATUS_OK {
+		return nil, fmt.Errorf("native command enum handler failed with status %d", int32(status))
+	}
+	if output.len == 0 {
+		return nil, nil
+	}
+	return strings.Split(string(C.GoBytes(buffer, C.int(output.len))), "\n"), nil
 }
 
 func (r *Runtime) HandlePlayerMove(input PlayerMoveInput, cancelled bool) (bool, error) {

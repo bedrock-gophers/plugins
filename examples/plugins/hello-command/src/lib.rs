@@ -1,4 +1,14 @@
-use dragonfly_plugin::{Command, CommandEnum, CommandEvent, Plugin, plugin};
+use dragonfly_plugin::{
+    Command, CommandEnum, CommandEvent, CommandSource, Dynamic, DynamicCommandEnum, Plugin, plugin,
+};
+
+struct GreetingTargets;
+
+impl DynamicCommandEnum for GreetingTargets {
+    fn options(source: CommandSource<'_>) -> Vec<String> {
+        vec![source.name().to_owned(), "everyone".to_owned()]
+    }
+}
 
 #[derive(CommandEnum)]
 enum Style {
@@ -14,6 +24,7 @@ enum Hello {
     Toggle { enabled: bool },
     Echo { text: String },
     About,
+    Greet { target: Dynamic<GreetingTargets> },
 }
 
 #[derive(Default)]
@@ -34,6 +45,7 @@ impl Plugin for HelloCommand {
             Hello::Toggle { enabled } => format!("enabled={enabled}"),
             Hello::Echo { text } => text,
             Hello::About => "Hello from a Rust plugin running in Dragonfly.".to_owned(),
+            Hello::Greet { target } => format!("Greetings, {}!", target.value()),
         };
         event
             .reply(&message)

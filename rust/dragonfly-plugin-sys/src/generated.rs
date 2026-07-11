@@ -38,6 +38,7 @@ pub const DF_COMMAND_PARAMETER_STRING: u32 = 3;
 pub const DF_COMMAND_PARAMETER_INTEGER: u32 = 4;
 pub const DF_COMMAND_PARAMETER_FLOAT: u32 = 5;
 pub const DF_COMMAND_PARAMETER_BOOL: u32 = 6;
+pub const DF_COMMAND_PARAMETER_DYNAMIC_ENUM: u32 = 7;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandOverload { pub parameters: *const DfCommandParameter, pub parameter_count: u64 }
@@ -90,6 +91,7 @@ pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
 pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
+pub type DfCommandEnumOptionsFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, overload: u64, parameter: u64, source: DfStringView, output: *mut DfStringBuffer) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 
@@ -102,6 +104,7 @@ pub struct DfPluginApiV1 {
     pub disable: Option<DfPluginLifecycleFn>,
     pub commands: Option<DfPluginCommandsFn>,
     pub handle_command: Option<DfHandleCommandFn>,
+    pub command_enum_options: Option<DfCommandEnumOptionsFn>,
     pub destroy: Option<DfPluginDestroyFn>,
     pub handle_event: Option<DfHandleEventFn>,
 }

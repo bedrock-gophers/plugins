@@ -148,6 +148,13 @@ impl CommandParameter {
     pub const fn boolean(name: &'static str) -> Self {
         Self::typed(name, dragonfly_plugin_sys::DF_COMMAND_PARAMETER_BOOL)
     }
+
+    pub const fn dynamic_enum(name: &'static str) -> Self {
+        Self::typed(
+            name,
+            dragonfly_plugin_sys::DF_COMMAND_PARAMETER_DYNAMIC_ENUM,
+        )
+    }
 }
 
 #[repr(transparent)]
@@ -197,6 +204,86 @@ pub trait CommandDefinition: Sized {
     const COMMAND: Command;
 
     fn parse(arguments: &str) -> Result<Self, CommandParseError>;
+
+    #[doc(hidden)]
+    fn dynamic_options(
+        _overload: usize,
+        _parameter: usize,
+        _source: CommandSource<'_>,
+    ) -> Option<Vec<String>> {
+        None
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommandSource<'a> {
+    name: &'a str,
+}
+
+impl<'a> CommandSource<'a> {
+    #[doc(hidden)]
+    pub const fn new(name: &'a str) -> Self {
+        Self { name }
+    }
+
+    pub const fn name(self) -> &'a str {
+        self.name
+    }
+}
+
+pub trait DynamicCommandEnum {
+    fn options(source: CommandSource<'_>) -> Vec<String>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Dynamic<T> {
+    value: String,
+    marker: core::marker::PhantomData<T>,
+}
+
+impl<T> Dynamic<T> {
+    #[doc(hidden)]
+    pub fn new(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            marker: core::marker::PhantomData,
+        }
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    pub fn into_string(self) -> String {
+        self.value
+    }
+}
+
+#[doc(hidden)]
+pub fn write_dynamic_options(
+    options: Vec<String>,
+    output: &mut dragonfly_plugin_sys::DfStringBuffer,
+) -> Result<(), MessageTooLong> {
+    let encoded = options.join("\n");
+    if options.iter().any(|option| option.contains('\n')) {
+        return Err(MessageTooLong {
+            length: encoded.len(),
+            capacity: output.capacity as usize,
+        });
+    }
+    let capacity = output.capacity as usize;
+    if encoded.len() > capacity || (!encoded.is_empty() && output.data.is_null()) {
+        return Err(MessageTooLong {
+            length: encoded.len(),
+            capacity,
+        });
+    }
+    if !encoded.is_empty() {
+        // SAFETY: the runtime supplied a writable buffer and capacity was checked above.
+        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), output.data, encoded.len()) };
+    }
+    output.len = encoded.len() as u64;
+    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

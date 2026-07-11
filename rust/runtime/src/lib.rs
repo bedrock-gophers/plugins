@@ -1,10 +1,11 @@
 use dragonfly_plugin_sys::{
-    DF_ABI_VERSION, DF_COMMAND_PARAMETER_BOOL, DF_COMMAND_PARAMETER_ENUM,
-    DF_COMMAND_PARAMETER_FLOAT, DF_COMMAND_PARAMETER_INTEGER, DF_COMMAND_PARAMETER_STRING,
-    DF_COMMAND_PARAMETER_SUBCOMMAND, DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_MOVE, DF_STATUS_ERROR,
-    DF_STATUS_OK, DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_MOVE, DfCommandDescriptor,
-    DfCommandInput, DfCommandState, DfPlayerChatInput, DfPlayerChatState, DfPlayerMoveInput,
-    DfPlayerMoveState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
+    DF_ABI_VERSION, DF_COMMAND_PARAMETER_BOOL, DF_COMMAND_PARAMETER_DYNAMIC_ENUM,
+    DF_COMMAND_PARAMETER_ENUM, DF_COMMAND_PARAMETER_FLOAT, DF_COMMAND_PARAMETER_INTEGER,
+    DF_COMMAND_PARAMETER_STRING, DF_COMMAND_PARAMETER_SUBCOMMAND, DF_EVENT_PLAYER_CHAT,
+    DF_EVENT_PLAYER_MOVE, DF_STATUS_ERROR, DF_STATUS_OK, DF_SUBSCRIPTION_PLAYER_CHAT,
+    DF_SUBSCRIPTION_PLAYER_MOVE, DfCommandDescriptor, DfCommandInput, DfCommandState,
+    DfPlayerChatInput, DfPlayerChatState, DfPlayerMoveInput, DfPlayerMoveState, DfPluginApiV1,
+    DfPluginEntryV1Fn, DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -201,6 +202,49 @@ impl DfRuntime {
         let status = unsafe { handle(plugin.instance, command.local, input, state) };
         if status != DF_STATUS_OK || !valid_command_state(state) {
             return DF_STATUS_ERROR;
+        }
+        DF_STATUS_OK
+    }
+
+    fn command_enum_options(
+        &self,
+        index: usize,
+        overload: u64,
+        parameter: u64,
+        source: DfStringView,
+        output: &mut dragonfly_plugin_sys::DfStringBuffer,
+    ) -> DfStatus {
+        let Some(command) = self.commands.get(index) else {
+            return DF_STATUS_ERROR;
+        };
+        let plugin = &self.plugins[command.plugin];
+        if !plugin.enabled {
+            return DF_STATUS_ERROR;
+        }
+        let Some(options) = plugin.api.command_enum_options else {
+            return DF_STATUS_ERROR;
+        };
+        let status = unsafe {
+            options(
+                plugin.instance,
+                command.local,
+                overload,
+                parameter,
+                source,
+                output,
+            )
+        };
+        if status != DF_STATUS_OK || output.len > output.capacity {
+            return DF_STATUS_ERROR;
+        }
+        if output.len != 0 {
+            if output.data.is_null() {
+                return DF_STATUS_ERROR;
+            }
+            let bytes = unsafe { slice::from_raw_parts(output.data, output.len as usize) };
+            if std::str::from_utf8(bytes).is_err() {
+                return DF_STATUS_ERROR;
+            }
         }
         DF_STATUS_OK
     }
@@ -422,6 +466,7 @@ fn valid_command_descriptor(descriptor: &DfCommandDescriptor) -> bool {
                 | DF_COMMAND_PARAMETER_FLOAT
                 | DF_COMMAND_PARAMETER_BOOL
                     if values.is_empty() => {}
+                DF_COMMAND_PARAMETER_DYNAMIC_ENUM if values.is_empty() => {}
                 _ => return false,
             }
         }
@@ -592,6 +637,32 @@ pub unsafe extern "C" fn df_runtime_handle_command(
     }
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         runtime.handle_command(index as usize, input, state)
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+#[unsafe(no_mangle)]
+/// Resolves source-aware options for a dynamic command enum.
+///
+/// # Safety
+/// All pointers and string views must remain valid for this synchronous call.
+pub unsafe extern "C" fn df_runtime_command_enum_options(
+    runtime: *mut DfRuntime,
+    index: u64,
+    overload: u64,
+    parameter: u64,
+    source: DfStringView,
+    output: *mut dragonfly_plugin_sys::DfStringBuffer,
+) -> DfStatus {
+    let (Some(runtime), Some(output)) = (unsafe { runtime.as_ref() }, unsafe { output.as_mut() })
+    else {
+        return DF_STATUS_ERROR;
+    };
+    if unsafe { string_view(source) }.is_err() {
+        return DF_STATUS_ERROR;
+    }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.command_enum_options(index as usize, overload, parameter, source, output)
     }))
     .unwrap_or(DF_STATUS_ERROR)
 }

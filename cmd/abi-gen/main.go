@@ -147,6 +147,7 @@ typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffe
 #define DF_COMMAND_PARAMETER_INTEGER 4u
 #define DF_COMMAND_PARAMETER_FLOAT 5u
 #define DF_COMMAND_PARAMETER_BOOL 6u
+#define DF_COMMAND_PARAMETER_DYNAMIC_ENUM 7u
 typedef struct { uint32_t kind; DfStringView name; const DfStringView *values; uint64_t value_count; } DfCommandParameter;
 typedef struct { const DfCommandParameter *parameters; uint64_t parameter_count; } DfCommandOverload;
 typedef struct { DfStringView name; DfStringView description; const DfCommandOverload *overloads; uint64_t overload_count; } DfCommandDescriptor;
@@ -180,6 +181,7 @@ typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
+typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, DfStringView source, DfStringBuffer *output);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -190,6 +192,7 @@ typedef struct {
     DfPluginLifecycleFn disable;
     DfPluginCommandsFn commands;
     DfHandleCommandFn handle_command;
+    DfCommandEnumOptionsFn command_enum_options;
     DfPluginDestroyFn destroy;
     DfHandleEventFn handle_event;
 } DfPluginApiV1;
@@ -208,6 +211,7 @@ uint64_t df_runtime_subscriptions(const DfRuntime *runtime);
 uint64_t df_runtime_command_count(const DfRuntime *runtime);
 DfStatus df_runtime_command_at(const DfRuntime *runtime, uint64_t index, DfCommandDescriptor *out);
 DfStatus df_runtime_handle_command(DfRuntime *runtime, uint64_t index, const DfCommandInput *input, DfCommandState *state);
+DfStatus df_runtime_command_enum_options(DfRuntime *runtime, uint64_t index, uint64_t overload, uint64_t parameter, DfStringView source, DfStringBuffer *output);
 `)
 	for _, evt := range events {
 		name := cName(evt)
@@ -264,6 +268,7 @@ pub const DF_COMMAND_PARAMETER_STRING: u32 = 3;
 pub const DF_COMMAND_PARAMETER_INTEGER: u32 = 4;
 pub const DF_COMMAND_PARAMETER_FLOAT: u32 = 5;
 pub const DF_COMMAND_PARAMETER_BOOL: u32 = 6;
+pub const DF_COMMAND_PARAMETER_DYNAMIC_ENUM: u32 = 7;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandOverload { pub parameters: *const DfCommandParameter, pub parameter_count: u64 }
@@ -303,6 +308,7 @@ pub struct DfAbiHeader { pub abi_version: u32, pub struct_size: u32, pub subscri
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
 pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
+pub type DfCommandEnumOptionsFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, overload: u64, parameter: u64, source: DfStringView, output: *mut DfStringBuffer) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 
@@ -315,6 +321,7 @@ pub struct DfPluginApiV1 {
     pub disable: Option<DfPluginLifecycleFn>,
     pub commands: Option<DfPluginCommandsFn>,
     pub handle_command: Option<DfHandleCommandFn>,
+    pub command_enum_options: Option<DfCommandEnumOptionsFn>,
     pub destroy: Option<DfPluginDestroyFn>,
     pub handle_event: Option<DfHandleEventFn>,
 }

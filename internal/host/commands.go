@@ -14,6 +14,7 @@ import (
 type commandRuntime interface {
 	Commands() ([]native.Command, error)
 	HandleCommand(index uint64, input native.CommandInput) (native.CommandOutput, error)
+	CommandEnumOptions(index, overload, parameter uint64, sourceName string) ([]string, error)
 }
 
 // RegisterCommands publishes all enabled plugin commands in Dragonfly's command registry.
@@ -46,6 +47,10 @@ func commandRunnables(runtime commandRuntime, command native.Command) ([]cmd.Run
 		for index, parameter := range overload.Parameters {
 			parameters[index] = pluginParameter{
 				descriptor: parameter,
+				runtime:    runtime,
+				command:    command.Index,
+				overload:   uint64(overloadIndex),
+				parameter:  uint64(index),
 				enumType: fmt.Sprintf(
 					"bedrock_gophers_%s_%d_%s",
 					command.Name,
@@ -111,6 +116,10 @@ func (c pluginCommand) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
 
 type pluginParameter struct {
 	descriptor native.CommandParameter
+	runtime    commandRuntime
+	command    uint64
+	overload   uint64
+	parameter  uint64
 	enumType   string
 	selected   string
 }
@@ -154,6 +163,8 @@ func (p pluginParameter) Parse(line *cmd.Line, value reflect.Value) error {
 			return fmt.Errorf("%q is not a valid boolean", argument)
 		}
 		p.selected = strings.ToLower(argument)
+	case native.CommandParameterDynamicEnum:
+		p.selected = argument
 	default:
 		return fmt.Errorf("unknown plugin parameter kind %d", p.descriptor.Kind)
 	}
@@ -164,12 +175,31 @@ func (p pluginParameter) Parse(line *cmd.Line, value reflect.Value) error {
 func (p pluginParameter) Type() string { return p.descriptor.Name }
 
 type describedEnum struct {
-	typeName string
-	options  []string
+	typeName  string
+	options   []string
+	parameter *pluginParameter
 }
 
-func (e describedEnum) Type() string                { return e.typeName }
-func (e describedEnum) Options(cmd.Source) []string { return e.options }
+func (e describedEnum) Type() string { return e.typeName }
+func (e describedEnum) Options(source cmd.Source) []string {
+	if e.parameter == nil {
+		return e.options
+	}
+	sourceName := fmt.Sprintf("%T", source)
+	if named, ok := source.(cmd.NamedTarget); ok {
+		sourceName = named.Name()
+	}
+	options, err := e.parameter.runtime.CommandEnumOptions(
+		e.parameter.command,
+		e.parameter.overload,
+		e.parameter.parameter,
+		sourceName,
+	)
+	if err != nil {
+		return nil
+	}
+	return options
+}
 
 func describe(parameters ...pluginParameter) []cmd.ParamInfo {
 	result := make([]cmd.ParamInfo, 0, len(parameters))
@@ -177,12 +207,18 @@ func describe(parameters ...pluginParameter) []cmd.ParamInfo {
 		switch parameter.descriptor.Kind {
 		case native.CommandParameterSubcommand:
 			result = append(result, cmd.ParamInfo{Name: parameter.descriptor.Name, Value: cmd.SubCommand{}})
-		case native.CommandParameterEnum:
+		case native.CommandParameterEnum, native.CommandParameterDynamicEnum:
+			var dynamic *pluginParameter
+			if parameter.descriptor.Kind == native.CommandParameterDynamicEnum {
+				copy := parameter
+				dynamic = &copy
+			}
 			result = append(result, cmd.ParamInfo{
 				Name: parameter.descriptor.Name,
 				Value: describedEnum{
-					typeName: parameter.enumType,
-					options:  parameter.descriptor.Values,
+					typeName:  parameter.enumType,
+					options:   parameter.descriptor.Values,
+					parameter: dynamic,
 				},
 			})
 		case native.CommandParameterString:

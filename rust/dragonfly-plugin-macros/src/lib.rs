@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    Attribute, Data, DeriveInput, Fields, FnArg, ImplItem, ItemImpl, LitStr, Type,
-    parse_macro_input,
+    Attribute, Data, DeriveInput, Fields, FnArg, GenericArgument, ImplItem, ItemImpl, LitStr,
+    PathArguments, Type, parse_macro_input,
 };
 
 fn command_attribute(attributes: &[Attribute], key: &str) -> syn::Result<Option<String>> {
@@ -54,6 +54,23 @@ fn type_name(value: &Type) -> Option<String> {
         .segments
         .last()
         .map(|segment| segment.ident.to_string())
+}
+
+fn dynamic_provider(value: &Type) -> Option<Type> {
+    let Type::Path(path) = value else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    if segment.ident != "Dynamic" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+    match arguments.args.first()? {
+        GenericArgument::Type(provider) => Some(provider.clone()),
+        _ => None,
+    }
 }
 
 fn parse_scalar(field: &syn::Ident, ty: &Type) -> proc_macro2::TokenStream {
@@ -136,7 +153,8 @@ fn expand_command(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     };
     let mut overloads = Vec::new();
     let mut parsers = Vec::new();
-    for variant in data.variants {
+    let mut dynamic_options = Vec::new();
+    for (overload_index, variant) in data.variants.into_iter().enumerate() {
         let variant_name = command_attribute(&variant.attrs, "name")?
             .unwrap_or_else(|| kebab_case(&variant.ident.to_string()));
         let variant_ident = variant.ident;
@@ -146,54 +164,76 @@ fn expand_command(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 let mut parameters = Vec::new();
                 let mut names = Vec::new();
                 let mut reads = Vec::new();
-                for field in fields.named {
+                for (field_index, field) in fields.named.into_iter().enumerate() {
                     let field_name = field.ident.expect("named field");
                     let parameter_name = command_attribute(&field.attrs, "name")?
                         .unwrap_or_else(|| kebab_case(&field_name.to_string()));
                     let field_type = field.ty;
+                    let provider = dynamic_provider(&field_type);
                     let field_type_name = type_name(&field_type);
-                    let (parameter, read) = match field_type_name.as_deref() {
-                        Some("String") => (
-                            quote!(::dragonfly_plugin::CommandParameter::string(#parameter_name)),
+                    let (parameter, read) = if let Some(provider) = provider {
+                        let parameter_index = field_index + 1;
+                        dynamic_options.push(quote! {
+                            (#overload_index, #parameter_index) => {
+                                return Some(<#provider as ::dragonfly_plugin::DynamicCommandEnum>::options(source));
+                            }
+                        });
+                        (
+                            quote!(::dragonfly_plugin::CommandParameter::dynamic_enum(#parameter_name)),
                             quote! {
-                                let #field_name = parts.next().ok_or_else(|| {
-                                    ::dragonfly_plugin::CommandParseError::new(
-                                        concat!("missing command argument ", stringify!(#field_name))
+                                let #field_name = ::dragonfly_plugin::Dynamic::new(
+                                    parts.next().ok_or_else(|| {
+                                        ::dragonfly_plugin::CommandParseError::new(
+                                            concat!("missing command argument ", stringify!(#field_name))
+                                        )
+                                    })?
+                                );
+                            },
+                        )
+                    } else {
+                        match field_type_name.as_deref() {
+                            Some("String") => (
+                                quote!(::dragonfly_plugin::CommandParameter::string(#parameter_name)),
+                                quote! {
+                                    let #field_name = parts.next().ok_or_else(|| {
+                                        ::dragonfly_plugin::CommandParseError::new(
+                                            concat!("missing command argument ", stringify!(#field_name))
+                                        )
+                                    })?.to_owned();
+                                },
+                            ),
+                            Some("bool") => (
+                                quote!(::dragonfly_plugin::CommandParameter::boolean(#parameter_name)),
+                                parse_scalar(&field_name, &field_type),
+                            ),
+                            Some("f32" | "f64") => (
+                                quote!(::dragonfly_plugin::CommandParameter::float(#parameter_name)),
+                                parse_scalar(&field_name, &field_type),
+                            ),
+                            Some(
+                                "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32"
+                                | "u64" | "usize",
+                            ) => (
+                                quote!(::dragonfly_plugin::CommandParameter::integer(#parameter_name)),
+                                parse_scalar(&field_name, &field_type),
+                            ),
+                            _ => (
+                                quote! {
+                                    ::dragonfly_plugin::CommandParameter::enumeration(
+                                        #parameter_name,
+                                        <#field_type as ::dragonfly_plugin::CommandEnum>::VALUES,
                                     )
-                                })?.to_owned();
-                            },
-                        ),
-                        Some("bool") => (
-                            quote!(::dragonfly_plugin::CommandParameter::boolean(#parameter_name)),
-                            parse_scalar(&field_name, &field_type),
-                        ),
-                        Some("f32" | "f64") => (
-                            quote!(::dragonfly_plugin::CommandParameter::float(#parameter_name)),
-                            parse_scalar(&field_name, &field_type),
-                        ),
-                        Some(
-                            "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64"
-                            | "usize",
-                        ) => (
-                            quote!(::dragonfly_plugin::CommandParameter::integer(#parameter_name)),
-                            parse_scalar(&field_name, &field_type),
-                        ),
-                        _ => (
-                            quote! {
-                                ::dragonfly_plugin::CommandParameter::enumeration(
-                                    #parameter_name,
-                                    <#field_type as ::dragonfly_plugin::CommandEnum>::VALUES,
-                                )
-                            },
-                            quote! {
-                                let raw = parts.next().ok_or_else(|| ::dragonfly_plugin::CommandParseError::new(
-                                    concat!("missing command argument ", stringify!(#field_name))
-                                ))?;
-                                let #field_name = <#field_type as ::dragonfly_plugin::CommandEnum>::parse(raw).ok_or_else(|| {
-                                    ::dragonfly_plugin::CommandParseError::new(format!("invalid {}: {raw}", stringify!(#field_name)))
-                                })?;
-                            },
-                        ),
+                                },
+                                quote! {
+                                    let raw = parts.next().ok_or_else(|| ::dragonfly_plugin::CommandParseError::new(
+                                        concat!("missing command argument ", stringify!(#field_name))
+                                    ))?;
+                                    let #field_name = <#field_type as ::dragonfly_plugin::CommandEnum>::parse(raw).ok_or_else(|| {
+                                        ::dragonfly_plugin::CommandParseError::new(format!("invalid {}: {raw}", stringify!(#field_name)))
+                                    })?;
+                                },
+                            ),
+                        }
                     };
                     parameters.push(parameter);
                     names.push(field_name);
@@ -249,6 +289,17 @@ fn expand_command(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 })?;
                 #(#parsers)*
                 Err(::dragonfly_plugin::CommandParseError::new(format!("unknown subcommand: {subcommand}")))
+            }
+
+            fn dynamic_options(
+                overload: usize,
+                parameter: usize,
+                source: ::dragonfly_plugin::CommandSource<'_>,
+            ) -> Option<Vec<String>> {
+                match (overload, parameter) {
+                    #(#dynamic_options)*
+                    _ => None,
+                }
             }
         }
     })
@@ -356,6 +407,19 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
     };
+    let dynamic_dispatch_arms: Vec<_> = command_types
+        .iter()
+        .enumerate()
+        .map(|(index, command_type)| {
+            quote! {
+                #index => <#command_type as ::dragonfly_plugin::CommandDefinition>::dynamic_options(
+                    overload as usize,
+                    parameter as usize,
+                    source,
+                ),
+            }
+        })
+        .collect();
     let handles_move = implementation
         .items
         .iter()
@@ -455,6 +519,39 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 if result.is_ok() { sys::DF_STATUS_OK } else { sys::DF_STATUS_ERROR }
             }
 
+            unsafe extern "C" fn command_enum_options(
+                instance: *mut ::dragonfly_plugin::__private::c_void,
+                command: u64,
+                overload: u64,
+                parameter: u64,
+                source: ::dragonfly_plugin::__private::sys::DfStringView,
+                output: *mut ::dragonfly_plugin::__private::sys::DfStringBuffer,
+            ) -> ::dragonfly_plugin::__private::sys::DfStatus {
+                use ::dragonfly_plugin::__private::sys;
+                if instance.is_null() || output.is_null() || (source.len != 0 && source.data.is_null()) {
+                    return sys::DF_STATUS_ERROR;
+                }
+                let result = ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
+                    let bytes = if source.len == 0 {
+                        &[][..]
+                    } else {
+                        unsafe { ::core::slice::from_raw_parts(source.data, source.len as usize) }
+                    };
+                    let name = ::core::str::from_utf8(bytes).map_err(|_| ())?;
+                    let source = ::dragonfly_plugin::CommandSource::new(name);
+                    let options = match command as usize {
+                        #(#dynamic_dispatch_arms)*
+                        _ => None,
+                    }.ok_or(())?;
+                    unsafe { (*output).len = 0 };
+                    ::dragonfly_plugin::write_dynamic_options(options, unsafe { &mut *output }).map_err(|_| ())
+                }));
+                match result {
+                    Ok(Ok(())) => sys::DF_STATUS_OK,
+                    _ => sys::DF_STATUS_ERROR,
+                }
+            }
+
             unsafe extern "C" fn handle_event(
                 instance: *mut ::dragonfly_plugin::__private::c_void,
                 event_id: ::dragonfly_plugin::__private::sys::DfEventId,
@@ -503,6 +600,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     disable: Some(disable),
                     commands: Some(commands),
                     handle_command: Some(handle_command),
+                    command_enum_options: Some(command_enum_options),
                     destroy: Some(destroy),
                     handle_event: Some(handle_event),
                 };

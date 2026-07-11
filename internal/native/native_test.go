@@ -91,6 +91,17 @@ func TestCommand(t *testing.T) {
 	}
 }
 
+func TestDynamicCommandEnum(t *testing.T) {
+	runtime := openTestRuntime(t)
+	options, err := runtime.CommandEnumOptions(0, 5, 1, "Danick")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(options) != 2 || options[0] != "Danick" || options[1] != "everyone" {
+		t.Fatalf("options = %#v", options)
+	}
+}
+
 func TestChatFilter(t *testing.T) {
 	runtime := openTestRuntime(t)
 	if runtime.Subscriptions()&PlayerChatSubscription == 0 {
