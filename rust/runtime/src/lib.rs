@@ -1,7 +1,9 @@
 use dragonfly_plugin_sys::{
-    DF_ABI_VERSION, DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_MOVE, DF_STATUS_ERROR, DF_STATUS_OK,
-    DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_MOVE, DfPlayerChatInput, DfPlayerChatState,
-    DfPlayerMoveInput, DfPlayerMoveState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
+    DF_ABI_VERSION, DF_COMMAND_PARAMETER_ENUM, DF_COMMAND_PARAMETER_SUBCOMMAND,
+    DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_MOVE, DF_STATUS_ERROR, DF_STATUS_OK,
+    DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_MOVE, DfCommandDescriptor, DfCommandInput,
+    DfCommandState, DfPlayerChatInput, DfPlayerChatState, DfPlayerMoveInput, DfPlayerMoveState,
+    DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -18,7 +20,14 @@ pub struct DfRuntimeConfig {
 
 pub struct DfRuntime {
     plugins: Vec<LoadedPlugin>,
+    commands: Vec<RuntimeCommand>,
     subscriptions: u64,
+}
+
+struct RuntimeCommand {
+    plugin: usize,
+    local: u64,
+    descriptor: DfCommandDescriptor,
 }
 
 struct LoadedPlugin {
@@ -63,6 +72,7 @@ impl DfRuntime {
         }
         Ok(Self {
             plugins,
+            commands: Vec::new(),
             subscriptions,
         })
     }
@@ -115,13 +125,83 @@ impl DfRuntime {
             }
             plugin.enabled = true;
         }
-        DF_STATUS_OK
+        let status = self.rebuild_commands();
+        if status != DF_STATUS_OK {
+            self.disable();
+        }
+        status
     }
 
     fn disable(&mut self) {
+        self.commands.clear();
         for plugin in self.plugins.iter_mut().rev() {
             plugin.disable();
         }
+    }
+
+    fn rebuild_commands(&mut self) -> DfStatus {
+        self.commands.clear();
+        for (plugin_index, plugin) in self.plugins.iter().enumerate() {
+            let Some(commands) = plugin.api.commands else {
+                continue;
+            };
+            let mut count = 0;
+            let descriptors = unsafe { commands(plugin.instance, &mut count) };
+            if count != 0 && descriptors.is_null() {
+                return DF_STATUS_ERROR;
+            }
+            let Ok(descriptors) = (unsafe { abi_slice(descriptors, count) }) else {
+                return DF_STATUS_ERROR;
+            };
+            for (local, descriptor) in descriptors.iter().copied().enumerate() {
+                let Ok(name) = (unsafe { string_view(descriptor.name) }) else {
+                    return DF_STATUS_ERROR;
+                };
+                if name.is_empty()
+                    || self.commands.iter().any(|command| {
+                        unsafe { string_view(command.descriptor.name) }
+                            .is_ok_and(|existing| existing == name)
+                    })
+                {
+                    return DF_STATUS_ERROR;
+                }
+                if unsafe { string_view(descriptor.description) }.is_err() {
+                    return DF_STATUS_ERROR;
+                }
+                if !valid_command_descriptor(&descriptor) {
+                    return DF_STATUS_ERROR;
+                }
+                self.commands.push(RuntimeCommand {
+                    plugin: plugin_index,
+                    local: local as u64,
+                    descriptor,
+                });
+            }
+        }
+        DF_STATUS_OK
+    }
+
+    fn handle_command(
+        &self,
+        index: usize,
+        input: &DfCommandInput,
+        state: &mut DfCommandState,
+    ) -> DfStatus {
+        let Some(command) = self.commands.get(index) else {
+            return DF_STATUS_ERROR;
+        };
+        let plugin = &self.plugins[command.plugin];
+        if !plugin.enabled {
+            return DF_STATUS_ERROR;
+        }
+        let Some(handle) = plugin.api.handle_command else {
+            return DF_STATUS_ERROR;
+        };
+        let status = unsafe { handle(plugin.instance, command.local, input, state) };
+        if status != DF_STATUS_OK || !valid_command_state(state) {
+            return DF_STATUS_ERROR;
+        }
+        DF_STATUS_OK
     }
 
     fn handle_chat(&self, input: &DfPlayerChatInput, state: &mut DfPlayerChatState) -> DfStatus {
@@ -180,6 +260,22 @@ fn valid_chat_state(state: &DfPlayerChatState) -> bool {
             state.replacement.len as usize,
         )
     };
+    std::str::from_utf8(bytes).is_ok()
+}
+
+fn valid_command_state(state: &DfCommandState) -> bool {
+    if state.output.len > state.output.capacity {
+        return false;
+    }
+    if state.output.len == 0 {
+        return true;
+    }
+    if state.output.data.is_null() {
+        return false;
+    }
+    // SAFETY: bounds and pointer were validated above for the caller-owned buffer.
+    let bytes =
+        unsafe { slice::from_raw_parts(state.output.data.cast_const(), state.output.len as usize) };
     std::str::from_utf8(bytes).is_ok()
 }
 
@@ -276,6 +372,55 @@ unsafe fn string_view<'a>(view: DfStringView) -> Result<&'a str, String> {
     // SAFETY: caller guarantees view points to readable memory for view.len bytes.
     let bytes = unsafe { slice::from_raw_parts(view.data, view.len as usize) };
     std::str::from_utf8(bytes).map_err(|err| format!("invalid UTF-8: {err}"))
+}
+
+unsafe fn abi_slice<'a, T>(data: *const T, len: u64) -> Result<&'a [T], ()> {
+    if len == 0 {
+        return Ok(&[]);
+    }
+    if data.is_null() || len > 1024 {
+        return Err(());
+    }
+    Ok(unsafe { slice::from_raw_parts(data, len as usize) })
+}
+
+fn valid_command_descriptor(descriptor: &DfCommandDescriptor) -> bool {
+    let Ok(overloads) = (unsafe { abi_slice(descriptor.overloads, descriptor.overload_count) })
+    else {
+        return false;
+    };
+    for overload in overloads {
+        if overload.parameter_count > 4 {
+            return false;
+        }
+        let Ok(parameters) = (unsafe { abi_slice(overload.parameters, overload.parameter_count) })
+        else {
+            return false;
+        };
+        for parameter in parameters {
+            let Ok(name) = (unsafe { string_view(parameter.name) }) else {
+                return false;
+            };
+            if name.is_empty() {
+                return false;
+            }
+            let Ok(values) = (unsafe { abi_slice(parameter.values, parameter.value_count) }) else {
+                return false;
+            };
+            match parameter.kind {
+                DF_COMMAND_PARAMETER_SUBCOMMAND if values.is_empty() => {}
+                DF_COMMAND_PARAMETER_ENUM if !values.is_empty() => {
+                    for value in values {
+                        if unsafe { string_view(*value) }.is_err() {
+                            return false;
+                        }
+                    }
+                }
+                _ => return false,
+            }
+        }
+    }
+    true
 }
 
 fn write_error(buffer: *mut u8, capacity: u64, message: &str) {
@@ -383,6 +528,66 @@ pub unsafe extern "C" fn df_runtime_plugin_count(runtime: *const DfRuntime) -> u
 pub unsafe extern "C" fn df_runtime_subscriptions(runtime: *const DfRuntime) -> u64 {
     // SAFETY: null is handled; non-null pointer is owned by caller.
     unsafe { runtime.as_ref() }.map_or(0, |runtime| runtime.subscriptions)
+}
+
+#[unsafe(no_mangle)]
+/// Returns the number of commands exposed by enabled plugins.
+///
+/// # Safety
+/// `runtime` must be null or point to a live runtime for this call.
+pub unsafe extern "C" fn df_runtime_command_count(runtime: *const DfRuntime) -> u64 {
+    // SAFETY: null is handled; non-null pointer is owned by caller.
+    unsafe { runtime.as_ref() }.map_or(0, |runtime| runtime.commands.len() as u64)
+}
+
+#[unsafe(no_mangle)]
+/// Copies a command descriptor by global runtime index.
+///
+/// # Safety
+/// `runtime` and `out` must point to live ABI-compatible values for this call.
+pub unsafe extern "C" fn df_runtime_command_at(
+    runtime: *const DfRuntime,
+    index: u64,
+    out: *mut DfCommandDescriptor,
+) -> DfStatus {
+    let (Some(runtime), Some(out)) = (unsafe { runtime.as_ref() }, unsafe { out.as_mut() }) else {
+        return DF_STATUS_ERROR;
+    };
+    let Some(command) = runtime.commands.get(index as usize) else {
+        return DF_STATUS_ERROR;
+    };
+    *out = command.descriptor;
+    DF_STATUS_OK
+}
+
+#[unsafe(no_mangle)]
+/// Dispatches a registered command to its owning plugin.
+///
+/// # Safety
+/// All pointers must reference live ABI-compatible values for this synchronous call. The output
+/// buffer in `state` must remain writable for its declared capacity.
+pub unsafe extern "C" fn df_runtime_handle_command(
+    runtime: *mut DfRuntime,
+    index: u64,
+    input: *const DfCommandInput,
+    state: *mut DfCommandState,
+) -> DfStatus {
+    let (Some(runtime), Some(input), Some(state)) = (
+        unsafe { runtime.as_ref() },
+        unsafe { input.as_ref() },
+        unsafe { state.as_mut() },
+    ) else {
+        return DF_STATUS_ERROR;
+    };
+    if unsafe { string_view(input.source) }.is_err()
+        || unsafe { string_view(input.arguments) }.is_err()
+    {
+        return DF_STATUS_ERROR;
+    }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.handle_command(index as usize, input, state)
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
 }
 
 #[unsafe(no_mangle)]

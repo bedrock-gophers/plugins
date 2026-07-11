@@ -63,6 +63,10 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if err := pluginRuntime.Enable(); err != nil {
 		return err
 	}
+	if err := host.RegisterCommands(pluginRuntime); err != nil {
+		pluginRuntime.Disable()
+		return err
+	}
 	srv.Listen()
 	defer func() {
 		if err := srv.Close(); err != nil {

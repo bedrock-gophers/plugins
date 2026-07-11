@@ -20,6 +20,13 @@ typedef struct { double x; double y; double z; } DfVec3;
 typedef struct { float yaw; float pitch; } DfRotation;
 typedef struct { const uint8_t *data; uint64_t len; } DfStringView;
 typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffer;
+#define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
+#define DF_COMMAND_PARAMETER_ENUM 2u
+typedef struct { uint32_t kind; DfStringView name; const DfStringView *values; uint64_t value_count; } DfCommandParameter;
+typedef struct { const DfCommandParameter *parameters; uint64_t parameter_count; } DfCommandOverload;
+typedef struct { DfStringView name; DfStringView description; const DfCommandOverload *overloads; uint64_t overload_count; } DfCommandDescriptor;
+typedef struct { DfStringView source; DfStringView arguments; } DfCommandInput;
+typedef struct { uint8_t failed; DfStringBuffer output; } DfCommandState;
 
 typedef struct {
     uint32_t abi_version;
@@ -56,6 +63,8 @@ typedef struct {
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
+typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
+typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -64,6 +73,8 @@ typedef struct {
     DfPluginCreateFn create;
     DfPluginLifecycleFn enable;
     DfPluginLifecycleFn disable;
+    DfPluginCommandsFn commands;
+    DfHandleCommandFn handle_command;
     DfPluginDestroyFn destroy;
     DfHandleEventFn handle_event;
 } DfPluginApiV1;
@@ -79,6 +90,9 @@ void df_runtime_disable(DfRuntime *runtime);
 void df_runtime_destroy(DfRuntime *runtime);
 uint64_t df_runtime_plugin_count(const DfRuntime *runtime);
 uint64_t df_runtime_subscriptions(const DfRuntime *runtime);
+uint64_t df_runtime_command_count(const DfRuntime *runtime);
+DfStatus df_runtime_command_at(const DfRuntime *runtime, uint64_t index, DfCommandDescriptor *out);
+DfStatus df_runtime_handle_command(DfRuntime *runtime, uint64_t index, const DfCommandInput *input, DfCommandState *state);
 DfStatus df_runtime_handle_player_move(DfRuntime *runtime, const DfPlayerMoveInput *input, DfPlayerMoveState *state);
 DfStatus df_runtime_handle_player_chat(DfRuntime *runtime, const DfPlayerChatInput *input, DfPlayerChatState *state);
 

@@ -44,8 +44,8 @@ func openTestRuntime(t testing.TB) *Runtime {
 
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 3 {
-		t.Fatalf("plugin count = %d, want 3", runtime.PluginCount())
+	if runtime.PluginCount() != 4 {
+		t.Fatalf("plugin count = %d, want 4", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")
@@ -67,6 +67,27 @@ func TestMovementGuard(t *testing.T) {
 	}
 	if !cancelled {
 		t.Fatal("movement below world was not cancelled")
+	}
+}
+
+func TestCommand(t *testing.T) {
+	runtime := openTestRuntime(t)
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != 1 || commands[0].Name != "hello" {
+		t.Fatalf("commands = %#v, want hello", commands)
+	}
+	output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+		Source:    "Danick",
+		Arguments: "say excited dragonfly",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Failed || output.Message != "Hello, Danick! You passed: say excited dragonfly" {
+		t.Fatalf("output = %#v", output)
 	}
 }
 

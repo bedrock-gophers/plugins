@@ -496,13 +496,15 @@ Generation prevents stale references from affecting a reconnected player or repl
 
 Dragonfly commands use reflection over concrete Go `Runnable` structs. Dynamic native plugins cannot create new Go struct methods.
 
-Initial command support uses one generic Go runnable with `cmd.Varargs`:
+Raw commands use one generic Go runnable with `cmd.Varargs`:
 
 ```text
 /plugin-command <raw arguments...>
 ```
 
-Rust SDK provides parsing and validation. Rich Bedrock command parameter metadata can be generated later from command schema.
+Structured commands declare overloads containing literal subcommands and enum parameters. The Go adapter maps them to Dragonfly `Runnable`, `ParamDescriber`, `Parameter`, and `Enum` implementations so Bedrock clients receive native command metadata.
+
+Rust has no Go-style runtime reflection. Its equivalent plugin API uses derive and attribute proc macros at compile time. The intended author-facing form is a derived enum/struct: enum variants become subcommands, enum-typed fields become Dragonfly enums, and fields become parameters. These macros generate the low-level static command schema and parser; direct `Command`, `CommandOverload`, and `CommandParameter` construction remains available as an escape hatch and ABI test surface.
 
 ## Scope and parity target
 
@@ -520,7 +522,7 @@ Initial ABI foundation includes:
 - Hurt and heal.
 - Block break and place.
 - Basic event-scoped messaging and cancellation.
-- Raw-argument commands.
+- Raw and structured commands, including enums and subcommands.
 - Player/world opaque IDs.
 
 Temporarily deferred from the first implementation milestone:
@@ -682,6 +684,8 @@ Exact equality with raw Go is impossible because FFI has a boundary. Acceptance 
 ### Phase 6: commands and actions
 
 - Add raw-argument commands.
+- Add structured enum/subcommand descriptors and Dragonfly metadata adapters.
+- Add Rust derives that generate descriptors and argument parsing at compile time.
 - Add generated action list representation.
 - Add transaction-safe teleport, block, sound, and particle actions.
 

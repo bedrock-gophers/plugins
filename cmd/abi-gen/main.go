@@ -141,6 +141,13 @@ typedef struct { double x; double y; double z; } DfVec3;
 typedef struct { float yaw; float pitch; } DfRotation;
 typedef struct { const uint8_t *data; uint64_t len; } DfStringView;
 typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffer;
+#define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
+#define DF_COMMAND_PARAMETER_ENUM 2u
+typedef struct { uint32_t kind; DfStringView name; const DfStringView *values; uint64_t value_count; } DfCommandParameter;
+typedef struct { const DfCommandParameter *parameters; uint64_t parameter_count; } DfCommandOverload;
+typedef struct { DfStringView name; DfStringView description; const DfCommandOverload *overloads; uint64_t overload_count; } DfCommandDescriptor;
+typedef struct { DfStringView source; DfStringView arguments; } DfCommandInput;
+typedef struct { uint8_t failed; DfStringBuffer output; } DfCommandState;
 
 typedef struct {
     uint32_t abi_version;
@@ -167,6 +174,8 @@ typedef struct {
 	b.WriteString(`typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
+typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
+typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -175,6 +184,8 @@ typedef struct {
     DfPluginCreateFn create;
     DfPluginLifecycleFn enable;
     DfPluginLifecycleFn disable;
+    DfPluginCommandsFn commands;
+    DfHandleCommandFn handle_command;
     DfPluginDestroyFn destroy;
     DfHandleEventFn handle_event;
 } DfPluginApiV1;
@@ -190,6 +201,9 @@ void df_runtime_disable(DfRuntime *runtime);
 void df_runtime_destroy(DfRuntime *runtime);
 uint64_t df_runtime_plugin_count(const DfRuntime *runtime);
 uint64_t df_runtime_subscriptions(const DfRuntime *runtime);
+uint64_t df_runtime_command_count(const DfRuntime *runtime);
+DfStatus df_runtime_command_at(const DfRuntime *runtime, uint64_t index, DfCommandDescriptor *out);
+DfStatus df_runtime_handle_command(DfRuntime *runtime, uint64_t index, const DfCommandInput *input, DfCommandState *state);
 `)
 	for _, evt := range events {
 		name := cName(evt)
@@ -238,6 +252,23 @@ impl Default for DfStringBuffer {
     fn default() -> Self { Self { data: core::ptr::null_mut(), len: 0, capacity: 0 } }
 }
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandParameter { pub kind: u32, pub name: DfStringView, pub values: *const DfStringView, pub value_count: u64 }
+pub const DF_COMMAND_PARAMETER_SUBCOMMAND: u32 = 1;
+pub const DF_COMMAND_PARAMETER_ENUM: u32 = 2;
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandOverload { pub parameters: *const DfCommandParameter, pub parameter_count: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandDescriptor { pub name: DfStringView, pub description: DfStringView, pub overloads: *const DfCommandOverload, pub overload_count: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandInput { pub source: DfStringView, pub arguments: DfStringView }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandState { pub failed: u8, pub output: DfStringBuffer }
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfAbiHeader { pub abi_version: u32, pub struct_size: u32, pub subscriptions: u64 }
 
@@ -262,6 +293,8 @@ pub struct DfAbiHeader { pub abi_version: u32, pub struct_size: u32, pub subscri
 	}
 	b.WriteString(`pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
+pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
+pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 
@@ -272,6 +305,8 @@ pub struct DfPluginApiV1 {
     pub create: Option<DfPluginCreateFn>,
     pub enable: Option<DfPluginLifecycleFn>,
     pub disable: Option<DfPluginLifecycleFn>,
+    pub commands: Option<DfPluginCommandsFn>,
+    pub handle_command: Option<DfHandleCommandFn>,
     pub destroy: Option<DfPluginDestroyFn>,
     pub handle_event: Option<DfHandleEventFn>,
 }

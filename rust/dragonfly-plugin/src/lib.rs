@@ -78,6 +78,159 @@ impl core::fmt::Display for MessageTooLong {
 
 impl std::error::Error for MessageTooLong {}
 
+#[repr(transparent)]
+pub struct Command(dragonfly_plugin_sys::DfCommandDescriptor);
+
+unsafe impl Sync for Command {}
+
+#[repr(transparent)]
+pub struct CommandValue(dragonfly_plugin_sys::DfStringView);
+
+unsafe impl Sync for CommandValue {}
+
+impl CommandValue {
+    pub const fn new(value: &'static str) -> Self {
+        Self(dragonfly_plugin_sys::DfStringView {
+            data: value.as_ptr(),
+            len: value.len() as u64,
+        })
+    }
+}
+
+#[repr(transparent)]
+pub struct CommandParameter(dragonfly_plugin_sys::DfCommandParameter);
+
+unsafe impl Sync for CommandParameter {}
+
+impl CommandParameter {
+    pub const fn subcommand(name: &'static str) -> Self {
+        Self(dragonfly_plugin_sys::DfCommandParameter {
+            kind: dragonfly_plugin_sys::DF_COMMAND_PARAMETER_SUBCOMMAND,
+            name: dragonfly_plugin_sys::DfStringView {
+                data: name.as_ptr(),
+                len: name.len() as u64,
+            },
+            values: core::ptr::null(),
+            value_count: 0,
+        })
+    }
+
+    pub const fn enumeration(name: &'static str, values: &'static [CommandValue]) -> Self {
+        Self(dragonfly_plugin_sys::DfCommandParameter {
+            kind: dragonfly_plugin_sys::DF_COMMAND_PARAMETER_ENUM,
+            name: dragonfly_plugin_sys::DfStringView {
+                data: name.as_ptr(),
+                len: name.len() as u64,
+            },
+            values: values.as_ptr().cast(),
+            value_count: values.len() as u64,
+        })
+    }
+}
+
+#[repr(transparent)]
+pub struct CommandOverload(dragonfly_plugin_sys::DfCommandOverload);
+
+unsafe impl Sync for CommandOverload {}
+
+impl CommandOverload {
+    pub const fn new(parameters: &'static [CommandParameter]) -> Self {
+        Self(dragonfly_plugin_sys::DfCommandOverload {
+            parameters: parameters.as_ptr().cast(),
+            parameter_count: parameters.len() as u64,
+        })
+    }
+}
+
+impl Command {
+    pub const fn new(name: &'static str, description: &'static str) -> Self {
+        Self(dragonfly_plugin_sys::DfCommandDescriptor {
+            name: dragonfly_plugin_sys::DfStringView {
+                data: name.as_ptr(),
+                len: name.len() as u64,
+            },
+            description: dragonfly_plugin_sys::DfStringView {
+                data: description.as_ptr(),
+                len: description.len() as u64,
+            },
+            overloads: core::ptr::null(),
+            overload_count: 0,
+        })
+    }
+
+    pub const fn with_overloads(mut self, overloads: &'static [CommandOverload]) -> Self {
+        self.0.overloads = overloads.as_ptr().cast();
+        self.0.overload_count = overloads.len() as u64;
+        self
+    }
+}
+
+pub struct CommandEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfCommandInput,
+    state: &'a mut dragonfly_plugin_sys::DfCommandState,
+}
+
+impl<'a> CommandEvent<'a> {
+    /// Creates a safe command view over runtime-validated ABI values.
+    ///
+    /// # Safety
+    /// Both references and the state's output buffer must belong to the same active command callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfCommandInput,
+        state: &'a mut dragonfly_plugin_sys::DfCommandState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn source(&self) -> &str {
+        unsafe { string_view(self.input.source) }
+    }
+
+    pub fn arguments(&self) -> &str {
+        unsafe { string_view(self.input.arguments) }
+    }
+
+    pub fn reply(&mut self, message: &str) -> Result<(), MessageTooLong> {
+        self.write(message, false)
+    }
+
+    pub fn fail(&mut self, message: &str) -> Result<(), MessageTooLong> {
+        self.write(message, true)
+    }
+
+    fn write(&mut self, message: &str, failed: bool) -> Result<(), MessageTooLong> {
+        let capacity = self.state.output.capacity as usize;
+        if message.len() > capacity || (!message.is_empty() && self.state.output.data.is_null()) {
+            return Err(MessageTooLong {
+                length: message.len(),
+                capacity,
+            });
+        }
+        if !message.is_empty() {
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    message.as_ptr(),
+                    self.state.output.data,
+                    message.len(),
+                )
+            };
+        }
+        self.state.output.len = message.len() as u64;
+        self.state.failed = u8::from(failed);
+        Ok(())
+    }
+}
+
+unsafe fn string_view<'a>(view: dragonfly_plugin_sys::DfStringView) -> &'a str {
+    if view.len == 0 {
+        return "";
+    }
+    unsafe {
+        core::str::from_utf8_unchecked(core::slice::from_raw_parts(view.data, view.len as usize))
+    }
+}
+
 pub struct PlayerChatEvent<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerChatInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerChatState,
@@ -151,6 +304,10 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_disable(&self) {}
     fn on_move(&self, _event: &mut PlayerMoveEvent<'_>) {}
     fn on_chat(&self, _event: &mut PlayerChatEvent<'_>) {}
+    fn commands(&self) -> &'static [Command] {
+        &[]
+    }
+    fn on_command(&self, _command: usize, _event: &mut CommandEvent<'_>) {}
 }
 
 #[cfg(test)]

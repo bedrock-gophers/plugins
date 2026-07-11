@@ -69,6 +69,49 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
+            unsafe extern "C" fn commands(
+                instance: *mut ::dragonfly_plugin::__private::c_void,
+                count: *mut u64,
+            ) -> *const ::dragonfly_plugin::__private::sys::DfCommandDescriptor {
+                if instance.is_null() || count.is_null() {
+                    return ::core::ptr::null();
+                }
+                let plugin = unsafe { &*instance.cast::<PluginType>() };
+                match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
+                    <PluginType as ::dragonfly_plugin::Plugin>::commands(plugin)
+                })) {
+                    Ok(commands) => {
+                        unsafe { *count = commands.len() as u64 };
+                        commands.as_ptr().cast()
+                    }
+                    Err(_) => {
+                        unsafe { *count = u64::MAX };
+                        ::core::ptr::null()
+                    }
+                }
+            }
+
+            unsafe extern "C" fn handle_command(
+                instance: *mut ::dragonfly_plugin::__private::c_void,
+                command: u64,
+                input: *const ::dragonfly_plugin::__private::sys::DfCommandInput,
+                state: *mut ::dragonfly_plugin::__private::sys::DfCommandState,
+            ) -> ::dragonfly_plugin::__private::sys::DfStatus {
+                use ::dragonfly_plugin::__private::sys;
+                if instance.is_null() || input.is_null() || state.is_null() {
+                    return sys::DF_STATUS_ERROR;
+                }
+                let plugin = unsafe { &*instance.cast::<PluginType>() };
+                if command as usize >= <PluginType as ::dragonfly_plugin::Plugin>::commands(plugin).len() {
+                    return sys::DF_STATUS_ERROR;
+                }
+                let result = ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
+                    let mut event = unsafe { ::dragonfly_plugin::CommandEvent::from_raw(&*input, &mut *state) };
+                    <PluginType as ::dragonfly_plugin::Plugin>::on_command(plugin, command as usize, &mut event);
+                }));
+                if result.is_ok() { sys::DF_STATUS_OK } else { sys::DF_STATUS_ERROR }
+            }
+
             unsafe extern "C" fn handle_event(
                 instance: *mut ::dragonfly_plugin::__private::c_void,
                 event_id: ::dragonfly_plugin::__private::sys::DfEventId,
@@ -115,6 +158,8 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     create: Some(create),
                     enable: Some(enable),
                     disable: Some(disable),
+                    commands: Some(commands),
+                    handle_command: Some(handle_command),
                     destroy: Some(destroy),
                     handle_event: Some(handle_event),
                 };

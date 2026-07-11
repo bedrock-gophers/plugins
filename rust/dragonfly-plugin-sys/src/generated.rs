@@ -30,6 +30,23 @@ impl Default for DfStringBuffer {
     fn default() -> Self { Self { data: core::ptr::null_mut(), len: 0, capacity: 0 } }
 }
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandParameter { pub kind: u32, pub name: DfStringView, pub values: *const DfStringView, pub value_count: u64 }
+pub const DF_COMMAND_PARAMETER_SUBCOMMAND: u32 = 1;
+pub const DF_COMMAND_PARAMETER_ENUM: u32 = 2;
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandOverload { pub parameters: *const DfCommandParameter, pub parameter_count: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandDescriptor { pub name: DfStringView, pub description: DfStringView, pub overloads: *const DfCommandOverload, pub overload_count: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandInput { pub source: DfStringView, pub arguments: DfStringView }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfCommandState { pub failed: u8, pub output: DfStringBuffer }
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfAbiHeader { pub abi_version: u32, pub struct_size: u32, pub subscriptions: u64 }
 
@@ -67,6 +84,8 @@ pub struct DfPlayerChatState {
 
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
+pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
+pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 
@@ -77,6 +96,8 @@ pub struct DfPluginApiV1 {
     pub create: Option<DfPluginCreateFn>,
     pub enable: Option<DfPluginLifecycleFn>,
     pub disable: Option<DfPluginLifecycleFn>,
+    pub commands: Option<DfPluginCommandsFn>,
+    pub handle_command: Option<DfHandleCommandFn>,
     pub destroy: Option<DfPluginDestroyFn>,
     pub handle_event: Option<DfHandleEventFn>,
 }

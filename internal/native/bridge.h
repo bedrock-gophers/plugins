@@ -18,6 +18,18 @@ DfStatus bg_runtime_enable(BgRuntimeLibrary *library);
 void bg_runtime_disable(BgRuntimeLibrary *library);
 uint64_t bg_runtime_plugin_count(const BgRuntimeLibrary *library);
 uint64_t bg_runtime_subscriptions(const BgRuntimeLibrary *library);
+uint64_t bg_runtime_command_count(const BgRuntimeLibrary *library);
+DfStatus bg_runtime_command_at(
+    const BgRuntimeLibrary *library,
+    uint64_t index,
+    DfCommandDescriptor *out
+);
+DfStatus bg_runtime_handle_command(
+    BgRuntimeLibrary *library,
+    uint64_t index,
+    const DfCommandInput *input,
+    DfCommandState *state
+);
 DfStatus bg_runtime_handle_player_move(
     BgRuntimeLibrary *library,
     const DfPlayerMoveInput *input,

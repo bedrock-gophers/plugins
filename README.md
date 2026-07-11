@@ -2,7 +2,7 @@
 
 Native multi-language plugin runtime for [df-mc/dragonfly](https://github.com/df-mc/dragonfly). Rust is the first supported plugin language.
 
-Current status: architecture spike. One generated movement event travels through Go, the native Rust runtime, and a dynamically loaded Rust plugin.
+Current status: native runtime foundation. Generated events, lifecycle hooks, and Dragonfly commands travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
 
 ## Build and test
 
@@ -63,5 +63,6 @@ See [native plugin architecture](docs/plans/rust-plugin-architecture.md).
 - [Movement guard](examples/plugins/movement-guard): cancels movement below Y=0.
 - [Chat filter](examples/plugins/chat-filter): replaces text and cancels a blocked message.
 - [Lifecycle logger](examples/plugins/lifecycle-logger): demonstrates enable and disable hooks.
+- [Hello command](examples/plugins/hello-command): demonstrates Dragonfly subcommands and enum parameters.
 
-Both examples compile as native plugin libraries through `make stage-examples`. Precompiled `.so`, `.dylib`, or `.dll` plugins may also be placed directly in `examples/plugins`.
+The examples compile as native plugin libraries through `make stage-examples`. Precompiled `.so`, `.dylib`, or `.dll` plugins may also be placed directly in `examples/plugins`.

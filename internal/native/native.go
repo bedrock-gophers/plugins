@@ -20,6 +20,7 @@ const (
 	PlayerMoveSubscription  uint64 = 1
 	PlayerChatSubscription  uint64 = 2
 	MaxChatReplacementBytes        = 4096
+	MaxCommandOutputBytes          = 4096
 )
 
 type PlayerID struct {
@@ -50,6 +51,40 @@ type PlayerChatInput struct {
 type PlayerChatOutput struct {
 	Cancelled   bool
 	Replacement *string
+}
+
+type Command struct {
+	Index       uint64
+	Name        string
+	Description string
+	Overloads   []CommandOverload
+}
+
+type CommandOverload struct {
+	Parameters []CommandParameter
+}
+
+type CommandParameter struct {
+	Kind   CommandParameterKind
+	Name   string
+	Values []string
+}
+
+type CommandParameterKind uint32
+
+const (
+	CommandParameterSubcommand CommandParameterKind = 1
+	CommandParameterEnum       CommandParameterKind = 2
+)
+
+type CommandInput struct {
+	Source    string
+	Arguments string
+}
+
+type CommandOutput struct {
+	Failed  bool
+	Message string
 }
 
 // Runtime owns a loaded Rust runtime and its plugin libraries.
@@ -127,6 +162,83 @@ func (r *Runtime) Subscriptions() uint64 {
 	return uint64(C.bg_runtime_subscriptions(r.ptr))
 }
 
+func (r *Runtime) Commands() ([]Command, error) {
+	if r == nil || r.ptr == nil {
+		return nil, errors.New("native runtime is closed")
+	}
+	count := uint64(C.bg_runtime_command_count(r.ptr))
+	commands := make([]Command, 0, count)
+	for index := uint64(0); index < count; index++ {
+		var descriptor C.DfCommandDescriptor
+		if status := C.bg_runtime_command_at(r.ptr, C.uint64_t(index), &descriptor); status != C.DF_STATUS_OK {
+			return nil, fmt.Errorf("read native command %d: status %d", index, int32(status))
+		}
+		command := Command{
+			Index:       index,
+			Name:        stringView(descriptor.name),
+			Description: stringView(descriptor.description),
+		}
+		if descriptor.overload_count > 0 && descriptor.overloads == nil {
+			return nil, fmt.Errorf("read native command %d: null overloads", index)
+		}
+		overloads := unsafe.Slice(descriptor.overloads, int(descriptor.overload_count))
+		for _, nativeOverload := range overloads {
+			overload := CommandOverload{}
+			if nativeOverload.parameter_count > 0 && nativeOverload.parameters == nil {
+				return nil, fmt.Errorf("read native command %d: null parameters", index)
+			}
+			parameters := unsafe.Slice(nativeOverload.parameters, int(nativeOverload.parameter_count))
+			for _, nativeParameter := range parameters {
+				parameter := CommandParameter{
+					Kind: CommandParameterKind(nativeParameter.kind),
+					Name: stringView(nativeParameter.name),
+				}
+				if nativeParameter.value_count > 0 && nativeParameter.values == nil {
+					return nil, fmt.Errorf("read native command %d: null enum values", index)
+				}
+				values := unsafe.Slice(nativeParameter.values, int(nativeParameter.value_count))
+				for _, value := range values {
+					parameter.Values = append(parameter.Values, stringView(value))
+				}
+				overload.Parameters = append(overload.Parameters, parameter)
+			}
+			command.Overloads = append(command.Overloads, overload)
+		}
+		commands = append(commands, command)
+	}
+	return commands, nil
+}
+
+func (r *Runtime) HandleCommand(index uint64, input CommandInput) (CommandOutput, error) {
+	var output CommandOutput
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	source := C.CBytes([]byte(input.Source))
+	defer C.free(source)
+	arguments := C.CBytes([]byte(input.Arguments))
+	defer C.free(arguments)
+	message := C.malloc(MaxCommandOutputBytes)
+	if message == nil {
+		return output, errors.New("allocate command output buffer")
+	}
+	defer C.free(message)
+
+	nativeInput := C.DfCommandInput{
+		source:    C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))},
+		arguments: C.DfStringView{data: (*C.uint8_t)(arguments), len: C.uint64_t(len(input.Arguments))},
+	}
+	state := C.DfCommandState{
+		output: C.DfStringBuffer{data: (*C.uint8_t)(message), capacity: MaxCommandOutputBytes},
+	}
+	if status := C.bg_runtime_handle_command(r.ptr, C.uint64_t(index), &nativeInput, &state); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("native command handler failed with status %d", int32(status))
+	}
+	output.Failed = state.failed != 0
+	output.Message = string(C.GoBytes(message, C.int(state.output.len)))
+	return output, nil
+}
+
 func (r *Runtime) HandlePlayerMove(input PlayerMoveInput, cancelled bool) (bool, error) {
 	if r == nil || r.ptr == nil {
 		return cancelled, errors.New("native runtime is closed")
@@ -194,4 +306,11 @@ func fillPlayerID(destination *C.DfPlayerId, source PlayerID) {
 		destination.bytes[i] = C.uint8_t(value)
 	}
 	destination.generation = C.uint64_t(source.Generation)
+}
+
+func stringView(view C.DfStringView) string {
+	if view.len == 0 {
+		return ""
+	}
+	return string(C.GoBytes(unsafe.Pointer(view.data), C.int(view.len)))
 }
