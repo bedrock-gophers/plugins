@@ -17,17 +17,16 @@ $(CACHE)/Cargo.toml:
 	git -C $(CACHE) checkout --quiet $(BEDROCK_GOPHERS_REV)
 
 build: $(CACHE)/Cargo.toml
-	cargo build --release
+	cargo build --release --manifest-path plugins/movement-guard/Cargo.toml
 	cargo build --release --manifest-path $(CACHE)/Cargo.toml -p dragonfly-plugin-runtime
 	mkdir -p lib plugins
 	cp $(CACHE)/target/release/$(RUNTIME_LIBRARY) lib/
-	cp target/release/$(PLUGIN_LIBRARY) plugins/
+	cp plugins/movement-guard/target/release/$(PLUGIN_LIBRARY) plugins/
 	go mod download
 
 run: build
 	go run .
 
 clean:
-	rm -rf .cache .data lib target
+	rm -rf .cache .data lib plugins/movement-guard/target
 	rm -f plugins/$(PLUGIN_LIBRARY)
-
