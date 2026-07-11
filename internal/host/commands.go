@@ -44,6 +44,12 @@ func commandRunnables(runtime commandRuntime, players *Players, command native.C
 		return []cmd.Runnable{pluginCommand{pluginCommandBase: base}}, nil
 	}
 	runnables := make([]cmd.Runnable, 0, len(command.Overloads))
+	typeCounts := map[string]int{}
+	for _, overload := range command.Overloads {
+		for _, parameter := range overload.Parameters {
+			typeCounts[command.Name+"_"+parameter.Name]++
+		}
+	}
 	for overloadIndex, overload := range command.Overloads {
 		parameters := make([]pluginParameter, len(overload.Parameters))
 		for index, parameter := range overload.Parameters {
@@ -54,12 +60,7 @@ func commandRunnables(runtime commandRuntime, players *Players, command native.C
 				command:    command.Index,
 				overload:   uint64(overloadIndex),
 				parameter:  uint64(index),
-				enumType: fmt.Sprintf(
-					"bedrock_gophers_%s_%d_%s",
-					command.Name,
-					overloadIndex,
-					parameter.Name,
-				),
+				enumType:   commandEnumType(command.Name, parameter.Name, overloadIndex, typeCounts),
 			}
 		}
 		switch len(parameters) {
@@ -78,6 +79,14 @@ func commandRunnables(runtime commandRuntime, players *Players, command native.C
 		}
 	}
 	return runnables, nil
+}
+
+func commandEnumType(command, parameter string, overload int, counts map[string]int) string {
+	name := command + "_" + parameter
+	if counts[name] > 1 {
+		return fmt.Sprintf("%s_%d", name, overload)
+	}
+	return name
 }
 
 type pluginCommandBase struct {

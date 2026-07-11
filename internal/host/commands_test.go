@@ -31,6 +31,10 @@ func TestPlayerCommandResolvesStableHandle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		runnable := runnables[0].(pluginCommand2)
+		if runnable.P2.enumType != "direct_player" {
+			t.Fatalf("enum type = %q", runnable.P2.enumType)
+		}
 		cmd.New("direct", "", nil, runnables...).Execute("send TestPlayer", &commandSourceStub{}, nil)
 		if !strings.HasPrefix(runtime.input.Arguments, "send ") || !strings.Contains(runtime.input.Arguments, ":77:") {
 			t.Fatalf("arguments = %q", runtime.input.Arguments)
