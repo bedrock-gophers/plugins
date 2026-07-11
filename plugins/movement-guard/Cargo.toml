@@ -1,0 +1,13 @@
+[package]
+name = "movement-guard"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dragonfly-plugin = { git = "https://github.com/bedrock-gophers/plugins", rev = "e5390b1f06507a3b36d9f947beb183e4c6001f6a" }
+
