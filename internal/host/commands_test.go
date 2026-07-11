@@ -101,3 +101,16 @@ func TestPlayerSourceIsResolvedByUUID(t *testing.T) {
 		}
 	})
 }
+
+func TestMissingOptionalPlayerStaysAbsent(t *testing.T) {
+	parameter := pluginParameter{
+		descriptor: native.CommandParameter{
+			Kind:     native.CommandParameterPlayer,
+			Optional: true,
+		},
+		players: NewPlayers(),
+	}
+	if value := parameter.transport(); value != "" {
+		t.Fatalf("transport = %q, want empty", value)
+	}
+}

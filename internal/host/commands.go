@@ -163,6 +163,9 @@ func (p pluginParameter) Parse(line *cmd.Line, value reflect.Value) error {
 func (p pluginParameter) Type() string { return p.descriptor.Name }
 
 func (p pluginParameter) transport() string {
+	if p.descriptor.Optional && p.selected == "" {
+		return ""
+	}
 	if p.descriptor.Kind != native.CommandParameterPlayer {
 		return p.selected
 	}
