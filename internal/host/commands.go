@@ -9,8 +9,8 @@ import (
 
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/cmd"
-	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"
+	"github.com/google/uuid"
 )
 
 type commandRuntime interface {
@@ -97,8 +97,9 @@ func (c pluginCommandBase) dispatch(source cmd.Source, output *cmd.Output, argum
 		SourceKind:    native.CommandSourceConsole,
 		OnlinePlayers: c.players.CommandSnapshots(),
 	}
-	if sourcePlayer, ok := source.(*player.Player); ok {
-		if id, found := c.players.ID(sourcePlayer); found {
+	if sourcePlayer, ok := source.(interface{ UUID() uuid.UUID }); ok {
+		playerUUID := sourcePlayer.UUID()
+		if id, found := c.players.ResolveUUID(playerUUID); found {
 			input.SourcePlayer = &id
 		}
 	}

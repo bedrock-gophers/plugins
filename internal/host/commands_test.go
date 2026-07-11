@@ -89,3 +89,15 @@ func TestPlayerEnumOptionsAreLowercase(t *testing.T) {
 		}
 	})
 }
+
+func TestPlayerSourceIsResolvedByUUID(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		players.Register(player, 3)
+		runtime := &commandRuntimeStub{}
+		(pluginCommandBase{runtime: runtime, players: players}).dispatch(player, &cmd.Output{}, "")
+		if runtime.input.SourcePlayer == nil || runtime.input.SourcePlayer.Generation != 3 {
+			t.Fatalf("source player = %#v", runtime.input.SourcePlayer)
+		}
+	})
+}

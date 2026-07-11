@@ -81,6 +81,17 @@ func (p *Players) ResolveName(name string) (native.PlayerID, bool) {
 	return native.PlayerID{}, false
 }
 
+func (p *Players) ResolveUUID(uuid [16]byte) (native.PlayerID, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, id := range p.entries {
+		if id.UUID == uuid {
+			return id, true
+		}
+	}
+	return native.PlayerID{}, false
+}
+
 func (p *Players) ResolveID(id native.PlayerID) (*player.Player, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
