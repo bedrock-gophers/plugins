@@ -82,6 +82,7 @@ const (
 	CommandParameterFloat       CommandParameterKind = 5
 	CommandParameterBool        CommandParameterKind = 6
 	CommandParameterDynamicEnum CommandParameterKind = 7
+	CommandParameterPlayer      CommandParameterKind = 8
 )
 
 type CommandInput struct {

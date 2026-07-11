@@ -1,15 +1,41 @@
 package host
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/cmd"
+	"github.com/df-mc/dragonfly/server/player"
 	"github.com/go-gl/mathgl/mgl64"
 )
 
 type commandRuntimeStub struct {
 	input native.CommandInput
+}
+
+func TestPlayerCommandResolvesStableHandle(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		players.Register(player, 77)
+		runtime := &commandRuntimeStub{}
+		command := native.Command{
+			Index: 4,
+			Name:  "direct",
+			Overloads: []native.CommandOverload{{Parameters: []native.CommandParameter{
+				{Kind: native.CommandParameterSubcommand, Name: "send"},
+				{Kind: native.CommandParameterPlayer, Name: "player"},
+			}}},
+		}
+		runnables, err := commandRunnables(runtime, players, command)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd.New("direct", "", nil, runnables...).Execute("send TestPlayer", &commandSourceStub{}, nil)
+		if !strings.HasPrefix(runtime.input.Arguments, "send ") || !strings.HasSuffix(runtime.input.Arguments, ":77") {
+			t.Fatalf("arguments = %q", runtime.input.Arguments)
+		}
+	})
 }
 
 func (r *commandRuntimeStub) Commands() ([]native.Command, error) { return nil, nil }

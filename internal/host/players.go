@@ -2,6 +2,7 @@ package host
 
 import (
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
@@ -50,4 +51,26 @@ func (p *Players) Names() []string {
 	p.mu.RUnlock()
 	slices.Sort(names)
 	return names
+}
+
+func (p *Players) ResolveName(name string) (native.PlayerID, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for connected, id := range p.entries {
+		if strings.EqualFold(connected.Name(), name) {
+			return id, true
+		}
+	}
+	return native.PlayerID{}, false
+}
+
+func (p *Players) ResolveID(id native.PlayerID) (*player.Player, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for connected, candidate := range p.entries {
+		if candidate == id {
+			return connected, true
+		}
+	}
+	return nil, false
 }

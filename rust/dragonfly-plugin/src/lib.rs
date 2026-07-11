@@ -17,6 +17,57 @@ pub struct Vec3 {
     pub z: f64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct PlayerId {
+    uuid: [u8; 16],
+    generation: u64,
+}
+
+impl PlayerId {
+    pub const fn uuid_bytes(self) -> [u8; 16] {
+        self.uuid
+    }
+
+    pub const fn generation(self) -> u64 {
+        self.generation
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Player {
+    id: PlayerId,
+}
+
+impl Player {
+    pub const fn id(self) -> PlayerId {
+        self.id
+    }
+
+    #[doc(hidden)]
+    pub fn from_command_argument(value: &str) -> Result<Self, CommandParseError> {
+        let (uuid, generation) = value
+            .split_once(':')
+            .ok_or_else(|| CommandParseError::new("player is no longer online"))?;
+        if uuid.len() != 32 {
+            return Err(CommandParseError::new("player is no longer online"));
+        }
+        let mut bytes = [0; 16];
+        for (index, byte) in bytes.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&uuid[index * 2..index * 2 + 2], 16)
+                .map_err(|_| CommandParseError::new("player is no longer online"))?;
+        }
+        let generation = generation
+            .parse()
+            .map_err(|_| CommandParseError::new("player is no longer online"))?;
+        Ok(Self {
+            id: PlayerId {
+                uuid: bytes,
+                generation,
+            },
+        })
+    }
+}
+
 impl From<dragonfly_plugin_sys::DfVec3> for Vec3 {
     fn from(value: dragonfly_plugin_sys::DfVec3) -> Self {
         Self {
@@ -154,6 +205,10 @@ impl CommandParameter {
             name,
             dragonfly_plugin_sys::DF_COMMAND_PARAMETER_DYNAMIC_ENUM,
         )
+    }
+
+    pub const fn player(name: &'static str) -> Self {
+        Self::typed(name, dragonfly_plugin_sys::DF_COMMAND_PARAMETER_PLAYER)
     }
 }
 
@@ -483,6 +538,9 @@ mod tests {
             scale: f64,
             enabled: bool,
         },
+        Target {
+            player: Player,
+        },
         Query,
     }
 
@@ -531,5 +589,11 @@ mod tests {
             }
         );
         assert!(ModeCommand::parse("set spectator").is_err());
+        let target = ModeCommand::parse("target 000102030405060708090a0b0c0d0e0f:9").unwrap();
+        let ModeCommand::Target { player } = target else {
+            panic!("wrong command variant");
+        };
+        assert_eq!(player.id().generation(), 9);
+        assert_eq!(player.id().uuid_bytes()[15], 15);
     }
 }

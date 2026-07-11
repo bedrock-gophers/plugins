@@ -1,8 +1,10 @@
 package host
 
 import (
+	"encoding/hex"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
@@ -139,7 +141,7 @@ func (p pluginParameter) Parse(line *cmd.Line, value reflect.Value) error {
 		value.Set(reflect.ValueOf(p))
 		return nil
 	}
-	if p.descriptor.Kind < native.CommandParameterSubcommand || p.descriptor.Kind > native.CommandParameterDynamicEnum {
+	if p.descriptor.Kind < native.CommandParameterSubcommand || p.descriptor.Kind > native.CommandParameterPlayer {
 		return fmt.Errorf("unknown plugin parameter kind %d", p.descriptor.Kind)
 	}
 	p.selected = argument
@@ -149,15 +151,30 @@ func (p pluginParameter) Parse(line *cmd.Line, value reflect.Value) error {
 
 func (p pluginParameter) Type() string { return p.descriptor.Name }
 
+func (p pluginParameter) transport() string {
+	if p.descriptor.Kind != native.CommandParameterPlayer {
+		return p.selected
+	}
+	id, ok := p.players.ResolveName(p.selected)
+	if !ok {
+		return "invalid"
+	}
+	return hex.EncodeToString(id.UUID[:]) + ":" + strconv.FormatUint(id.Generation, 10)
+}
+
 type describedEnum struct {
 	typeName  string
 	options   []string
 	parameter *pluginParameter
+	players   *Players
 }
 
 func (e describedEnum) Type() string { return e.typeName }
 func (e describedEnum) Options(source cmd.Source) []string {
 	if e.parameter == nil {
+		if e.players != nil {
+			return e.players.Names()
+		}
 		return e.options
 	}
 	sourceName := fmt.Sprintf("%T", source)
@@ -205,6 +222,14 @@ func describe(parameters ...pluginParameter) []cmd.ParamInfo {
 			result = append(result, cmd.ParamInfo{Name: parameter.descriptor.Name, Value: float64(0)})
 		case native.CommandParameterBool:
 			result = append(result, cmd.ParamInfo{Name: parameter.descriptor.Name, Value: false})
+		case native.CommandParameterPlayer:
+			result = append(result, cmd.ParamInfo{
+				Name: parameter.descriptor.Name,
+				Value: describedEnum{
+					typeName: parameter.enumType,
+					players:  parameter.players,
+				},
+			})
 		}
 	}
 	return result
@@ -217,7 +242,7 @@ type pluginCommand1 struct {
 }
 
 func (c pluginCommand1) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, joinedArguments([]string{c.P1.selected}, c.Arguments))
+	c.dispatch(source, output, joinedArguments([]string{c.P1.transport()}, c.Arguments))
 }
 func (c pluginCommand1) DescribeParams(cmd.Source) []cmd.ParamInfo { return describe(c.P1) }
 
@@ -228,7 +253,7 @@ type pluginCommand2 struct {
 }
 
 func (c pluginCommand2) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, joinedArguments([]string{c.P1.selected, c.P2.selected}, c.Arguments))
+	c.dispatch(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport()}, c.Arguments))
 }
 func (c pluginCommand2) DescribeParams(cmd.Source) []cmd.ParamInfo { return describe(c.P1, c.P2) }
 
@@ -239,7 +264,7 @@ type pluginCommand3 struct {
 }
 
 func (c pluginCommand3) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, joinedArguments([]string{c.P1.selected, c.P2.selected, c.P3.selected}, c.Arguments))
+	c.dispatch(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport(), c.P3.transport()}, c.Arguments))
 }
 func (c pluginCommand3) DescribeParams(cmd.Source) []cmd.ParamInfo {
 	return describe(c.P1, c.P2, c.P3)
@@ -252,7 +277,7 @@ type pluginCommand4 struct {
 }
 
 func (c pluginCommand4) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, joinedArguments([]string{c.P1.selected, c.P2.selected, c.P3.selected, c.P4.selected}, c.Arguments))
+	c.dispatch(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport(), c.P3.transport(), c.P4.transport()}, c.Arguments))
 }
 func (c pluginCommand4) DescribeParams(cmd.Source) []cmd.ParamInfo {
 	return describe(c.P1, c.P2, c.P3, c.P4)

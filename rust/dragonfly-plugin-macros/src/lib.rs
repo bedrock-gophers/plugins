@@ -192,6 +192,17 @@ fn expand_command(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                         )
                     } else {
                         match field_type_name.as_deref() {
+                            Some("Player") => (
+                                quote!(::dragonfly_plugin::CommandParameter::player(#parameter_name)),
+                                quote! {
+                                    let raw = parts.next().ok_or_else(|| {
+                                        ::dragonfly_plugin::CommandParseError::new(
+                                            concat!("missing command argument ", stringify!(#field_name))
+                                        )
+                                    })?;
+                                    let #field_name = ::dragonfly_plugin::Player::from_command_argument(raw)?;
+                                },
+                            ),
                             Some("String") => (
                                 quote!(::dragonfly_plugin::CommandParameter::string(#parameter_name)),
                                 quote! {

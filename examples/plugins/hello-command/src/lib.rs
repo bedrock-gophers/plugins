@@ -1,5 +1,6 @@
 use dragonfly_plugin::{
-    Command, CommandEnum, CommandEvent, CommandSource, Dynamic, DynamicCommandEnum, Plugin, plugin,
+    Command, CommandEnum, CommandEvent, CommandSource, Dynamic, DynamicCommandEnum, Player, Plugin,
+    plugin,
 };
 
 struct GreetingTargets;
@@ -27,6 +28,7 @@ enum Hello {
     Echo { text: String },
     About,
     Greet { target: Dynamic<GreetingTargets> },
+    Direct { player: Player },
 }
 
 #[derive(Default)]
@@ -54,6 +56,7 @@ impl Plugin for HelloCommand {
             Hello::Echo { text } => text,
             Hello::About => "Hello from a Rust plugin running in Dragonfly.".to_owned(),
             Hello::Greet { target } => format!("Greetings, {}!", target.value()),
+            Hello::Direct { player } => format!("player generation={}", player.id().generation()),
         };
         event
             .reply(&message)
