@@ -3,13 +3,6 @@
 version = 4
 
 [[package]]
-name = "chat-filter"
-version = "0.1.0"
-dependencies = [
- "dragonfly-plugin",
-]
-
-[[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=68f5e89fc5e5bcea544f9527ef39fa8c975d0a87#68f5e89fc5e5bcea544f9527ef39fa8c975d0a87"
@@ -32,6 +25,13 @@ dependencies = [
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=68f5e89fc5e5bcea544f9527ef39fa8c975d0a87#68f5e89fc5e5bcea544f9527ef39fa8c975d0a87"
+
+[[package]]
+name = "hello-command"
+version = "0.1.0"
+dependencies = [
+ "dragonfly-plugin",
+]
 
 [[package]]
 name = "proc-macro2"
