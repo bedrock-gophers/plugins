@@ -1,4 +1,4 @@
-BEDROCK_GOPHERS_REV := 68f5e89fc5e5bcea544f9527ef39fa8c975d0a87
+BEDROCK_GOPHERS_REV := 1b6a7317ff0cf5245550c6744a201d3984707b26
 CACHE := .cache/bedrock-gophers
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
