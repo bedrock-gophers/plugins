@@ -23,8 +23,14 @@ enum Style {
 struct HelloCommand;
 
 #[plugin]
+#[command("hello")]
 impl Plugin for HelloCommand {
-    #[command("hello say")]
+    #[command]
+    fn root(&self, event: &mut CommandEvent<'_>) {
+        event.reply("Use a hello subcommand.");
+    }
+
+    #[subcommand("say")]
     fn say(&self, event: &mut CommandEvent<'_>, style: Style, text: Varargs) {
         let message = match style {
             Style::Plain => format!("Hello, {}: {}", event.source(), text.value()),
@@ -34,53 +40,41 @@ impl Plugin for HelloCommand {
                 text.value().to_uppercase()
             ),
         };
-        event.reply(&message).expect("command reply fits");
+        event.reply(&message);
     }
 
-    #[command("hello add")]
+    #[subcommand("add")]
     fn add(&self, event: &mut CommandEvent<'_>, left: i64, right: i64) {
-        event
-            .reply(&format!("{}", left + right))
-            .expect("reply fits");
+        event.reply(&format!("{}", left + right));
     }
 
-    #[command("hello toggle")]
+    #[subcommand("toggle")]
     fn toggle(&self, event: &mut CommandEvent<'_>, enabled: bool) {
-        event
-            .reply(&format!("enabled={enabled}"))
-            .expect("reply fits");
+        event.reply(&format!("enabled={enabled}"));
     }
 
-    #[command("hello echo")]
+    #[subcommand("echo")]
     fn echo(&self, event: &mut CommandEvent<'_>, text: String) {
-        event.reply(&text).expect("reply fits");
+        event.reply(&text);
     }
 
-    #[command("hello about")]
+    #[subcommand("about")]
     fn about(&self, event: &mut CommandEvent<'_>) {
-        event
-            .reply("Hello from a Rust plugin running in Dragonfly.")
-            .expect("reply fits");
+        event.reply("Hello from a Rust plugin running in Dragonfly.");
     }
 
-    #[command("hello greet")]
+    #[subcommand("greet")]
     fn greet(&self, event: &mut CommandEvent<'_>, target: Dynamic<GreetingTargets>) {
-        event
-            .reply(&format!("Greetings, {}!", target.value()))
-            .expect("reply fits");
+        event.reply(&format!("Greetings, {}!", target.value()));
     }
 
-    #[command("hello direct")]
+    #[subcommand("direct")]
     fn direct(&self, event: &mut CommandEvent<'_>, player: Player) {
-        event
-            .reply(&format!("player generation={}", player.id().generation()))
-            .expect("reply fits");
+        event.reply(&format!("player generation={}", player.id().generation()));
     }
 
-    #[command("hello maybe")]
+    #[subcommand("maybe")]
     fn maybe(&self, event: &mut CommandEvent<'_>, value: Option<i64>) {
-        event
-            .reply(&format!("value={value:?}"))
-            .expect("reply fits");
+        event.reply(&format!("value={value:?}"));
     }
 }

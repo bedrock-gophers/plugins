@@ -97,7 +97,7 @@ func TestCommand(t *testing.T) {
 
 func TestDynamicCommandEnum(t *testing.T) {
 	runtime := openTestRuntime(t)
-	options, err := runtime.CommandEnumOptions(0, 5, 1, "Danick", []string{"Danick", "RestartFU"})
+	options, err := runtime.CommandEnumOptions(0, 6, 1, "Danick", []string{"Danick", "RestartFU"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -427,11 +427,27 @@ impl<'a> CommandEvent<'a> {
         unsafe { string_view(self.input.arguments) }
     }
 
-    pub fn reply(&mut self, message: &str) -> Result<(), MessageTooLong> {
+    pub fn reply(&mut self, message: &str) {
+        if self.try_reply(message).is_err() {
+            self.state.failed = 1;
+            self.state.output.len = 0;
+            let _ = self.write("command output exceeded the runtime buffer", true);
+        }
+    }
+
+    pub fn fail(&mut self, message: &str) {
+        if self.try_fail(message).is_err() {
+            self.state.failed = 1;
+            self.state.output.len = 0;
+            let _ = self.write("command error exceeded the runtime buffer", true);
+        }
+    }
+
+    pub fn try_reply(&mut self, message: &str) -> Result<(), MessageTooLong> {
         self.write(message, false)
     }
 
-    pub fn fail(&mut self, message: &str) -> Result<(), MessageTooLong> {
+    pub fn try_fail(&mut self, message: &str) -> Result<(), MessageTooLong> {
         self.write(message, true)
     }
 

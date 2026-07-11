@@ -19,6 +19,16 @@ fn command_method_path(attributes: &[Attribute]) -> syn::Result<Option<String>> 
     Ok(Some(attribute.parse_args::<LitStr>()?.value()))
 }
 
+fn subcommand_name(attributes: &[Attribute]) -> syn::Result<Option<String>> {
+    let Some(attribute) = attributes
+        .iter()
+        .find(|attribute| attribute.path().is_ident("subcommand"))
+    else {
+        return Ok(None);
+    };
+    Ok(Some(attribute.parse_args::<LitStr>()?.value()))
+}
+
 fn command_attribute(attributes: &[Attribute], key: &str) -> syn::Result<Option<String>> {
     let mut value = None;
     for attribute in attributes
@@ -35,12 +45,38 @@ fn command_attribute(attributes: &[Attribute], key: &str) -> syn::Result<Option<
                     value = Some(parsed);
                 }
                 Ok(())
+            } else if meta.path.is_ident("root") {
+                Ok(())
             } else {
                 Err(meta.error("unknown command option"))
             }
         })?;
     }
     Ok(value)
+}
+
+fn command_flag(attributes: &[Attribute], key: &str) -> syn::Result<bool> {
+    let mut found = false;
+    for attribute in attributes
+        .iter()
+        .filter(|attribute| attribute.path().is_ident("command"))
+    {
+        attribute.parse_nested_meta(|meta| {
+            if meta.path.is_ident("root") {
+                found |= key == "root";
+                return Ok(());
+            }
+            if meta.path.is_ident("name")
+                || meta.path.is_ident("description")
+                || meta.path.is_ident("value")
+            {
+                let _ = meta.value()?.parse::<LitStr>()?;
+                return Ok(());
+            }
+            Err(meta.error("unknown command option"))
+        })?;
+    }
+    Ok(found)
 }
 
 fn kebab_case(value: &str) -> String {
@@ -167,10 +203,18 @@ fn expand_command(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     };
     let mut overloads = Vec::new();
     let mut parsers = Vec::new();
+    let mut root_parser = None;
     let mut dynamic_options = Vec::new();
     for (overload_index, variant) in data.variants.into_iter().enumerate() {
         let variant_name = command_attribute(&variant.attrs, "name")?
             .unwrap_or_else(|| kebab_case(&variant.ident.to_string()));
+        let is_root = command_flag(&variant.attrs, "root")?;
+        if is_root && root_parser.is_some() {
+            return Err(syn::Error::new_spanned(
+                &variant.ident,
+                "a command may only have one root runnable",
+            ));
+        }
         let variant_ident = variant.ident;
         let (parameters, field_names, reads, named_variant): (Vec<_>, Vec<_>, Vec<_>, bool) =
             match variant.fields {
@@ -215,7 +259,7 @@ fn expand_command(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                                 },
                             )
                         } else if let Some(provider) = provider {
-                            let parameter_index = field_index + 1;
+                            let parameter_index = field_index + usize::from(!is_root);
                             dynamic_options.push(quote! {
                             (#overload_index, #parameter_index) => {
                                 return Some(<#provider as ::dragonfly_plugin::DynamicCommandEnum>::options(source));
@@ -315,33 +359,52 @@ fn expand_command(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     ));
                 }
             };
-        if parameters.len() > 3 {
+        let maximum_parameters = if is_root { 4 } else { 3 };
+        if parameters.len() > maximum_parameters {
             return Err(syn::Error::new_spanned(
                 &variant_ident,
                 "a command supports at most three enum fields after its subcommand",
             ));
         }
-        overloads.push(quote! {
-            ::dragonfly_plugin::CommandOverload::new(&[
-                ::dragonfly_plugin::CommandParameter::subcommand(#variant_name),
-                #(#parameters),*
-            ])
-        });
+        if is_root {
+            overloads.push(quote! {
+                ::dragonfly_plugin::CommandOverload::new(&[#(#parameters),*])
+            });
+        } else {
+            overloads.push(quote! {
+                ::dragonfly_plugin::CommandOverload::new(&[
+                    ::dragonfly_plugin::CommandParameter::subcommand(#variant_name),
+                    #(#parameters),*
+                ])
+            });
+        }
         let construct = if named_variant {
             quote!(Self::#variant_ident { #(#field_names),* })
         } else {
             quote!(Self::#variant_ident)
         };
-        parsers.push(quote! {
-            if subcommand.eq_ignore_ascii_case(#variant_name) {
+        let parser = quote! {
                 #(#reads)*
                 if let Some(extra) = parts.next() {
                     return Err(::dragonfly_plugin::CommandParseError::new(format!("unexpected command argument: {extra}")));
                 }
                 return Ok(#construct);
+        };
+        if is_root {
+            root_parser = Some(parser);
+        } else {
+            parsers.push(quote! {
+            if subcommand.is_some_and(|value| value.eq_ignore_ascii_case(#variant_name)) {
+                let _ = parts.next();
+                #parser
             }
-        });
+            });
+        }
     }
+    let root_parser = root_parser.unwrap_or_else(|| quote! {
+        let subcommand = subcommand.unwrap_or("<missing>");
+        return Err(::dragonfly_plugin::CommandParseError::new(format!("unknown subcommand: {subcommand}")));
+    });
     Ok(quote! {
         impl ::dragonfly_plugin::CommandDefinition for #name {
             const COMMAND: ::dragonfly_plugin::Command =
@@ -351,11 +414,9 @@ fn expand_command(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
 
             fn parse(arguments: &str) -> ::core::result::Result<Self, ::dragonfly_plugin::CommandParseError> {
                 let mut parts = arguments.split_whitespace();
-                let subcommand = parts.next().ok_or_else(|| {
-                    ::dragonfly_plugin::CommandParseError::new("missing subcommand")
-                })?;
+                let subcommand = parts.clone().next();
                 #(#parsers)*
-                Err(::dragonfly_plugin::CommandParseError::new(format!("unknown subcommand: {subcommand}")))
+                #root_parser
             }
 
             fn dynamic_options(
@@ -383,6 +444,13 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         .into();
     }
     let mut implementation = parse_macro_input!(input as ItemImpl);
+    let command_root = match command_method_path(&implementation.attrs) {
+        Ok(root) => root,
+        Err(error) => return error.into_compile_error().into(),
+    };
+    implementation
+        .attrs
+        .retain(|attribute| !attribute.path().is_ident("command"));
     let plugin_type = implementation.self_ty.clone();
     let mut legacy_methods = Vec::new();
     let mut direct_groups: BTreeMap<String, Vec<(String, syn::ImplItemFn)>> = BTreeMap::new();
@@ -390,19 +458,58 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     for item in implementation.items {
         match item {
             ImplItem::Fn(mut function)
-                if function
-                    .attrs
-                    .iter()
-                    .any(|attribute| attribute.path().is_ident("command")) =>
+                if function.attrs.iter().any(|attribute| {
+                    attribute.path().is_ident("command") || attribute.path().is_ident("subcommand")
+                }) =>
             {
+                let subcommand = match subcommand_name(&function.attrs) {
+                    Ok(subcommand) => subcommand,
+                    Err(error) => return error.into_compile_error().into(),
+                };
                 let path = match command_method_path(&function.attrs) {
                     Ok(path) => path,
                     Err(error) => return error.into_compile_error().into(),
                 };
-                function
-                    .attrs
-                    .retain(|attribute| !attribute.path().is_ident("command"));
-                if let Some(path) = path {
+                function.attrs.retain(|attribute| {
+                    !attribute.path().is_ident("command")
+                        && !attribute.path().is_ident("subcommand")
+                });
+                if let Some(subcommand) = subcommand {
+                    let Some(root) = &command_root else {
+                        return syn::Error::new_spanned(
+                            &function.sig,
+                            "#[subcommand] requires #[command(\"root\")] on the plugin impl",
+                        )
+                        .into_compile_error()
+                        .into();
+                    };
+                    if path.is_some() {
+                        return syn::Error::new_spanned(
+                            &function.sig,
+                            "a method cannot be both #[command] and #[subcommand]",
+                        )
+                        .into_compile_error()
+                        .into();
+                    }
+                    direct_groups
+                        .entry(root.clone())
+                        .or_default()
+                        .push((subcommand, function));
+                } else if let Some(root) = &command_root {
+                    let subcommand = path.unwrap_or_default();
+                    if subcommand.split_whitespace().count() > 1 {
+                        return syn::Error::new_spanned(
+                            &function.sig,
+                            "method command attributes under a root contain only the subcommand",
+                        )
+                        .into_compile_error()
+                        .into();
+                    }
+                    direct_groups
+                        .entry(root.clone())
+                        .or_default()
+                        .push((subcommand, function));
+                } else if let Some(path) = path {
                     let parts: Vec<_> = path.split_whitespace().collect();
                     if parts.len() != 2 {
                         return syn::Error::new_spanned(
@@ -466,7 +573,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
             #index => match <#command_type as ::dragonfly_plugin::CommandDefinition>::parse(event.arguments()) {
                 Ok(command) => self.#method(event, command),
                 Err(error) => {
-                    let _ = event.fail(&error.to_string());
+                    event.fail(&error.to_string());
                 }
             },
         });
@@ -518,8 +625,13 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 fields.push(quote!(#field: #ty));
                 field_names.push(field);
             }
+            let variant_attribute = if subcommand.is_empty() {
+                quote!(#[command(root)])
+            } else {
+                quote!(#[command(name = #subcommand)])
+            };
             variants.push(quote! {
-                #[command(name = #subcommand)]
+                #variant_attribute
                 #variant { #(#fields),* }
             });
             variant_dispatch.push(quote! {
@@ -542,7 +654,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     #(#variant_dispatch)*
                 },
                 Err(error) => {
-                    let _ = event.fail(&error.to_string());
+                    event.fail(&error.to_string());
                 }
             },
         });

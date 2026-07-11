@@ -510,7 +510,7 @@ Dynamic enum fields use `Dynamic<T>`, where `T: DynamicCommandEnum`. Dragonfly p
 
 Go reflected runnable fields are transport only. `ParamDescriber` supplies client metadata, while generated Rust parsing owns validation and error text. A hidden trailing `Varargs` transport prevents Dragonfly syntax errors from leaking internal `P1`/`P2` field names.
 
-Rust has no Go-style runtime reflection. Its equivalent plugin API uses attribute and derive proc macros at compile time. Each `#[command("root subcommand")]` method becomes one Dragonfly runnable; method arguments generate its schema and parser. Methods sharing a root are grouped into one command. Derived command enums remain available for programmatic schemas, while direct `Command`, `CommandOverload`, and `CommandParameter` construction is the low-level escape hatch.
+Rust has no Go-style runtime reflection. Its equivalent plugin API uses attribute and derive proc macros at compile time. `#[command("root")]` on the plugin impl declares a command, bare `#[command]` marks its root runnable, and each `#[subcommand("name")]` method becomes another Dragonfly runnable. Method arguments generate schema and parsing. Derived command enums remain available for programmatic schemas; direct descriptors are the low-level escape hatch.
 
 ## Scope and parity target
 

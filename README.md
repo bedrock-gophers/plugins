@@ -56,7 +56,7 @@ impl Plugin for MovementGuard {
 Events continue by default. Cancellation is monotonic; no `allow()` API exists.
 Plugin identity defaults to Cargo's package name; handler code does not repeat it.
 
-Commands use compile-time macros in place of Go runtime reflection. Each `#[command("root subcommand")]` method becomes a Dragonfly runnable, with typed method arguments generating native metadata and parsing. See the hello-command example for the complete form.
+Commands use compile-time macros in place of Go runtime reflection. `#[command("root")]` declares the command, and each `#[subcommand("name")]` method becomes a Dragonfly runnable with generated native metadata and parsing. See the hello-command example for the complete form.
 
 See [native plugin architecture](docs/plans/rust-plugin-architecture.md).
 
