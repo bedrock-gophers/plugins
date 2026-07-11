@@ -1,4 +1,4 @@
-use dragonfly_plugin::{PlayerMoveEvent, Plugin, plugin};
+use dragonfly::{PlayerMoveEvent, Plugin, plugin};
 
 #[derive(Default)]
 struct MovementGuard;
@@ -6,9 +6,8 @@ struct MovementGuard;
 #[plugin]
 impl Plugin for MovementGuard {
     fn on_move(&self, event: &mut PlayerMoveEvent<'_>) {
-        if event.new_position().y < 0.0 {
+        if event.new_position().y < -64.0 {
             event.cancel();
         }
     }
 }
-

@@ -1,4 +1,4 @@
-use dragonfly_plugin::{PlayerChatEvent, Plugin, plugin};
+use dragonfly::{PlayerChatEvent, Plugin, plugin};
 
 #[derive(Default)]
 struct ChatFilter;
@@ -10,4 +10,3 @@ impl Plugin for ChatFilter {
         event.replace_message(&filtered).expect("message too long");
     }
 }
-

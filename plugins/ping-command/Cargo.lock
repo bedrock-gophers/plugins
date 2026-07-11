@@ -27,7 +27,7 @@ version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=06d269aa0fd65b85d778295a34a905374f07e9c1#06d269aa0fd65b85d778295a34a905374f07e9c1"
 
 [[package]]
-name = "lifecycle-logger"
+name = "ping-command"
 version = "0.1.0"
 dependencies = [
  "dragonfly-plugin",

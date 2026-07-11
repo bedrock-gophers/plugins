@@ -1,4 +1,4 @@
-use dragonfly_plugin::{Plugin, plugin};
+use dragonfly::{PlayerJoinEvent, PlayerQuitEvent, Plugin, plugin};
 
 #[derive(Default)]
 struct LifecycleLogger;
@@ -12,5 +12,12 @@ impl Plugin for LifecycleLogger {
     fn on_disable(&self) {
         eprintln!("disabled");
     }
-}
 
+    fn on_join(&self, event: &mut PlayerJoinEvent<'_>) {
+        eprintln!("{} joined", event.name());
+    }
+
+    fn on_quit(&self, event: &PlayerQuitEvent<'_>) {
+        eprintln!("{} quit", event.name());
+    }
+}
