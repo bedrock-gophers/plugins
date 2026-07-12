@@ -1,8 +1,8 @@
 use dragonfly::{
-    PlayerBlockBreakEvent, PlayerBlockPlaceEvent, PlayerDeathEvent, PlayerFireExtinguishEvent,
-    PlayerFoodLossEvent, PlayerHealEvent, PlayerHurtEvent, PlayerJoinEvent, PlayerJumpEvent,
-    PlayerQuitEvent, PlayerStartBreakEvent, PlayerTeleportEvent, PlayerToggleSneakEvent,
-    PlayerToggleSprintEvent, Plugin, plugin,
+    PlayerBlockBreakEvent, PlayerBlockPlaceEvent, PlayerDeathEvent, PlayerExperienceGainEvent,
+    PlayerFireExtinguishEvent, PlayerFoodLossEvent, PlayerHealEvent, PlayerHurtEvent,
+    PlayerJoinEvent, PlayerJumpEvent, PlayerPunchAirEvent, PlayerQuitEvent, PlayerStartBreakEvent,
+    PlayerTeleportEvent, PlayerToggleSneakEvent, PlayerToggleSprintEvent, Plugin, plugin,
 };
 
 #[derive(Default)]
@@ -74,5 +74,13 @@ impl Plugin for LifecycleLogger {
 
     fn on_teleport(&self, event: &mut PlayerTeleportEvent<'_>) {
         eprintln!("teleporting to {:?}", event.position());
+    }
+
+    fn on_experience_gain(&self, event: &mut PlayerExperienceGainEvent<'_>) {
+        eprintln!("gaining {} experience", event.amount());
+    }
+
+    fn on_punch_air(&self, _event: &mut PlayerPunchAirEvent<'_>) {
+        eprintln!("punched air");
     }
 }
