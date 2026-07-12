@@ -507,7 +507,7 @@ func (r *Runtime) HandlePlayerChat(input PlayerChatInput, cancelled bool) (Playe
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_chat(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_CHAT, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		output.Cancelled = state.cancelled != 0
 		return output, fmt.Errorf("native chat handler failed with status %d", int32(status))
 	}
@@ -532,7 +532,7 @@ func (r *Runtime) HandlePlayerJoin(input PlayerJoinInput, cancelled bool) (bool,
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_join(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_JOIN, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native join handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
@@ -548,7 +548,7 @@ func (r *Runtime) HandlePlayerQuit(input PlayerQuitInput) error {
 	fillPlayerID(&nativeInput.player, input.Player)
 	nativeInput.name = C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(input.Name))}
 	var state C.DfPlayerQuitState
-	if status := C.bg_runtime_handle_player_quit(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_QUIT, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return fmt.Errorf("native quit handler failed with status %d", int32(status))
 	}
 	return nil
@@ -572,7 +572,7 @@ func (r *Runtime) HandlePlayerHurt(input PlayerHurtInput, cancelled bool) (Playe
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_hurt(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_HURT, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return output, fmt.Errorf("native hurt handler failed with status %d", int32(status))
 	}
 	output.Cancelled = state.cancelled != 0
@@ -595,7 +595,7 @@ func (r *Runtime) HandlePlayerHeal(input PlayerHealInput, cancelled bool) (Playe
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_heal(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_HEAL, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return output, fmt.Errorf("native heal handler failed with status %d", int32(status))
 	}
 	output.Cancelled = state.cancelled != 0
@@ -618,7 +618,7 @@ func (r *Runtime) HandlePlayerBlockBreak(input PlayerBlockBreakInput, cancelled 
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_block_break(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_BLOCK_BREAK, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return output, fmt.Errorf("native block-break handler failed with status %d", int32(status))
 	}
 	output.Cancelled = state.cancelled != 0
@@ -640,7 +640,7 @@ func (r *Runtime) HandlePlayerBlockPlace(input PlayerBlockPlaceInput, cancelled 
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_block_place(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_BLOCK_PLACE, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native block-place handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
@@ -658,7 +658,7 @@ func (r *Runtime) HandlePlayerFoodLoss(input PlayerFoodLossInput, cancelled bool
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_food_loss(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_FOOD_LOSS, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return output, fmt.Errorf("native food-loss handler failed with status %d", int32(status))
 	}
 	output.Cancelled = state.cancelled != 0
@@ -679,7 +679,7 @@ func (r *Runtime) HandlePlayerDeath(input PlayerDeathInput, keepInventory bool) 
 	if keepInventory {
 		state.keep_inventory = 1
 	}
-	if status := C.bg_runtime_handle_player_death(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_DEATH, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return keepInventory, fmt.Errorf("native death handler failed with status %d", int32(status))
 	}
 	return state.keep_inventory != 0, nil
@@ -696,7 +696,7 @@ func (r *Runtime) HandlePlayerStartBreak(input PlayerPositionInput, cancelled bo
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_start_break(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_START_BREAK, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native start-break handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
@@ -713,7 +713,7 @@ func (r *Runtime) HandlePlayerFireExtinguish(input PlayerPositionInput, cancelle
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_fire_extinguish(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_FIRE_EXTINGUISH, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native fire-extinguish handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
@@ -730,7 +730,7 @@ func (r *Runtime) HandlePlayerToggleSprint(input PlayerToggleInput, cancelled bo
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_toggle_sprint(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_TOGGLE_SPRINT, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native toggle-sprint handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
@@ -746,7 +746,7 @@ func (r *Runtime) HandlePlayerToggleSneak(input PlayerToggleInput, cancelled boo
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_toggle_sneak(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_TOGGLE_SNEAK, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native toggle-sneak handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
@@ -759,7 +759,7 @@ func (r *Runtime) HandlePlayerJump(player PlayerID) error {
 	var input C.DfPlayerJumpInput
 	fillPlayerID(&input.player, player)
 	var state C.DfPlayerJumpState
-	if status := C.bg_runtime_handle_player_jump(r.ptr, &input, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_JUMP, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return fmt.Errorf("native jump handler failed with status %d", int32(status))
 	}
 	return nil
@@ -776,7 +776,7 @@ func (r *Runtime) HandlePlayerTeleport(input PlayerTeleportInput, cancelled bool
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_teleport(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_TELEPORT, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native teleport handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
@@ -793,7 +793,7 @@ func (r *Runtime) HandlePlayerExperienceGain(player PlayerID, amount int, cancel
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_experience_gain(r.ptr, &input, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_EXPERIENCE_GAIN, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return output, fmt.Errorf("native experience-gain handler failed with status %d", int32(status))
 	}
 	return PlayerExperienceGainOutput{Cancelled: state.cancelled != 0, Amount: int(state.amount)}, nil
@@ -809,7 +809,7 @@ func (r *Runtime) HandlePlayerPunchAir(player PlayerID, cancelled bool) (bool, e
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_player_punch_air(r.ptr, &input, &state); status != C.DF_STATUS_OK {
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_PUNCH_AIR, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native punch-air handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil

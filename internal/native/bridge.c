@@ -13,24 +13,7 @@ typedef uint64_t (*RuntimeCountFn)(const DfRuntime *);
 typedef DfStatus (*RuntimeCommandAtFn)(const DfRuntime *, uint64_t, DfCommandDescriptor *);
 typedef DfStatus (*RuntimeCommandFn)(DfRuntime *, uint64_t, const DfCommandInput *, DfCommandState *);
 typedef DfStatus (*RuntimeCommandEnumFn)(DfRuntime *, uint64_t, uint64_t, uint64_t, const DfCommandEnumContext *, DfStringBuffer *);
-typedef DfStatus (*RuntimeMoveFn)(DfRuntime *, const DfPlayerMoveInput *, DfPlayerMoveState *);
-typedef DfStatus (*RuntimeChatFn)(DfRuntime *, const DfPlayerChatInput *, DfPlayerChatState *);
-typedef DfStatus (*RuntimeJoinFn)(DfRuntime *, const DfPlayerJoinInput *, DfPlayerJoinState *);
-typedef DfStatus (*RuntimeQuitFn)(DfRuntime *, const DfPlayerQuitInput *, DfPlayerQuitState *);
-typedef DfStatus (*RuntimeHurtFn)(DfRuntime *, const DfPlayerHurtInput *, DfPlayerHurtState *);
-typedef DfStatus (*RuntimeHealFn)(DfRuntime *, const DfPlayerHealInput *, DfPlayerHealState *);
-typedef DfStatus (*RuntimeBlockBreakFn)(DfRuntime *, const DfPlayerBlockBreakInput *, DfPlayerBlockBreakState *);
-typedef DfStatus (*RuntimeBlockPlaceFn)(DfRuntime *, const DfPlayerBlockPlaceInput *, DfPlayerBlockPlaceState *);
-typedef DfStatus (*RuntimeFoodLossFn)(DfRuntime *, const DfPlayerFoodLossInput *, DfPlayerFoodLossState *);
-typedef DfStatus (*RuntimeDeathFn)(DfRuntime *, const DfPlayerDeathInput *, DfPlayerDeathState *);
-typedef DfStatus (*RuntimeStartBreakFn)(DfRuntime *, const DfPlayerStartBreakInput *, DfPlayerStartBreakState *);
-typedef DfStatus (*RuntimeFireExtinguishFn)(DfRuntime *, const DfPlayerFireExtinguishInput *, DfPlayerFireExtinguishState *);
-typedef DfStatus (*RuntimeToggleSprintFn)(DfRuntime *, const DfPlayerToggleSprintInput *, DfPlayerToggleSprintState *);
-typedef DfStatus (*RuntimeToggleSneakFn)(DfRuntime *, const DfPlayerToggleSneakInput *, DfPlayerToggleSneakState *);
-typedef DfStatus (*RuntimeJumpFn)(DfRuntime *, const DfPlayerJumpInput *, DfPlayerJumpState *);
-typedef DfStatus (*RuntimeTeleportFn)(DfRuntime *, const DfPlayerTeleportInput *, DfPlayerTeleportState *);
-typedef DfStatus (*RuntimeExperienceGainFn)(DfRuntime *, const DfPlayerExperienceGainInput *, DfPlayerExperienceGainState *);
-typedef DfStatus (*RuntimePunchAirFn)(DfRuntime *, const DfPlayerPunchAirInput *, DfPlayerPunchAirState *);
+typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *);
 
 struct BgRuntimeLibrary {
     void *handle;
@@ -44,24 +27,7 @@ struct BgRuntimeLibrary {
     RuntimeCommandAtFn command_at;
     RuntimeCommandFn handle_command;
     RuntimeCommandEnumFn command_enum_options;
-    RuntimeMoveFn handle_move;
-    RuntimeChatFn handle_chat;
-    RuntimeJoinFn handle_join;
-    RuntimeQuitFn handle_quit;
-    RuntimeHurtFn handle_hurt;
-    RuntimeHealFn handle_heal;
-    RuntimeBlockBreakFn handle_block_break;
-    RuntimeBlockPlaceFn handle_block_place;
-    RuntimeFoodLossFn handle_food_loss;
-    RuntimeDeathFn handle_death;
-    RuntimeStartBreakFn handle_start_break;
-    RuntimeFireExtinguishFn handle_fire_extinguish;
-    RuntimeToggleSprintFn handle_toggle_sprint;
-    RuntimeToggleSneakFn handle_toggle_sneak;
-    RuntimeJumpFn handle_jump;
-    RuntimeTeleportFn handle_teleport;
-    RuntimeExperienceGainFn handle_experience_gain;
-    RuntimePunchAirFn handle_punch_air;
+    RuntimeEventFn handle_event;
 };
 
 static void write_error(uint8_t *error, uint64_t capacity, const char *message) {
@@ -110,25 +76,8 @@ DfStatus bg_runtime_open(
     RuntimeCommandAtFn command_at = (RuntimeCommandAtFn) load_symbol(handle, "df_runtime_command_at", error, error_capacity);
     RuntimeCommandFn handle_command = (RuntimeCommandFn) load_symbol(handle, "df_runtime_handle_command", error, error_capacity);
     RuntimeCommandEnumFn command_enum_options = (RuntimeCommandEnumFn) load_symbol(handle, "df_runtime_command_enum_options", error, error_capacity);
-    RuntimeMoveFn handle_move = (RuntimeMoveFn) load_symbol(handle, "df_runtime_handle_player_move", error, error_capacity);
-    RuntimeChatFn handle_chat = (RuntimeChatFn) load_symbol(handle, "df_runtime_handle_player_chat", error, error_capacity);
-    RuntimeJoinFn handle_join = (RuntimeJoinFn) load_symbol(handle, "df_runtime_handle_player_join", error, error_capacity);
-    RuntimeQuitFn handle_quit = (RuntimeQuitFn) load_symbol(handle, "df_runtime_handle_player_quit", error, error_capacity);
-    RuntimeHurtFn handle_hurt = (RuntimeHurtFn) load_symbol(handle, "df_runtime_handle_player_hurt", error, error_capacity);
-    RuntimeHealFn handle_heal = (RuntimeHealFn) load_symbol(handle, "df_runtime_handle_player_heal", error, error_capacity);
-    RuntimeBlockBreakFn handle_block_break = (RuntimeBlockBreakFn) load_symbol(handle, "df_runtime_handle_player_block_break", error, error_capacity);
-    RuntimeBlockPlaceFn handle_block_place = (RuntimeBlockPlaceFn) load_symbol(handle, "df_runtime_handle_player_block_place", error, error_capacity);
-    RuntimeFoodLossFn handle_food_loss = (RuntimeFoodLossFn) load_symbol(handle, "df_runtime_handle_player_food_loss", error, error_capacity);
-    RuntimeDeathFn handle_death = (RuntimeDeathFn) load_symbol(handle, "df_runtime_handle_player_death", error, error_capacity);
-    RuntimeStartBreakFn handle_start_break = (RuntimeStartBreakFn) load_symbol(handle, "df_runtime_handle_player_start_break", error, error_capacity);
-    RuntimeFireExtinguishFn handle_fire_extinguish = (RuntimeFireExtinguishFn) load_symbol(handle, "df_runtime_handle_player_fire_extinguish", error, error_capacity);
-    RuntimeToggleSprintFn handle_toggle_sprint = (RuntimeToggleSprintFn) load_symbol(handle, "df_runtime_handle_player_toggle_sprint", error, error_capacity);
-    RuntimeToggleSneakFn handle_toggle_sneak = (RuntimeToggleSneakFn) load_symbol(handle, "df_runtime_handle_player_toggle_sneak", error, error_capacity);
-    RuntimeJumpFn handle_jump = (RuntimeJumpFn) load_symbol(handle, "df_runtime_handle_player_jump", error, error_capacity);
-    RuntimeTeleportFn handle_teleport = (RuntimeTeleportFn) load_symbol(handle, "df_runtime_handle_player_teleport", error, error_capacity);
-    RuntimeExperienceGainFn handle_experience_gain = (RuntimeExperienceGainFn) load_symbol(handle, "df_runtime_handle_player_experience_gain", error, error_capacity);
-    RuntimePunchAirFn handle_punch_air = (RuntimePunchAirFn) load_symbol(handle, "df_runtime_handle_player_punch_air", error, error_capacity);
-    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_move == NULL || handle_chat == NULL || handle_join == NULL || handle_quit == NULL || handle_hurt == NULL || handle_heal == NULL || handle_block_break == NULL || handle_block_place == NULL || handle_food_loss == NULL || handle_death == NULL || handle_start_break == NULL || handle_fire_extinguish == NULL || handle_toggle_sprint == NULL || handle_toggle_sneak == NULL || handle_jump == NULL || handle_teleport == NULL || handle_experience_gain == NULL || handle_punch_air == NULL) {
+    RuntimeEventFn handle_event = (RuntimeEventFn) load_symbol(handle, "df_runtime_handle_event", error, error_capacity);
+    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_event == NULL) {
         dlclose(handle);
         return DF_STATUS_ERROR;
     }
@@ -162,24 +111,7 @@ DfStatus bg_runtime_open(
     library->command_at = command_at;
     library->handle_command = handle_command;
     library->command_enum_options = command_enum_options;
-    library->handle_move = handle_move;
-    library->handle_chat = handle_chat;
-    library->handle_join = handle_join;
-    library->handle_quit = handle_quit;
-    library->handle_hurt = handle_hurt;
-    library->handle_heal = handle_heal;
-    library->handle_block_break = handle_block_break;
-    library->handle_block_place = handle_block_place;
-    library->handle_food_loss = handle_food_loss;
-    library->handle_death = handle_death;
-    library->handle_start_break = handle_start_break;
-    library->handle_fire_extinguish = handle_fire_extinguish;
-    library->handle_toggle_sprint = handle_toggle_sprint;
-    library->handle_toggle_sneak = handle_toggle_sneak;
-    library->handle_jump = handle_jump;
-    library->handle_teleport = handle_teleport;
-    library->handle_experience_gain = handle_experience_gain;
-    library->handle_punch_air = handle_punch_air;
+    library->handle_event = handle_event;
     *out = library;
     return DF_STATUS_OK;
 }
@@ -252,6 +184,13 @@ DfStatus bg_runtime_command_enum_options(
     return library->command_enum_options(library->runtime, index, overload, parameter, context, output);
 }
 
+DfStatus bg_runtime_handle_event(BgRuntimeLibrary *library, DfEventId event_id, const void *input, void *state) {
+    if (library == NULL || input == NULL || state == NULL) {
+        return DF_STATUS_ERROR;
+    }
+    return library->handle_event(library->runtime, event_id, input, state);
+}
+
 DfStatus bg_runtime_handle_player_move(
     BgRuntimeLibrary *library,
     const DfPlayerMoveInput *input,
@@ -260,7 +199,7 @@ DfStatus bg_runtime_handle_player_move(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_move(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_MOVE, input, state);
 }
 
 DfStatus bg_runtime_handle_player_chat(
@@ -271,7 +210,7 @@ DfStatus bg_runtime_handle_player_chat(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_chat(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_CHAT, input, state);
 }
 
 DfStatus bg_runtime_handle_player_join(
@@ -282,7 +221,7 @@ DfStatus bg_runtime_handle_player_join(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_join(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_JOIN, input, state);
 }
 
 DfStatus bg_runtime_handle_player_quit(
@@ -293,7 +232,7 @@ DfStatus bg_runtime_handle_player_quit(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_quit(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_QUIT, input, state);
 }
 
 DfStatus bg_runtime_handle_player_hurt(
@@ -304,7 +243,7 @@ DfStatus bg_runtime_handle_player_hurt(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_hurt(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_HURT, input, state);
 }
 
 DfStatus bg_runtime_handle_player_heal(
@@ -315,7 +254,7 @@ DfStatus bg_runtime_handle_player_heal(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_heal(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_HEAL, input, state);
 }
 
 DfStatus bg_runtime_handle_player_block_break(
@@ -326,7 +265,7 @@ DfStatus bg_runtime_handle_player_block_break(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_block_break(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_BLOCK_BREAK, input, state);
 }
 
 DfStatus bg_runtime_handle_player_block_place(
@@ -337,7 +276,7 @@ DfStatus bg_runtime_handle_player_block_place(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_block_place(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_BLOCK_PLACE, input, state);
 }
 
 DfStatus bg_runtime_handle_player_food_loss(
@@ -348,7 +287,7 @@ DfStatus bg_runtime_handle_player_food_loss(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_food_loss(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_FOOD_LOSS, input, state);
 }
 
 DfStatus bg_runtime_handle_player_death(
@@ -359,24 +298,24 @@ DfStatus bg_runtime_handle_player_death(
     if (library == NULL || input == NULL || state == NULL) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_death(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_DEATH, input, state);
 }
 
 DfStatus bg_runtime_handle_player_start_break(BgRuntimeLibrary *library, const DfPlayerStartBreakInput *input, DfPlayerStartBreakState *state) {
     if (library == NULL || input == NULL || state == NULL) return DF_STATUS_ERROR;
-    return library->handle_start_break(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_START_BREAK, input, state);
 }
 
 DfStatus bg_runtime_handle_player_fire_extinguish(BgRuntimeLibrary *library, const DfPlayerFireExtinguishInput *input, DfPlayerFireExtinguishState *state) {
     if (library == NULL || input == NULL || state == NULL) return DF_STATUS_ERROR;
-    return library->handle_fire_extinguish(library->runtime, input, state);
+    return bg_runtime_handle_event(library, DF_EVENT_PLAYER_FIRE_EXTINGUISH, input, state);
 }
-DfStatus bg_runtime_handle_player_toggle_sprint(BgRuntimeLibrary *library, const DfPlayerToggleSprintInput *input, DfPlayerToggleSprintState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_toggle_sprint(library->runtime, input, state); }
-DfStatus bg_runtime_handle_player_toggle_sneak(BgRuntimeLibrary *library, const DfPlayerToggleSneakInput *input, DfPlayerToggleSneakState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_toggle_sneak(library->runtime, input, state); }
-DfStatus bg_runtime_handle_player_jump(BgRuntimeLibrary *library, const DfPlayerJumpInput *input, DfPlayerJumpState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_jump(library->runtime, input, state); }
-DfStatus bg_runtime_handle_player_teleport(BgRuntimeLibrary *library, const DfPlayerTeleportInput *input, DfPlayerTeleportState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_teleport(library->runtime, input, state); }
-DfStatus bg_runtime_handle_player_experience_gain(BgRuntimeLibrary *library, const DfPlayerExperienceGainInput *input, DfPlayerExperienceGainState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_experience_gain(library->runtime, input, state); }
-DfStatus bg_runtime_handle_player_punch_air(BgRuntimeLibrary *library, const DfPlayerPunchAirInput *input, DfPlayerPunchAirState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_punch_air(library->runtime, input, state); }
+DfStatus bg_runtime_handle_player_toggle_sprint(BgRuntimeLibrary *library, const DfPlayerToggleSprintInput *input, DfPlayerToggleSprintState *state) { return bg_runtime_handle_event(library, DF_EVENT_PLAYER_TOGGLE_SPRINT, input, state); }
+DfStatus bg_runtime_handle_player_toggle_sneak(BgRuntimeLibrary *library, const DfPlayerToggleSneakInput *input, DfPlayerToggleSneakState *state) { return bg_runtime_handle_event(library, DF_EVENT_PLAYER_TOGGLE_SNEAK, input, state); }
+DfStatus bg_runtime_handle_player_jump(BgRuntimeLibrary *library, const DfPlayerJumpInput *input, DfPlayerJumpState *state) { return bg_runtime_handle_event(library, DF_EVENT_PLAYER_JUMP, input, state); }
+DfStatus bg_runtime_handle_player_teleport(BgRuntimeLibrary *library, const DfPlayerTeleportInput *input, DfPlayerTeleportState *state) { return bg_runtime_handle_event(library, DF_EVENT_PLAYER_TELEPORT, input, state); }
+DfStatus bg_runtime_handle_player_experience_gain(BgRuntimeLibrary *library, const DfPlayerExperienceGainInput *input, DfPlayerExperienceGainState *state) { return bg_runtime_handle_event(library, DF_EVENT_PLAYER_EXPERIENCE_GAIN, input, state); }
+DfStatus bg_runtime_handle_player_punch_air(BgRuntimeLibrary *library, const DfPlayerPunchAirInput *input, DfPlayerPunchAirState *state) { return bg_runtime_handle_event(library, DF_EVENT_PLAYER_PUNCH_AIR, input, state); }
 
 uint64_t bg_runtime_handle_player_move_value(
     BgRuntimeLibrary *library,
@@ -384,6 +323,8 @@ uint64_t bg_runtime_handle_player_move_value(
     uint8_t cancelled
 ) {
     DfPlayerMoveState state = {.cancelled = cancelled};
-    DfStatus status = bg_runtime_handle_player_move(library, &input, &state);
+    DfStatus status = library == NULL
+        ? DF_STATUS_ERROR
+        : library->handle_event(library->runtime, DF_EVENT_PLAYER_MOVE, &input, &state);
     return ((uint64_t) (uint32_t) status << 32u) | (uint64_t) state.cancelled;
 }

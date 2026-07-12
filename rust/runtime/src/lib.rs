@@ -1213,6 +1213,86 @@ pub unsafe extern "C" fn df_runtime_command_enum_options(
 }
 
 #[unsafe(no_mangle)]
+/// Dispatches an event using its generated ABI event ID.
+///
+/// # Safety
+/// `input` and `state` must point to the generated types matching `event_id` and remain valid for this call.
+pub unsafe extern "C" fn df_runtime_handle_event(
+    runtime: *mut DfRuntime,
+    event_id: u32,
+    input: *const c_void,
+    state: *mut c_void,
+) -> DfStatus {
+    if event_id == DF_EVENT_PLAYER_MOVE {
+        let (Some(runtime), Some(input), Some(state)) = (
+            unsafe { runtime.as_ref() },
+            unsafe { input.cast::<DfPlayerMoveInput>().as_ref() },
+            unsafe { state.cast::<DfPlayerMoveState>().as_mut() },
+        ) else {
+            return DF_STATUS_ERROR;
+        };
+        return std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            runtime.handle_move(input, state)
+        }))
+        .unwrap_or(DF_STATUS_ERROR);
+    }
+    match event_id {
+        DF_EVENT_PLAYER_CHAT => unsafe {
+            df_runtime_handle_player_chat(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_JOIN => unsafe {
+            df_runtime_handle_player_join(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_QUIT => unsafe {
+            df_runtime_handle_player_quit(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_HURT => unsafe {
+            df_runtime_handle_player_hurt(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_HEAL => unsafe {
+            df_runtime_handle_player_heal(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_BLOCK_BREAK => unsafe {
+            df_runtime_handle_player_block_break(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_BLOCK_PLACE => unsafe {
+            df_runtime_handle_player_block_place(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_FOOD_LOSS => unsafe {
+            df_runtime_handle_player_food_loss(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_DEATH => unsafe {
+            df_runtime_handle_player_death(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_START_BREAK => unsafe {
+            df_runtime_handle_player_start_break(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_FIRE_EXTINGUISH => unsafe {
+            df_runtime_handle_player_fire_extinguish(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_TOGGLE_SPRINT => unsafe {
+            df_runtime_handle_player_toggle_sprint(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_TOGGLE_SNEAK => unsafe {
+            df_runtime_handle_player_toggle_sneak(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_JUMP => unsafe {
+            df_runtime_handle_player_jump(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_TELEPORT => unsafe {
+            df_runtime_handle_player_teleport(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_EXPERIENCE_GAIN => unsafe {
+            df_runtime_handle_player_experience_gain(runtime, input.cast(), state.cast())
+        },
+        DF_EVENT_PLAYER_PUNCH_AIR => unsafe {
+            df_runtime_handle_player_punch_air(runtime, input.cast(), state.cast())
+        },
+        _ => DF_STATUS_ERROR,
+    }
+}
+
+#[unsafe(no_mangle)]
 /// Dispatches a player movement event.
 ///
 /// # Safety
@@ -1661,5 +1741,13 @@ mod tests {
         let runtime = DfRuntime::load(&directory).unwrap();
         assert!(runtime.plugins.is_empty());
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn generic_dispatch_rejects_unknown_events() {
+        let status = unsafe {
+            df_runtime_handle_event(ptr::null_mut(), u32::MAX, ptr::null(), ptr::null_mut())
+        };
+        assert_eq!(status, DF_STATUS_ERROR);
     }
 }

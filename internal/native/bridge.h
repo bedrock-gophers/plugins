@@ -38,6 +38,12 @@ DfStatus bg_runtime_command_enum_options(
     const DfCommandEnumContext *context,
     DfStringBuffer *output
 );
+DfStatus bg_runtime_handle_event(
+    BgRuntimeLibrary *library,
+    DfEventId event_id,
+    const void *input,
+    void *state
+);
 DfStatus bg_runtime_handle_player_move(
     BgRuntimeLibrary *library,
     const DfPlayerMoveInput *input,

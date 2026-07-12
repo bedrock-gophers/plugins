@@ -227,11 +227,8 @@ uint64_t df_runtime_command_count(const DfRuntime *runtime);
 DfStatus df_runtime_command_at(const DfRuntime *runtime, uint64_t index, DfCommandDescriptor *out);
 DfStatus df_runtime_handle_command(DfRuntime *runtime, uint64_t index, const DfCommandInput *input, DfCommandState *state);
 DfStatus df_runtime_command_enum_options(DfRuntime *runtime, uint64_t index, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
+DfStatus df_runtime_handle_event(DfRuntime *runtime, DfEventId event_id, const void *input, void *state);
 `)
-	for _, evt := range events {
-		name := cName(evt)
-		fmt.Fprintf(&b, "DfStatus df_runtime_handle_%s(DfRuntime *runtime, const %sInput *input, %sState *state);\n", evt.Domain+"_"+evt.Name, name, name)
-	}
 	b.WriteString(`
 #ifdef __cplusplus
 }

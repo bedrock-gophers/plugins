@@ -291,24 +291,7 @@ uint64_t df_runtime_command_count(const DfRuntime *runtime);
 DfStatus df_runtime_command_at(const DfRuntime *runtime, uint64_t index, DfCommandDescriptor *out);
 DfStatus df_runtime_handle_command(DfRuntime *runtime, uint64_t index, const DfCommandInput *input, DfCommandState *state);
 DfStatus df_runtime_command_enum_options(DfRuntime *runtime, uint64_t index, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-DfStatus df_runtime_handle_player_move(DfRuntime *runtime, const DfPlayerMoveInput *input, DfPlayerMoveState *state);
-DfStatus df_runtime_handle_player_chat(DfRuntime *runtime, const DfPlayerChatInput *input, DfPlayerChatState *state);
-DfStatus df_runtime_handle_player_join(DfRuntime *runtime, const DfPlayerJoinInput *input, DfPlayerJoinState *state);
-DfStatus df_runtime_handle_player_quit(DfRuntime *runtime, const DfPlayerQuitInput *input, DfPlayerQuitState *state);
-DfStatus df_runtime_handle_player_hurt(DfRuntime *runtime, const DfPlayerHurtInput *input, DfPlayerHurtState *state);
-DfStatus df_runtime_handle_player_heal(DfRuntime *runtime, const DfPlayerHealInput *input, DfPlayerHealState *state);
-DfStatus df_runtime_handle_player_block_break(DfRuntime *runtime, const DfPlayerBlockBreakInput *input, DfPlayerBlockBreakState *state);
-DfStatus df_runtime_handle_player_block_place(DfRuntime *runtime, const DfPlayerBlockPlaceInput *input, DfPlayerBlockPlaceState *state);
-DfStatus df_runtime_handle_player_food_loss(DfRuntime *runtime, const DfPlayerFoodLossInput *input, DfPlayerFoodLossState *state);
-DfStatus df_runtime_handle_player_death(DfRuntime *runtime, const DfPlayerDeathInput *input, DfPlayerDeathState *state);
-DfStatus df_runtime_handle_player_start_break(DfRuntime *runtime, const DfPlayerStartBreakInput *input, DfPlayerStartBreakState *state);
-DfStatus df_runtime_handle_player_fire_extinguish(DfRuntime *runtime, const DfPlayerFireExtinguishInput *input, DfPlayerFireExtinguishState *state);
-DfStatus df_runtime_handle_player_toggle_sprint(DfRuntime *runtime, const DfPlayerToggleSprintInput *input, DfPlayerToggleSprintState *state);
-DfStatus df_runtime_handle_player_toggle_sneak(DfRuntime *runtime, const DfPlayerToggleSneakInput *input, DfPlayerToggleSneakState *state);
-DfStatus df_runtime_handle_player_jump(DfRuntime *runtime, const DfPlayerJumpInput *input, DfPlayerJumpState *state);
-DfStatus df_runtime_handle_player_teleport(DfRuntime *runtime, const DfPlayerTeleportInput *input, DfPlayerTeleportState *state);
-DfStatus df_runtime_handle_player_experience_gain(DfRuntime *runtime, const DfPlayerExperienceGainInput *input, DfPlayerExperienceGainState *state);
-DfStatus df_runtime_handle_player_punch_air(DfRuntime *runtime, const DfPlayerPunchAirInput *input, DfPlayerPunchAirState *state);
+DfStatus df_runtime_handle_event(DfRuntime *runtime, DfEventId event_id, const void *input, void *state);
 
 #ifdef __cplusplus
 }
