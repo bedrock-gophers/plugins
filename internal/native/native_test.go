@@ -408,6 +408,28 @@ func TestPlayerItemConsumeAndRelease(t *testing.T) {
 	}
 }
 
+func TestPlayerItemDamageAndDrop(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerItemDamageSubscription == 0 || runtime.Subscriptions()&PlayerItemDropSubscription == 0 {
+		t.Fatal("item-damage or item-drop subscription missing")
+	}
+	stack := ItemStackView{Identifier: "minecraft:diamond_sword", Count: 1}
+	output, err := runtime.HandlePlayerItemDamage(PlayerID{}, stack, 1, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Cancelled || output.Damage != 1 {
+		t.Fatalf("item damage = %+v", output)
+	}
+	cancelled, err := runtime.HandlePlayerItemDrop(PlayerID{}, stack, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled {
+		t.Fatal("item drop cancelled")
+	}
+}
+
 func TestCancellationIsMonotonic(t *testing.T) {
 	runtime := openTestRuntime(t)
 	cancelled, err := runtime.HandlePlayerMove(PlayerMoveInput{NewPosition: Vec3{Y: 64}}, true)

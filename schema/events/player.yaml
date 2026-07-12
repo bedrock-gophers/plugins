@@ -206,3 +206,18 @@ events:
       - { name: duration_milliseconds, type: u64 }
     state:
       - { name: cancelled, type: bool }
+  - name: item_damage
+    id: 28
+    input:
+      - { name: player, type: player_id }
+      - { name: item, type: item_stack }
+    state:
+      - { name: cancelled, type: bool }
+      - { name: damage, type: i32 }
+  - name: item_drop
+    id: 29
+    input:
+      - { name: player, type: player_id }
+      - { name: item, type: item_stack }
+    state:
+      - { name: cancelled, type: bool }

@@ -1422,6 +1422,70 @@ pub struct PlayerItemReleaseEvent<'a> {
     state: &'a mut dragonfly_plugin_sys::DfPlayerItemReleaseState,
 }
 
+pub struct PlayerItemDamageEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerItemDamageInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerItemDamageState,
+}
+
+impl<'a> PlayerItemDamageEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active item-damage callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerItemDamageInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerItemDamageState,
+    ) -> Self {
+        Self { input, state }
+    }
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn item(&self) -> ItemStack<'_> {
+        ItemStack::from_raw(&self.input.item)
+    }
+    pub fn damage(&self) -> i32 {
+        self.state.damage
+    }
+    pub fn set_damage(&mut self, damage: i32) {
+        self.state.damage = damage.max(0);
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
+pub struct PlayerItemDropEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerItemDropInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerItemDropState,
+}
+
+impl<'a> PlayerItemDropEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active item-drop callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerItemDropInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerItemDropState,
+    ) -> Self {
+        Self { input, state }
+    }
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn item(&self) -> ItemStack<'_> {
+        ItemStack::from_raw(&self.input.item)
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
 impl<'a> PlayerItemReleaseEvent<'a> {
     /// # Safety
     /// Both references must belong to the same active item-release callback.
@@ -1564,6 +1628,8 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_item_use_on_block(&self, _event: &mut PlayerItemUseOnBlockEvent<'_>) {}
     fn on_item_consume(&self, _event: &mut PlayerItemConsumeEvent<'_>) {}
     fn on_item_release(&self, _event: &mut PlayerItemReleaseEvent<'_>) {}
+    fn on_item_damage(&self, _event: &mut PlayerItemDamageEvent<'_>) {}
+    fn on_item_drop(&self, _event: &mut PlayerItemDropEvent<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }

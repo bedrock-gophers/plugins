@@ -43,6 +43,8 @@ type playerRuntime interface {
 	HandlePlayerItemUseOnBlock(native.PlayerItemUseOnBlockInput, bool) (bool, error)
 	HandlePlayerItemConsume(native.PlayerID, native.ItemStackView, bool) (bool, error)
 	HandlePlayerItemRelease(native.PlayerID, native.ItemStackView, time.Duration, bool) (bool, error)
+	HandlePlayerItemDamage(native.PlayerID, native.ItemStackView, int, bool) (native.PlayerItemDamageOutput, error)
+	HandlePlayerItemDrop(native.PlayerID, native.ItemStackView, bool) (bool, error)
 }
 
 func (h *PlayerHandler) HandleJump(p *player.Player) {
@@ -376,6 +378,37 @@ func (h *PlayerHandler) HandleItemRelease(ctx *player.Context, stack item.Stack,
 	cancelled, err := h.runtime.HandlePlayerItemRelease(h.playerID(p), nativeItemStack(stack), duration, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin item-release handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandleItemDamage(ctx *player.Context, stack item.Stack, damage *int) {
+	if h.runtime.Subscriptions()&native.PlayerItemDamageSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	output, err := h.runtime.HandlePlayerItemDamage(h.playerID(p), nativeItemStack(stack), *damage, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin item-damage handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	*damage = output.Damage
+	if output.Cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandleItemDrop(ctx *player.Context, stack item.Stack) {
+	if h.runtime.Subscriptions()&native.PlayerItemDropSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	cancelled, err := h.runtime.HandlePlayerItemDrop(h.playerID(p), nativeItemStack(stack), ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin item-drop handler failed", "player", p.Name(), "error", err)
 		return
 	}
 	if cancelled {

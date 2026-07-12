@@ -469,6 +469,35 @@ pub struct DfPlayerItemReleaseState {
     pub cancelled: u8,
 }
 
+pub const DF_EVENT_PLAYER_ITEM_DAMAGE: DfEventId = 28;
+pub const DF_SUBSCRIPTION_PLAYER_ITEM_DAMAGE: u64 = 1u64 << 27;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerItemDamageInput {
+    pub player: DfPlayerId,
+    pub item: DfItemStackView,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerItemDamageState {
+    pub cancelled: u8,
+    pub damage: i32,
+}
+
+pub const DF_EVENT_PLAYER_ITEM_DROP: DfEventId = 29;
+pub const DF_SUBSCRIPTION_PLAYER_ITEM_DROP: u64 = 1u64 << 28;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerItemDropInput {
+    pub player: DfPlayerId,
+    pub item: DfItemStackView,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerItemDropState {
+    pub cancelled: u8,
+}
+
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;

@@ -118,6 +118,12 @@ func (r *runtimeStub) HandlePlayerItemConsume(_ native.PlayerID, _ native.ItemSt
 func (r *runtimeStub) HandlePlayerItemRelease(_ native.PlayerID, _ native.ItemStackView, _ time.Duration, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
+func (r *runtimeStub) HandlePlayerItemDamage(_ native.PlayerID, _ native.ItemStackView, damage int, cancelled bool) (native.PlayerItemDamageOutput, error) {
+	return native.PlayerItemDamageOutput{Cancelled: cancelled, Damage: damage}, nil
+}
+func (r *runtimeStub) HandlePlayerItemDrop(_ native.PlayerID, _ native.ItemStackView, cancelled bool) (bool, error) {
+	return cancelled, nil
+}
 
 func (r *runtimeStub) Subscriptions() uint64 { return r.subscriptions }
 func (r *runtimeStub) HandlePlayerMove(input native.PlayerMoveInput, _ bool) (bool, error) {

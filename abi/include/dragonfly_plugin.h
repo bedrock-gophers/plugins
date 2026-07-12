@@ -364,6 +364,29 @@ typedef struct {
     uint8_t cancelled;
 } DfPlayerItemReleaseState;
 
+#define DF_EVENT_PLAYER_ITEM_DAMAGE 28u
+
+typedef struct {
+    DfPlayerId player;
+    DfItemStackView item;
+} DfPlayerItemDamageInput;
+
+typedef struct {
+    uint8_t cancelled;
+    int32_t damage;
+} DfPlayerItemDamageState;
+
+#define DF_EVENT_PLAYER_ITEM_DROP 29u
+
+typedef struct {
+    DfPlayerId player;
+    DfItemStackView item;
+} DfPlayerItemDropInput;
+
+typedef struct {
+    uint8_t cancelled;
+} DfPlayerItemDropState;
+
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);

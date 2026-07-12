@@ -863,6 +863,12 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_item_release = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_item_release"),
     );
+    let handles_item_damage = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_item_damage"),
+    );
+    let handles_item_drop = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_item_drop"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -889,7 +895,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_item_use) << 23)
         | (u64::from(handles_item_use_on_block) << 24)
         | (u64::from(handles_item_consume) << 25)
-        | (u64::from(handles_item_release) << 26);
+        | (u64::from(handles_item_release) << 26)
+        | (u64::from(handles_item_damage) << 27)
+        | (u64::from(handles_item_drop) << 28);
 
     quote! {
         #[doc(hidden)]
@@ -1257,6 +1265,22 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemReleaseState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerItemReleaseEvent::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_release(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_ITEM_DAMAGE => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerItemDamageInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerItemDamageState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemDamageEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_item_damage(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_ITEM_DROP => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerItemDropInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerItemDropState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemDropEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_item_drop(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

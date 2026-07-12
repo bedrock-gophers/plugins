@@ -46,6 +46,8 @@ const (
 	PlayerItemUseOnBlockSubscription  uint64 = 16777216
 	PlayerItemConsumeSubscription     uint64 = 33554432
 	PlayerItemReleaseSubscription     uint64 = 67108864
+	PlayerItemDamageSubscription      uint64 = 134217728
+	PlayerItemDropSubscription        uint64 = 268435456
 	MaxChatReplacementBytes                  = 4096
 	MaxCommandOutputBytes                    = 4096
 	MaxCommandEnumBytes                      = 4096
@@ -212,6 +214,10 @@ type ItemStackView struct {
 	Metadata   int
 	Count      int
 	Damage     int
+}
+type PlayerItemDamageOutput struct {
+	Cancelled bool
+	Damage    int
 }
 
 type Command struct {
@@ -1011,8 +1017,7 @@ func (r *Runtime) handlePlayerItemStackEvent(event C.DfEventId, player PlayerID,
 	if r == nil || r.ptr == nil {
 		return cancelled, errors.New("native runtime is closed")
 	}
-	identifier := unsafe.StringData(item.Identifier)
-	stack := C.DfItemStackView{identifier: C.DfStringView{data: (*C.uint8_t)(unsafe.Pointer(identifier)), len: C.uint64_t(len(item.Identifier))}, metadata: C.int32_t(item.Metadata), count: C.int32_t(item.Count), damage: C.int32_t(item.Damage)}
+	stack := nativeItemStack(item)
 	var state C.DfPlayerItemConsumeState
 	if cancelled {
 		state.cancelled = 1
@@ -1034,6 +1039,46 @@ func (r *Runtime) handlePlayerItemStackEvent(event C.DfEventId, player PlayerID,
 		return state.cancelled != 0, fmt.Errorf("native item-release handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
+}
+
+func (r *Runtime) HandlePlayerItemDamage(player PlayerID, item ItemStackView, damage int, cancelled bool) (PlayerItemDamageOutput, error) {
+	output := PlayerItemDamageOutput{Cancelled: cancelled, Damage: damage}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	var input C.DfPlayerItemDamageInput
+	fillPlayerID(&input.player, player)
+	input.item = nativeItemStack(item)
+	state := C.DfPlayerItemDamageState{damage: C.int32_t(damage)}
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_ITEM_DAMAGE, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("native item-damage handler failed with status %d", int32(status))
+	}
+	return PlayerItemDamageOutput{Cancelled: state.cancelled != 0, Damage: int(state.damage)}, nil
+}
+
+func (r *Runtime) HandlePlayerItemDrop(player PlayerID, item ItemStackView, cancelled bool) (bool, error) {
+	if r == nil || r.ptr == nil {
+		return cancelled, errors.New("native runtime is closed")
+	}
+	var input C.DfPlayerItemDropInput
+	fillPlayerID(&input.player, player)
+	input.item = nativeItemStack(item)
+	var state C.DfPlayerItemDropState
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_ITEM_DROP, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+		return state.cancelled != 0, fmt.Errorf("native item-drop handler failed with status %d", int32(status))
+	}
+	return state.cancelled != 0, nil
+}
+
+func nativeItemStack(item ItemStackView) C.DfItemStackView {
+	identifier := unsafe.StringData(item.Identifier)
+	return C.DfItemStackView{identifier: C.DfStringView{data: (*C.uint8_t)(unsafe.Pointer(identifier)), len: C.uint64_t(len(item.Identifier))}, metadata: C.int32_t(item.Metadata), count: C.int32_t(item.Count), damage: C.int32_t(item.Damage)}
 }
 
 func nativeBlockPos(position BlockPos) C.DfBlockPos {

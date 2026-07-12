@@ -1,11 +1,11 @@
 use dragonfly::{
     PlayerBlockBreakEvent, PlayerBlockPickEvent, PlayerBlockPlaceEvent, PlayerDeathEvent,
     PlayerExperienceGainEvent, PlayerFireExtinguishEvent, PlayerFoodLossEvent, PlayerHealEvent,
-    PlayerHeldSlotChangeEvent, PlayerHurtEvent, PlayerItemConsumeEvent, PlayerItemReleaseEvent,
-    PlayerItemUseEvent, PlayerItemUseOnBlockEvent, PlayerJoinEvent, PlayerJumpEvent,
-    PlayerLecternPageTurnEvent, PlayerPunchAirEvent, PlayerQuitEvent, PlayerSignEditEvent,
-    PlayerSleepEvent, PlayerStartBreakEvent, PlayerTeleportEvent, PlayerToggleSneakEvent,
-    PlayerToggleSprintEvent, Plugin, plugin,
+    PlayerHeldSlotChangeEvent, PlayerHurtEvent, PlayerItemConsumeEvent, PlayerItemDamageEvent,
+    PlayerItemDropEvent, PlayerItemReleaseEvent, PlayerItemUseEvent, PlayerItemUseOnBlockEvent,
+    PlayerJoinEvent, PlayerJumpEvent, PlayerLecternPageTurnEvent, PlayerPunchAirEvent,
+    PlayerQuitEvent, PlayerSignEditEvent, PlayerSleepEvent, PlayerStartBreakEvent,
+    PlayerTeleportEvent, PlayerToggleSneakEvent, PlayerToggleSprintEvent, Plugin, plugin,
 };
 
 #[derive(Default)]
@@ -121,6 +121,20 @@ impl Plugin for LifecycleLogger {
             "released {} after {:?}",
             event.item().identifier(),
             event.duration()
+        );
+    }
+    fn on_item_damage(&self, event: &mut PlayerItemDamageEvent<'_>) {
+        eprintln!(
+            "damaging {} by {}",
+            event.item().identifier(),
+            event.damage()
+        );
+    }
+    fn on_item_drop(&self, event: &mut PlayerItemDropEvent<'_>) {
+        eprintln!(
+            "dropping {} x{}",
+            event.item().identifier(),
+            event.item().count()
         );
     }
 }
