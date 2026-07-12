@@ -29,6 +29,8 @@ typedef DfStatus (*RuntimeToggleSprintFn)(DfRuntime *, const DfPlayerToggleSprin
 typedef DfStatus (*RuntimeToggleSneakFn)(DfRuntime *, const DfPlayerToggleSneakInput *, DfPlayerToggleSneakState *);
 typedef DfStatus (*RuntimeJumpFn)(DfRuntime *, const DfPlayerJumpInput *, DfPlayerJumpState *);
 typedef DfStatus (*RuntimeTeleportFn)(DfRuntime *, const DfPlayerTeleportInput *, DfPlayerTeleportState *);
+typedef DfStatus (*RuntimeExperienceGainFn)(DfRuntime *, const DfPlayerExperienceGainInput *, DfPlayerExperienceGainState *);
+typedef DfStatus (*RuntimePunchAirFn)(DfRuntime *, const DfPlayerPunchAirInput *, DfPlayerPunchAirState *);
 
 struct BgRuntimeLibrary {
     void *handle;
@@ -58,6 +60,8 @@ struct BgRuntimeLibrary {
     RuntimeToggleSneakFn handle_toggle_sneak;
     RuntimeJumpFn handle_jump;
     RuntimeTeleportFn handle_teleport;
+    RuntimeExperienceGainFn handle_experience_gain;
+    RuntimePunchAirFn handle_punch_air;
 };
 
 static void write_error(uint8_t *error, uint64_t capacity, const char *message) {
@@ -122,7 +126,9 @@ DfStatus bg_runtime_open(
     RuntimeToggleSneakFn handle_toggle_sneak = (RuntimeToggleSneakFn) load_symbol(handle, "df_runtime_handle_player_toggle_sneak", error, error_capacity);
     RuntimeJumpFn handle_jump = (RuntimeJumpFn) load_symbol(handle, "df_runtime_handle_player_jump", error, error_capacity);
     RuntimeTeleportFn handle_teleport = (RuntimeTeleportFn) load_symbol(handle, "df_runtime_handle_player_teleport", error, error_capacity);
-    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_move == NULL || handle_chat == NULL || handle_join == NULL || handle_quit == NULL || handle_hurt == NULL || handle_heal == NULL || handle_block_break == NULL || handle_block_place == NULL || handle_food_loss == NULL || handle_death == NULL || handle_start_break == NULL || handle_fire_extinguish == NULL || handle_toggle_sprint == NULL || handle_toggle_sneak == NULL || handle_jump == NULL || handle_teleport == NULL) {
+    RuntimeExperienceGainFn handle_experience_gain = (RuntimeExperienceGainFn) load_symbol(handle, "df_runtime_handle_player_experience_gain", error, error_capacity);
+    RuntimePunchAirFn handle_punch_air = (RuntimePunchAirFn) load_symbol(handle, "df_runtime_handle_player_punch_air", error, error_capacity);
+    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_move == NULL || handle_chat == NULL || handle_join == NULL || handle_quit == NULL || handle_hurt == NULL || handle_heal == NULL || handle_block_break == NULL || handle_block_place == NULL || handle_food_loss == NULL || handle_death == NULL || handle_start_break == NULL || handle_fire_extinguish == NULL || handle_toggle_sprint == NULL || handle_toggle_sneak == NULL || handle_jump == NULL || handle_teleport == NULL || handle_experience_gain == NULL || handle_punch_air == NULL) {
         dlclose(handle);
         return DF_STATUS_ERROR;
     }
@@ -172,6 +178,8 @@ DfStatus bg_runtime_open(
     library->handle_toggle_sneak = handle_toggle_sneak;
     library->handle_jump = handle_jump;
     library->handle_teleport = handle_teleport;
+    library->handle_experience_gain = handle_experience_gain;
+    library->handle_punch_air = handle_punch_air;
     *out = library;
     return DF_STATUS_OK;
 }
@@ -367,6 +375,8 @@ DfStatus bg_runtime_handle_player_toggle_sprint(BgRuntimeLibrary *library, const
 DfStatus bg_runtime_handle_player_toggle_sneak(BgRuntimeLibrary *library, const DfPlayerToggleSneakInput *input, DfPlayerToggleSneakState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_toggle_sneak(library->runtime, input, state); }
 DfStatus bg_runtime_handle_player_jump(BgRuntimeLibrary *library, const DfPlayerJumpInput *input, DfPlayerJumpState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_jump(library->runtime, input, state); }
 DfStatus bg_runtime_handle_player_teleport(BgRuntimeLibrary *library, const DfPlayerTeleportInput *input, DfPlayerTeleportState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_teleport(library->runtime, input, state); }
+DfStatus bg_runtime_handle_player_experience_gain(BgRuntimeLibrary *library, const DfPlayerExperienceGainInput *input, DfPlayerExperienceGainState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_experience_gain(library->runtime, input, state); }
+DfStatus bg_runtime_handle_player_punch_air(BgRuntimeLibrary *library, const DfPlayerPunchAirInput *input, DfPlayerPunchAirState *state) { if (!library || !input || !state) return DF_STATUS_ERROR; return library->handle_punch_air(library->runtime, input, state); }
 
 uint64_t bg_runtime_handle_player_move_value(
     BgRuntimeLibrary *library,

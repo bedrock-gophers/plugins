@@ -830,6 +830,12 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_teleport = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_teleport"),
     );
+    let handles_experience_gain = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_experience_gain"),
+    );
+    let handles_punch_air = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_punch_air"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -845,7 +851,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_toggle_sprint) << 12)
         | (u64::from(handles_toggle_sneak) << 13)
         | (u64::from(handles_jump) << 14)
-        | (u64::from(handles_teleport) << 15);
+        | (u64::from(handles_teleport) << 15)
+        | (u64::from(handles_experience_gain) << 16)
+        | (u64::from(handles_punch_air) << 17);
 
     quote! {
         #[doc(hidden)]
@@ -1125,6 +1133,22 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerTeleportState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerTeleportEvent::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_teleport(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_EXPERIENCE_GAIN => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerExperienceGainInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerExperienceGainState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerExperienceGainEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_experience_gain(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_PUNCH_AIR => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerPunchAirInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerPunchAirState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerPunchAirEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_punch_air(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

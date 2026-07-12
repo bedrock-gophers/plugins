@@ -1147,6 +1147,64 @@ cancellable_position_event!(
     dragonfly_plugin_sys::DfPlayerFireExtinguishState
 );
 
+pub struct PlayerExperienceGainEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerExperienceGainInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerExperienceGainState,
+}
+
+impl<'a> PlayerExperienceGainEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active experience-gain callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerExperienceGainInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerExperienceGainState,
+    ) -> Self {
+        Self { input, state }
+    }
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn amount(&self) -> i32 {
+        self.state.amount
+    }
+    pub fn set_amount(&mut self, amount: i32) {
+        self.state.amount = amount.max(0);
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
+pub struct PlayerPunchAirEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerPunchAirInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerPunchAirState,
+}
+
+impl<'a> PlayerPunchAirEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active punch-air callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerPunchAirInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerPunchAirState,
+    ) -> Self {
+        Self { input, state }
+    }
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
 pub trait Plugin: Default + Send + Sync + 'static {
     fn on_enable(&self) {}
     fn on_disable(&self) {}
@@ -1166,6 +1224,8 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_toggle_sneak(&self, _event: &mut PlayerToggleSneakEvent<'_>) {}
     fn on_jump(&self, _event: &PlayerJumpEvent<'_>) {}
     fn on_teleport(&self, _event: &mut PlayerTeleportEvent<'_>) {}
+    fn on_experience_gain(&self, _event: &mut PlayerExperienceGainEvent<'_>) {}
+    fn on_punch_air(&self, _event: &mut PlayerPunchAirEvent<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }

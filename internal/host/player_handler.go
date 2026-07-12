@@ -32,6 +32,8 @@ type playerRuntime interface {
 	HandlePlayerToggleSneak(native.PlayerToggleInput, bool) (bool, error)
 	HandlePlayerJump(native.PlayerID) error
 	HandlePlayerTeleport(native.PlayerTeleportInput, bool) (bool, error)
+	HandlePlayerExperienceGain(native.PlayerID, int, bool) (native.PlayerExperienceGainOutput, error)
+	HandlePlayerPunchAir(native.PlayerID, bool) (bool, error)
 }
 
 func (h *PlayerHandler) HandleJump(p *player.Player) {
@@ -51,6 +53,37 @@ func (h *PlayerHandler) HandleTeleport(ctx *player.Context, position mgl64.Vec3)
 	cancelled, err := h.runtime.HandlePlayerTeleport(native.PlayerTeleportInput{Player: h.playerID(p), Position: native.Vec3{X: position.X(), Y: position.Y(), Z: position.Z()}}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin teleport handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandleExperienceGain(ctx *player.Context, amount *int) {
+	if h.runtime.Subscriptions()&native.PlayerExperienceGainSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	output, err := h.runtime.HandlePlayerExperienceGain(h.playerID(p), *amount, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin experience-gain handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	*amount = output.Amount
+	if output.Cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandlePunchAir(ctx *player.Context) {
+	if h.runtime.Subscriptions()&native.PlayerPunchAirSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	cancelled, err := h.runtime.HandlePlayerPunchAir(h.playerID(p), ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin punch-air handler failed", "player", p.Name(), "error", err)
 		return
 	}
 	if cancelled {

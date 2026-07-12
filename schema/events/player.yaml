@@ -121,3 +121,16 @@ events:
       - { name: position, type: vec3 }
     state:
       - { name: cancelled, type: bool }
+  - name: experience_gain
+    id: 17
+    input:
+      - { name: player, type: player_id }
+    state:
+      - { name: cancelled, type: bool }
+      - { name: amount, type: i32 }
+  - name: punch_air
+    id: 18
+    input:
+      - { name: player, type: player_id }
+    state:
+      - { name: cancelled, type: bool }

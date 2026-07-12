@@ -3,27 +3,30 @@ use dragonfly_plugin_sys::{
     DF_COMMAND_PARAMETER_ENUM, DF_COMMAND_PARAMETER_FLOAT, DF_COMMAND_PARAMETER_INTEGER,
     DF_COMMAND_PARAMETER_PLAYER, DF_COMMAND_PARAMETER_RAW_TEXT, DF_COMMAND_PARAMETER_STRING,
     DF_COMMAND_PARAMETER_SUBCOMMAND, DF_EVENT_PLAYER_BLOCK_BREAK, DF_EVENT_PLAYER_BLOCK_PLACE,
-    DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_DEATH, DF_EVENT_PLAYER_FIRE_EXTINGUISH,
-    DF_EVENT_PLAYER_FOOD_LOSS, DF_EVENT_PLAYER_HEAL, DF_EVENT_PLAYER_HURT, DF_EVENT_PLAYER_JOIN,
-    DF_EVENT_PLAYER_JUMP, DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_QUIT, DF_EVENT_PLAYER_START_BREAK,
+    DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_DEATH, DF_EVENT_PLAYER_EXPERIENCE_GAIN,
+    DF_EVENT_PLAYER_FIRE_EXTINGUISH, DF_EVENT_PLAYER_FOOD_LOSS, DF_EVENT_PLAYER_HEAL,
+    DF_EVENT_PLAYER_HURT, DF_EVENT_PLAYER_JOIN, DF_EVENT_PLAYER_JUMP, DF_EVENT_PLAYER_MOVE,
+    DF_EVENT_PLAYER_PUNCH_AIR, DF_EVENT_PLAYER_QUIT, DF_EVENT_PLAYER_START_BREAK,
     DF_EVENT_PLAYER_TELEPORT, DF_EVENT_PLAYER_TOGGLE_SNEAK, DF_EVENT_PLAYER_TOGGLE_SPRINT,
     DF_STATUS_ERROR, DF_STATUS_OK, DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK,
     DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE, DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_DEATH,
-    DF_SUBSCRIPTION_PLAYER_FIRE_EXTINGUISH, DF_SUBSCRIPTION_PLAYER_FOOD_LOSS,
-    DF_SUBSCRIPTION_PLAYER_HEAL, DF_SUBSCRIPTION_PLAYER_HURT, DF_SUBSCRIPTION_PLAYER_JOIN,
-    DF_SUBSCRIPTION_PLAYER_JUMP, DF_SUBSCRIPTION_PLAYER_MOVE, DF_SUBSCRIPTION_PLAYER_QUIT,
+    DF_SUBSCRIPTION_PLAYER_EXPERIENCE_GAIN, DF_SUBSCRIPTION_PLAYER_FIRE_EXTINGUISH,
+    DF_SUBSCRIPTION_PLAYER_FOOD_LOSS, DF_SUBSCRIPTION_PLAYER_HEAL, DF_SUBSCRIPTION_PLAYER_HURT,
+    DF_SUBSCRIPTION_PLAYER_JOIN, DF_SUBSCRIPTION_PLAYER_JUMP, DF_SUBSCRIPTION_PLAYER_MOVE,
+    DF_SUBSCRIPTION_PLAYER_PUNCH_AIR, DF_SUBSCRIPTION_PLAYER_QUIT,
     DF_SUBSCRIPTION_PLAYER_START_BREAK, DF_SUBSCRIPTION_PLAYER_TELEPORT,
     DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK, DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT, DfCommandDescriptor,
     DfCommandInput, DfCommandState, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
     DfPlayerBlockPlaceInput, DfPlayerBlockPlaceState, DfPlayerChatInput, DfPlayerChatState,
-    DfPlayerDeathInput, DfPlayerDeathState, DfPlayerFireExtinguishInput,
-    DfPlayerFireExtinguishState, DfPlayerFoodLossInput, DfPlayerFoodLossState, DfPlayerHealInput,
-    DfPlayerHealState, DfPlayerHurtInput, DfPlayerHurtState, DfPlayerJoinInput, DfPlayerJoinState,
-    DfPlayerJumpInput, DfPlayerJumpState, DfPlayerMoveInput, DfPlayerMoveState, DfPlayerQuitInput,
-    DfPlayerQuitState, DfPlayerStartBreakInput, DfPlayerStartBreakState, DfPlayerTeleportInput,
-    DfPlayerTeleportState, DfPlayerToggleSneakInput, DfPlayerToggleSneakState,
-    DfPlayerToggleSprintInput, DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn,
-    DfStatus, DfStringView,
+    DfPlayerDeathInput, DfPlayerDeathState, DfPlayerExperienceGainInput,
+    DfPlayerExperienceGainState, DfPlayerFireExtinguishInput, DfPlayerFireExtinguishState,
+    DfPlayerFoodLossInput, DfPlayerFoodLossState, DfPlayerHealInput, DfPlayerHealState,
+    DfPlayerHurtInput, DfPlayerHurtState, DfPlayerJoinInput, DfPlayerJoinState, DfPlayerJumpInput,
+    DfPlayerJumpState, DfPlayerMoveInput, DfPlayerMoveState, DfPlayerPunchAirInput,
+    DfPlayerPunchAirState, DfPlayerQuitInput, DfPlayerQuitState, DfPlayerStartBreakInput,
+    DfPlayerStartBreakState, DfPlayerTeleportInput, DfPlayerTeleportState,
+    DfPlayerToggleSneakInput, DfPlayerToggleSneakState, DfPlayerToggleSprintInput,
+    DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -707,6 +710,73 @@ impl DfRuntime {
                 handle(
                     plugin.instance,
                     DF_EVENT_PLAYER_TELEPORT,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if status != DF_STATUS_OK {
+                return status;
+            }
+        }
+        DF_STATUS_OK
+    }
+
+    fn handle_experience_gain(
+        &self,
+        input: &DfPlayerExperienceGainInput,
+        state: &mut DfPlayerExperienceGainState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_EXPERIENCE_GAIN == 0
+            {
+                continue;
+            }
+            let was_cancelled = state.cancelled != 0;
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_EXPERIENCE_GAIN,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            state.amount = state.amount.max(0);
+            if status != DF_STATUS_OK {
+                return status;
+            }
+        }
+        DF_STATUS_OK
+    }
+
+    fn handle_punch_air(
+        &self,
+        input: &DfPlayerPunchAirInput,
+        state: &mut DfPlayerPunchAirState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_PUNCH_AIR == 0
+            {
+                continue;
+            }
+            let was_cancelled = state.cancelled != 0;
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_PUNCH_AIR,
                     ptr::from_ref(input).cast(),
                     ptr::from_mut(state).cast(),
                 )
@@ -1528,6 +1598,52 @@ pub unsafe extern "C" fn df_runtime_handle_player_teleport(
     };
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         runtime.handle_teleport(input, state)
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+#[unsafe(no_mangle)]
+/// Dispatches a player experience-gain event.
+///
+/// # Safety
+/// All pointers must remain valid for this synchronous call.
+pub unsafe extern "C" fn df_runtime_handle_player_experience_gain(
+    runtime: *mut DfRuntime,
+    input: *const DfPlayerExperienceGainInput,
+    state: *mut DfPlayerExperienceGainState,
+) -> DfStatus {
+    let (Some(runtime), Some(input), Some(state)) = (
+        unsafe { runtime.as_ref() },
+        unsafe { input.as_ref() },
+        unsafe { state.as_mut() },
+    ) else {
+        return DF_STATUS_ERROR;
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.handle_experience_gain(input, state)
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+#[unsafe(no_mangle)]
+/// Dispatches a player punch-air event.
+///
+/// # Safety
+/// All pointers must remain valid for this synchronous call.
+pub unsafe extern "C" fn df_runtime_handle_player_punch_air(
+    runtime: *mut DfRuntime,
+    input: *const DfPlayerPunchAirInput,
+    state: *mut DfPlayerPunchAirState,
+) -> DfStatus {
+    let (Some(runtime), Some(input), Some(state)) = (
+        unsafe { runtime.as_ref() },
+        unsafe { input.as_ref() },
+        unsafe { state.as_mut() },
+    ) else {
+        return DF_STATUS_ERROR;
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.handle_punch_air(input, state)
     }))
     .unwrap_or(DF_STATUS_ERROR)
 }

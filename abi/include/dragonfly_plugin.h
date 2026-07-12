@@ -234,6 +234,27 @@ typedef struct {
     uint8_t cancelled;
 } DfPlayerTeleportState;
 
+#define DF_EVENT_PLAYER_EXPERIENCE_GAIN 17u
+
+typedef struct {
+    DfPlayerId player;
+} DfPlayerExperienceGainInput;
+
+typedef struct {
+    uint8_t cancelled;
+    int32_t amount;
+} DfPlayerExperienceGainState;
+
+#define DF_EVENT_PLAYER_PUNCH_AIR 18u
+
+typedef struct {
+    DfPlayerId player;
+} DfPlayerPunchAirInput;
+
+typedef struct {
+    uint8_t cancelled;
+} DfPlayerPunchAirState;
+
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
@@ -286,6 +307,8 @@ DfStatus df_runtime_handle_player_toggle_sprint(DfRuntime *runtime, const DfPlay
 DfStatus df_runtime_handle_player_toggle_sneak(DfRuntime *runtime, const DfPlayerToggleSneakInput *input, DfPlayerToggleSneakState *state);
 DfStatus df_runtime_handle_player_jump(DfRuntime *runtime, const DfPlayerJumpInput *input, DfPlayerJumpState *state);
 DfStatus df_runtime_handle_player_teleport(DfRuntime *runtime, const DfPlayerTeleportInput *input, DfPlayerTeleportState *state);
+DfStatus df_runtime_handle_player_experience_gain(DfRuntime *runtime, const DfPlayerExperienceGainInput *input, DfPlayerExperienceGainState *state);
+DfStatus df_runtime_handle_player_punch_air(DfRuntime *runtime, const DfPlayerPunchAirInput *input, DfPlayerPunchAirState *state);
 
 #ifdef __cplusplus
 }

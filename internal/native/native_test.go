@@ -288,6 +288,27 @@ func TestPlayerJumpAndTeleport(t *testing.T) {
 	}
 }
 
+func TestPlayerExperienceGainAndPunchAir(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerExperienceGainSubscription == 0 || runtime.Subscriptions()&PlayerPunchAirSubscription == 0 {
+		t.Fatal("experience-gain or punch-air subscription missing")
+	}
+	output, err := runtime.HandlePlayerExperienceGain(PlayerID{}, 5, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Cancelled || output.Amount != 5 {
+		t.Fatalf("experience gain = %+v", output)
+	}
+	cancelled, err := runtime.HandlePlayerPunchAir(PlayerID{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled {
+		t.Fatal("punch air cancelled")
+	}
+}
+
 func TestCancellationIsMonotonic(t *testing.T) {
 	runtime := openTestRuntime(t)
 	cancelled, err := runtime.HandlePlayerMove(PlayerMoveInput{NewPosition: Vec3{Y: 64}}, true)

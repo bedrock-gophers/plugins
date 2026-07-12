@@ -35,6 +35,8 @@ const (
 	PlayerToggleSneakSubscription    uint64 = 8192
 	PlayerJumpSubscription           uint64 = 16384
 	PlayerTeleportSubscription       uint64 = 32768
+	PlayerExperienceGainSubscription uint64 = 65536
+	PlayerPunchAirSubscription       uint64 = 131072
 	MaxChatReplacementBytes                 = 4096
 	MaxCommandOutputBytes                   = 4096
 	MaxCommandEnumBytes                     = 4096
@@ -154,6 +156,10 @@ type PlayerToggleInput struct {
 type PlayerTeleportInput struct {
 	Player   PlayerID
 	Position Vec3
+}
+type PlayerExperienceGainOutput struct {
+	Cancelled bool
+	Amount    int
 }
 
 type Command struct {
@@ -772,6 +778,39 @@ func (r *Runtime) HandlePlayerTeleport(input PlayerTeleportInput, cancelled bool
 	}
 	if status := C.bg_runtime_handle_player_teleport(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native teleport handler failed with status %d", int32(status))
+	}
+	return state.cancelled != 0, nil
+}
+
+func (r *Runtime) HandlePlayerExperienceGain(player PlayerID, amount int, cancelled bool) (PlayerExperienceGainOutput, error) {
+	output := PlayerExperienceGainOutput{Cancelled: cancelled, Amount: amount}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	var input C.DfPlayerExperienceGainInput
+	fillPlayerID(&input.player, player)
+	state := C.DfPlayerExperienceGainState{amount: C.int32_t(amount)}
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_player_experience_gain(r.ptr, &input, &state); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("native experience-gain handler failed with status %d", int32(status))
+	}
+	return PlayerExperienceGainOutput{Cancelled: state.cancelled != 0, Amount: int(state.amount)}, nil
+}
+
+func (r *Runtime) HandlePlayerPunchAir(player PlayerID, cancelled bool) (bool, error) {
+	if r == nil || r.ptr == nil {
+		return cancelled, errors.New("native runtime is closed")
+	}
+	var input C.DfPlayerPunchAirInput
+	fillPlayerID(&input.player, player)
+	var state C.DfPlayerPunchAirState
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_player_punch_air(r.ptr, &input, &state); status != C.DF_STATUS_OK {
+		return state.cancelled != 0, fmt.Errorf("native punch-air handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
 }

@@ -304,6 +304,33 @@ pub struct DfPlayerTeleportState {
     pub cancelled: u8,
 }
 
+pub const DF_EVENT_PLAYER_EXPERIENCE_GAIN: DfEventId = 17;
+pub const DF_SUBSCRIPTION_PLAYER_EXPERIENCE_GAIN: u64 = 1u64 << 16;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerExperienceGainInput {
+    pub player: DfPlayerId,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerExperienceGainState {
+    pub cancelled: u8,
+    pub amount: i32,
+}
+
+pub const DF_EVENT_PLAYER_PUNCH_AIR: DfEventId = 18;
+pub const DF_SUBSCRIPTION_PLAYER_PUNCH_AIR: u64 = 1u64 << 17;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerPunchAirInput {
+    pub player: DfPlayerId,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerPunchAirState {
+    pub cancelled: u8,
+}
+
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
