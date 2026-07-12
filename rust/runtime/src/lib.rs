@@ -27,7 +27,7 @@ use dragonfly_plugin_sys::{
     DF_SUBSCRIPTION_PLAYER_SIGN_EDIT, DF_SUBSCRIPTION_PLAYER_SLEEP,
     DF_SUBSCRIPTION_PLAYER_START_BREAK, DF_SUBSCRIPTION_PLAYER_TELEPORT,
     DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK, DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT, DfCommandDescriptor,
-    DfCommandInput, DfCommandState, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
+    DfCommandInput, DfCommandState, DfHostApiV1, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
     DfPlayerBlockPickInput, DfPlayerBlockPickState, DfPlayerBlockPlaceInput,
     DfPlayerBlockPlaceState, DfPlayerChatInput, DfPlayerChatState, DfPlayerDeathInput,
     DfPlayerDeathState, DfPlayerExperienceGainInput, DfPlayerExperienceGainState,
@@ -57,6 +57,7 @@ use std::slice;
 #[repr(C)]
 pub struct DfRuntimeConfig {
     pub plugin_directory: DfStringView,
+    pub host: *const DfHostApiV1,
 }
 
 pub struct DfRuntime {
@@ -93,7 +94,7 @@ impl Drop for LoadedPlugin {
 }
 
 impl DfRuntime {
-    fn load(plugin_directory: &Path) -> Result<Self, String> {
+    fn load(plugin_directory: &Path, host: *const DfHostApiV1) -> Result<Self, String> {
         let mut paths = native_libraries(plugin_directory)?;
         paths.sort();
 
@@ -101,7 +102,7 @@ impl DfRuntime {
         let mut subscriptions = 0;
         for path in paths {
             // SAFETY: symbols and returned API are validated before use. Library stays owned by LoadedPlugin.
-            let plugin = unsafe { LoadedPlugin::open(&path)? };
+            let plugin = unsafe { LoadedPlugin::open(&path, host)? };
             if plugins
                 .iter()
                 .any(|loaded: &LoadedPlugin| loaded.id == plugin.id)
@@ -1228,7 +1229,7 @@ impl LoadedPlugin {
         self.enabled = false;
     }
 
-    unsafe fn open(path: &Path) -> Result<Self, String> {
+    unsafe fn open(path: &Path, host: *const DfHostApiV1) -> Result<Self, String> {
         // SAFETY: loading native plugins is the purpose of this trusted plugin runtime.
         let library = unsafe { Library::new(path) }
             .map_err(|err| format!("load {}: {err}", path.display()))?;
@@ -1268,13 +1269,23 @@ impl LoadedPlugin {
         if api.create.is_some() && instance.is_null() {
             return Err(format!("plugin {id:?} failed to create its instance"));
         }
-        Ok(Self {
+        let plugin = Self {
             api,
             instance,
             id,
             enabled: false,
             _library: library,
-        })
+        };
+        let Some(set_host) = api.set_host else {
+            return Err(format!(
+                "plugin {:?} does not accept the host API",
+                plugin.id
+            ));
+        };
+        if unsafe { set_host(plugin.instance, host) } != DF_STATUS_OK {
+            return Err(format!("plugin {:?} rejected the host API", plugin.id));
+        }
+        Ok(plugin)
     }
 }
 
@@ -1403,7 +1414,16 @@ pub unsafe extern "C" fn df_runtime_create(
     let result = std::panic::catch_unwind(|| {
         // SAFETY: config is readable for this call.
         let directory = unsafe { string_view((*config).plugin_directory) }?;
-        DfRuntime::load(Path::new(directory))
+        let host = unsafe { (*config).host };
+        let Some(host_api) = (unsafe { host.as_ref() }) else {
+            return Err("null host API".to_owned());
+        };
+        if host_api.abi_version != DF_ABI_VERSION
+            || host_api.struct_size < size_of::<DfHostApiV1>() as u32
+        {
+            return Err("incompatible host API".to_owned());
+        }
+        DfRuntime::load(Path::new(directory), host)
     });
     match result {
         Ok(Ok(runtime)) => {
@@ -2300,7 +2320,13 @@ mod tests {
             std::env::temp_dir().join(format!("dragonfly-runtime-{}", std::process::id()));
         let _ = fs::remove_dir_all(&directory);
         fs::create_dir_all(&directory).unwrap();
-        let runtime = DfRuntime::load(&directory).unwrap();
+        let host = DfHostApiV1 {
+            abi_version: DF_ABI_VERSION,
+            struct_size: size_of::<DfHostApiV1>() as u32,
+            context: 0,
+            player_message: None,
+        };
+        let runtime = DfRuntime::load(&directory, ptr::from_ref(&host)).unwrap();
         assert!(runtime.plugins.is_empty());
         fs::remove_dir_all(directory).unwrap();
     }

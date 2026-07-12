@@ -282,10 +282,15 @@ type CommandOutput struct {
 // Runtime owns a loaded Rust runtime and its plugin libraries.
 // Close must not run concurrently with any other method.
 type Runtime struct {
-	ptr *C.BgRuntimeLibrary
+	ptr         *C.BgRuntimeLibrary
+	hostContext uint64
 }
 
 func Open(runtimeLibrary, pluginDirectory string) (*Runtime, error) {
+	return OpenWithHost(runtimeLibrary, pluginDirectory, nil)
+}
+
+func OpenWithHost(runtimeLibrary, pluginDirectory string, host Host) (*Runtime, error) {
 	if runtimeLibrary == "" || pluginDirectory == "" {
 		return nil, errors.New("runtime library and plugin directory are required")
 	}
@@ -294,23 +299,26 @@ func Open(runtimeLibrary, pluginDirectory string) (*Runtime, error) {
 	pluginPath := C.CString(pluginDirectory)
 	defer C.free(unsafe.Pointer(pluginPath))
 
+	hostContext := registerHost(host)
 	var ptr *C.BgRuntimeLibrary
 	var errorBuffer [1024]C.uint8_t
 	status := C.bg_runtime_open(
 		libraryPath,
 		pluginPath,
+		C.uint64_t(hostContext),
 		&ptr,
 		&errorBuffer[0],
 		C.uint64_t(len(errorBuffer)),
 	)
 	if status != C.DF_STATUS_OK {
+		unregisterHost(hostContext)
 		message := C.GoString((*C.char)(unsafe.Pointer(&errorBuffer[0])))
 		if message == "" {
 			message = "unknown native runtime error"
 		}
 		return nil, fmt.Errorf("open native runtime: %s", message)
 	}
-	r := &Runtime{ptr: ptr}
+	r := &Runtime{ptr: ptr, hostContext: hostContext}
 	runtime.SetFinalizer(r, func(runtime *Runtime) { runtime.Close() })
 	return r, nil
 }
@@ -320,7 +328,9 @@ func (r *Runtime) Close() {
 		return
 	}
 	C.bg_runtime_close(r.ptr)
+	unregisterHost(r.hostContext)
 	r.ptr = nil
+	r.hostContext = 0
 	runtime.SetFinalizer(r, nil)
 }
 

@@ -941,6 +941,17 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
+            unsafe extern "C" fn set_host(
+                instance: *mut ::dragonfly_plugin::__private::c_void,
+                host: *const ::dragonfly_plugin::__private::sys::DfHostApiV1,
+            ) -> ::dragonfly_plugin::__private::sys::DfStatus {
+                if instance.is_null() || host.is_null() {
+                    return ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR;
+                }
+                unsafe { ::dragonfly_plugin::install_host(host) };
+                ::dragonfly_plugin::__private::sys::DF_STATUS_OK
+            }
+
             unsafe extern "C" fn destroy(instance: *mut ::dragonfly_plugin::__private::c_void) {
                 if !instance.is_null() {
                     let _ = ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
@@ -1305,6 +1316,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     commands: Some(commands),
                     handle_command: Some(handle_command),
                     command_enum_options: Some(command_enum_options),
+                    set_host: Some(set_host),
                     destroy: Some(destroy),
                     handle_event: Some(handle_event),
                 };

@@ -39,7 +39,8 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if log == nil {
 		log = slog.Default()
 	}
-	pluginRuntime, err := native.Open(config.Plugins.RuntimeLibrary, config.Plugins.Directory)
+	players := host.NewPlayers()
+	pluginRuntime, err := native.OpenWithHost(config.Plugins.RuntimeLibrary, config.Plugins.Directory, players)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,6 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if err := pluginRuntime.Enable(); err != nil {
 		return err
 	}
-	players := host.NewPlayers()
 	if err := host.RegisterCommands(pluginRuntime, players); err != nil {
 		pluginRuntime.Disable()
 		return err

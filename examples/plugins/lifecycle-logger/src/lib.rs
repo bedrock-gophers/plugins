@@ -23,6 +23,7 @@ impl Plugin for LifecycleLogger {
 
     fn on_join(&self, event: &mut PlayerJoinEvent<'_>) {
         eprintln!("{} joined", event.name());
+        event.player().message("Welcome from a Rust plugin.");
     }
 
     fn on_quit(&self, event: &PlayerQuitEvent<'_>) {

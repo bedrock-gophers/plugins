@@ -43,6 +43,36 @@ func openTestRuntime(t testing.TB) *Runtime {
 	return runtime
 }
 
+type recordingHost struct {
+	player  PlayerID
+	message string
+}
+
+func (h *recordingHost) MessagePlayer(player PlayerID, message string) bool {
+	h.player, h.message = player, message
+	return true
+}
+
+func TestPluginCanMessagePlayer(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	id := PlayerID{Generation: 42}
+	if _, err := runtime.HandlePlayerJoin(PlayerJoinInput{Player: id, Name: "TestPlayer"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if host.player != id || host.message != "Welcome from a Rust plugin." {
+		t.Fatalf("host call = player %+v message %q", host.player, host.message)
+	}
+}
+
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
 	if runtime.PluginCount() != 5 {

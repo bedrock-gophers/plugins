@@ -8,6 +8,7 @@ typedef struct BgRuntimeLibrary BgRuntimeLibrary;
 DfStatus bg_runtime_open(
     const char *library_path,
     const char *plugin_directory,
+    uint64_t host_context,
     BgRuntimeLibrary **out,
     uint8_t *error,
     uint64_t error_capacity

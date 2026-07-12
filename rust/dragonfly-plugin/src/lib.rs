@@ -2,12 +2,24 @@
 
 extern crate self as dragonfly_plugin;
 
+use core::sync::atomic::{AtomicPtr, Ordering};
+
 pub use dragonfly_plugin_macros::{Command, CommandEnum, plugin};
 
 #[doc(hidden)]
 pub mod __private {
     pub use core::ffi::c_void;
     pub use dragonfly_plugin_sys as sys;
+}
+
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV1> =
+    AtomicPtr::new(core::ptr::null_mut());
+
+#[doc(hidden)]
+/// # Safety
+/// `host` must remain valid while plugin callbacks may execute.
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV1) {
+    HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -121,6 +133,25 @@ impl Player {
             // Names are copied from runtime-validated UTF-8 or parsed Rust strings.
             unsafe { core::str::from_utf8_unchecked(&name.bytes[..name.len as usize]) }
         })
+    }
+
+    pub fn message(&self, message: &str) {
+        let host = HOST_API.load(Ordering::Acquire);
+        let Some(host) = (unsafe { host.as_ref() }) else {
+            return;
+        };
+        let Some(send) = host.player_message else {
+            return;
+        };
+        let view = dragonfly_plugin_sys::DfStringView {
+            data: message.as_ptr(),
+            len: message.len() as u64,
+        };
+        let id = dragonfly_plugin_sys::DfPlayerId {
+            bytes: self.id.uuid,
+            generation: self.id.generation,
+        };
+        let _ = unsafe { send(host.context, id, view) };
     }
 
     fn from_id(id: dragonfly_plugin_sys::DfPlayerId) -> Self {

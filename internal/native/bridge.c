@@ -5,6 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern DfStatus bg_go_player_message(uint64_t context, DfPlayerId player, DfStringView message);
+
+static DfStatus host_player_message(uint64_t context, DfPlayerId player, DfStringView message) {
+    return bg_go_player_message(context, player, message);
+}
+
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
 typedef void (*RuntimeDestroyFn)(DfRuntime *);
 typedef DfStatus (*RuntimeEnableFn)(DfRuntime *);
@@ -18,6 +24,7 @@ typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *)
 struct BgRuntimeLibrary {
     void *handle;
     DfRuntime *runtime;
+    DfHostApiV1 host_api;
     RuntimeDestroyFn destroy;
     RuntimeEnableFn enable;
     RuntimeDisableFn disable;
@@ -51,6 +58,7 @@ static void *load_symbol(void *handle, const char *name, uint8_t *error, uint64_
 DfStatus bg_runtime_open(
     const char *library_path,
     const char *plugin_directory,
+    uint64_t host_context,
     BgRuntimeLibrary **out,
     uint8_t *error,
     uint64_t error_capacity
@@ -89,11 +97,18 @@ DfStatus bg_runtime_open(
         return DF_STATUS_ERROR;
     }
 
+    library->host_api = (DfHostApiV1) {
+        .abi_version = DF_ABI_VERSION,
+        .struct_size = sizeof(DfHostApiV1),
+        .context = host_context,
+        .player_message = host_player_message,
+    };
     DfRuntimeConfig config = {
         .plugin_directory = {
             .data = (const uint8_t *) plugin_directory,
             .len = (uint64_t) strlen(plugin_directory),
         },
+        .host = &library->host_api,
     };
     if (create(&config, &library->runtime, error, error_capacity) != DF_STATUS_OK) {
         free(library);

@@ -102,3 +102,12 @@ func (p *Players) ResolveID(id native.PlayerID) (*player.Player, bool) {
 	}
 	return nil, false
 }
+
+func (p *Players) MessagePlayer(id native.PlayerID, message string) bool {
+	connected, ok := p.ResolveID(id)
+	if !ok {
+		return false
+	}
+	connected.Message(message)
+	return true
+}
