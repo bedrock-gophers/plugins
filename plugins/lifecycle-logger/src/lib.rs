@@ -1,9 +1,10 @@
 use dragonfly::{
-    PlayerBlockBreakEvent, PlayerBlockPlaceEvent, PlayerDeathEvent, PlayerExperienceGainEvent,
-    PlayerFireExtinguishEvent, PlayerFoodLossEvent, PlayerHealEvent, PlayerHeldSlotChangeEvent,
-    PlayerHurtEvent, PlayerJoinEvent, PlayerJumpEvent, PlayerPunchAirEvent, PlayerQuitEvent,
-    PlayerSleepEvent, PlayerStartBreakEvent, PlayerTeleportEvent, PlayerToggleSneakEvent,
-    PlayerToggleSprintEvent, Plugin, plugin,
+    PlayerBlockBreakEvent, PlayerBlockPickEvent, PlayerBlockPlaceEvent, PlayerDeathEvent,
+    PlayerExperienceGainEvent, PlayerFireExtinguishEvent, PlayerFoodLossEvent, PlayerHealEvent,
+    PlayerHeldSlotChangeEvent, PlayerHurtEvent, PlayerJoinEvent, PlayerJumpEvent,
+    PlayerLecternPageTurnEvent, PlayerPunchAirEvent, PlayerQuitEvent, PlayerSleepEvent,
+    PlayerStartBreakEvent, PlayerTeleportEvent, PlayerToggleSneakEvent, PlayerToggleSprintEvent,
+    Plugin, plugin,
 };
 
 #[derive(Default)]
@@ -91,5 +92,13 @@ impl Plugin for LifecycleLogger {
 
     fn on_sleep(&self, event: &mut PlayerSleepEvent<'_>) {
         eprintln!("sleeping, reminder={}", event.send_reminder());
+    }
+
+    fn on_block_pick(&self, event: &mut PlayerBlockPickEvent<'_>) {
+        eprintln!("picked {} at {:?}", event.block(), event.position());
+    }
+
+    fn on_lectern_page_turn(&self, event: &mut PlayerLecternPageTurnEvent<'_>) {
+        eprintln!("lectern page {} -> {}", event.old_page(), event.new_page());
     }
 }
