@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=88579fd1a83a0bd3d4d715296e6b6b42b20095f8#88579fd1a83a0bd3d4d715296e6b6b42b20095f8"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=9996b02cc1424306b934b460ace794e58457def0#9996b02cc1424306b934b460ace794e58457def0"
 dependencies = [
  "dragonfly-plugin-macros",
  "dragonfly-plugin-sys",
@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-macros"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=88579fd1a83a0bd3d4d715296e6b6b42b20095f8#88579fd1a83a0bd3d4d715296e6b6b42b20095f8"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=9996b02cc1424306b934b460ace794e58457def0#9996b02cc1424306b934b460ace794e58457def0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=88579fd1a83a0bd3d4d715296e6b6b42b20095f8#88579fd1a83a0bd3d4d715296e6b6b42b20095f8"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=9996b02cc1424306b934b460ace794e58457def0#9996b02cc1424306b934b460ace794e58457def0"
 
 [[package]]
 name = "lifecycle-logger"
