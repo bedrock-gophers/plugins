@@ -1,10 +1,10 @@
 use dragonfly::{
     PlayerBlockBreakEvent, PlayerBlockPickEvent, PlayerBlockPlaceEvent, PlayerDeathEvent,
     PlayerExperienceGainEvent, PlayerFireExtinguishEvent, PlayerFoodLossEvent, PlayerHealEvent,
-    PlayerHeldSlotChangeEvent, PlayerHurtEvent, PlayerItemUseEvent, PlayerJoinEvent,
-    PlayerJumpEvent, PlayerLecternPageTurnEvent, PlayerPunchAirEvent, PlayerQuitEvent,
-    PlayerSignEditEvent, PlayerSleepEvent, PlayerStartBreakEvent, PlayerTeleportEvent,
-    PlayerToggleSneakEvent, PlayerToggleSprintEvent, Plugin, plugin,
+    PlayerHeldSlotChangeEvent, PlayerHurtEvent, PlayerItemUseEvent, PlayerItemUseOnBlockEvent,
+    PlayerJoinEvent, PlayerJumpEvent, PlayerLecternPageTurnEvent, PlayerPunchAirEvent,
+    PlayerQuitEvent, PlayerSignEditEvent, PlayerSleepEvent, PlayerStartBreakEvent,
+    PlayerTeleportEvent, PlayerToggleSneakEvent, PlayerToggleSprintEvent, Plugin, plugin,
 };
 
 #[derive(Default)]
@@ -112,5 +112,13 @@ impl Plugin for LifecycleLogger {
 
     fn on_item_use(&self, _event: &mut PlayerItemUseEvent<'_>) {
         eprintln!("used an item");
+    }
+
+    fn on_item_use_on_block(&self, event: &mut PlayerItemUseOnBlockEvent<'_>) {
+        eprintln!(
+            "used item on {:?} face {:?}",
+            event.position(),
+            event.face()
+        );
     }
 }
