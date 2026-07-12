@@ -842,6 +842,12 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_sleep = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_sleep"),
     );
+    let handles_block_pick = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_block_pick"),
+    );
+    let handles_lectern_page_turn = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_lectern_page_turn"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -861,7 +867,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_experience_gain) << 16)
         | (u64::from(handles_punch_air) << 17)
         | (u64::from(handles_held_slot_change) << 18)
-        | (u64::from(handles_sleep) << 19);
+        | (u64::from(handles_sleep) << 19)
+        | (u64::from(handles_block_pick) << 20)
+        | (u64::from(handles_lectern_page_turn) << 21);
 
     quote! {
         #[doc(hidden)]
@@ -1173,6 +1181,22 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerSleepState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerSleepEvent::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_sleep(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_BLOCK_PICK => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerBlockPickInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerBlockPickState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerBlockPickEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_block_pick(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_LECTERN_PAGE_TURN => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerLecternPageTurnInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerLecternPageTurnState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerLecternPageTurnEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_lectern_page_turn(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

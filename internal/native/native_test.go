@@ -330,6 +330,27 @@ func TestPlayerHeldSlotChangeAndSleep(t *testing.T) {
 	}
 }
 
+func TestPlayerBlockPickAndLecternPageTurn(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerBlockPickSubscription == 0 || runtime.Subscriptions()&PlayerLecternPageTurnSubscription == 0 {
+		t.Fatal("block-pick or lectern-page subscription missing")
+	}
+	cancelled, err := runtime.HandlePlayerBlockPick(PlayerBlockPickInput{Block: "minecraft:stone"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled {
+		t.Fatal("block pick cancelled")
+	}
+	output, err := runtime.HandlePlayerLecternPageTurn(PlayerLecternPageTurnInput{OldPage: 1, NewPage: 2}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Cancelled || output.NewPage != 2 {
+		t.Fatalf("lectern page = %+v", output)
+	}
+}
+
 func TestCancellationIsMonotonic(t *testing.T) {
 	runtime := openTestRuntime(t)
 	cancelled, err := runtime.HandlePlayerMove(PlayerMoveInput{NewPosition: Vec3{Y: 64}}, true)

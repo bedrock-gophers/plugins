@@ -149,3 +149,20 @@ events:
     state:
       - { name: cancelled, type: bool }
       - { name: send_reminder, type: bool }
+  - name: block_pick
+    id: 21
+    input:
+      - { name: player, type: player_id }
+      - { name: position, type: block_pos }
+      - { name: block, type: string_view }
+    state:
+      - { name: cancelled, type: bool }
+  - name: lectern_page_turn
+    id: 22
+    input:
+      - { name: player, type: player_id }
+      - { name: position, type: block_pos }
+      - { name: old_page, type: i32 }
+    state:
+      - { name: cancelled, type: bool }
+      - { name: new_page, type: i32 }

@@ -278,6 +278,31 @@ typedef struct {
     uint8_t send_reminder;
 } DfPlayerSleepState;
 
+#define DF_EVENT_PLAYER_BLOCK_PICK 21u
+
+typedef struct {
+    DfPlayerId player;
+    DfBlockPos position;
+    DfStringView block;
+} DfPlayerBlockPickInput;
+
+typedef struct {
+    uint8_t cancelled;
+} DfPlayerBlockPickState;
+
+#define DF_EVENT_PLAYER_LECTERN_PAGE_TURN 22u
+
+typedef struct {
+    DfPlayerId player;
+    DfBlockPos position;
+    int32_t old_page;
+} DfPlayerLecternPageTurnInput;
+
+typedef struct {
+    uint8_t cancelled;
+    int32_t new_page;
+} DfPlayerLecternPageTurnState;
+
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);

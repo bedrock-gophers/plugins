@@ -19,29 +19,31 @@ import (
 )
 
 const (
-	PlayerMoveSubscription           uint64 = 1
-	PlayerChatSubscription           uint64 = 2
-	PlayerJoinSubscription           uint64 = 4
-	PlayerQuitSubscription           uint64 = 8
-	PlayerHurtSubscription           uint64 = 16
-	PlayerHealSubscription           uint64 = 32
-	PlayerBlockBreakSubscription     uint64 = 64
-	PlayerBlockPlaceSubscription     uint64 = 128
-	PlayerFoodLossSubscription       uint64 = 256
-	PlayerDeathSubscription          uint64 = 512
-	PlayerStartBreakSubscription     uint64 = 1024
-	PlayerFireExtinguishSubscription uint64 = 2048
-	PlayerToggleSprintSubscription   uint64 = 4096
-	PlayerToggleSneakSubscription    uint64 = 8192
-	PlayerJumpSubscription           uint64 = 16384
-	PlayerTeleportSubscription       uint64 = 32768
-	PlayerExperienceGainSubscription uint64 = 65536
-	PlayerPunchAirSubscription       uint64 = 131072
-	PlayerHeldSlotChangeSubscription uint64 = 262144
-	PlayerSleepSubscription          uint64 = 524288
-	MaxChatReplacementBytes                 = 4096
-	MaxCommandOutputBytes                   = 4096
-	MaxCommandEnumBytes                     = 4096
+	PlayerMoveSubscription            uint64 = 1
+	PlayerChatSubscription            uint64 = 2
+	PlayerJoinSubscription            uint64 = 4
+	PlayerQuitSubscription            uint64 = 8
+	PlayerHurtSubscription            uint64 = 16
+	PlayerHealSubscription            uint64 = 32
+	PlayerBlockBreakSubscription      uint64 = 64
+	PlayerBlockPlaceSubscription      uint64 = 128
+	PlayerFoodLossSubscription        uint64 = 256
+	PlayerDeathSubscription           uint64 = 512
+	PlayerStartBreakSubscription      uint64 = 1024
+	PlayerFireExtinguishSubscription  uint64 = 2048
+	PlayerToggleSprintSubscription    uint64 = 4096
+	PlayerToggleSneakSubscription     uint64 = 8192
+	PlayerJumpSubscription            uint64 = 16384
+	PlayerTeleportSubscription        uint64 = 32768
+	PlayerExperienceGainSubscription  uint64 = 65536
+	PlayerPunchAirSubscription        uint64 = 131072
+	PlayerHeldSlotChangeSubscription  uint64 = 262144
+	PlayerSleepSubscription           uint64 = 524288
+	PlayerBlockPickSubscription       uint64 = 1048576
+	PlayerLecternPageTurnSubscription uint64 = 2097152
+	MaxChatReplacementBytes                  = 4096
+	MaxCommandOutputBytes                    = 4096
+	MaxCommandEnumBytes                      = 4096
 )
 
 type PlayerID struct {
@@ -171,6 +173,21 @@ type PlayerHeldSlotChangeInput struct {
 type PlayerSleepOutput struct {
 	Cancelled    bool
 	SendReminder bool
+}
+type PlayerBlockPickInput struct {
+	Player   PlayerID
+	Position BlockPos
+	Block    string
+}
+type PlayerLecternPageTurnInput struct {
+	Player   PlayerID
+	Position BlockPos
+	OldPage  int
+	NewPage  int
+}
+type PlayerLecternPageTurnOutput struct {
+	Cancelled bool
+	NewPage   int
 }
 
 type Command struct {
@@ -859,6 +876,42 @@ func (r *Runtime) HandlePlayerSleep(player PlayerID, sendReminder, cancelled boo
 		return output, fmt.Errorf("native sleep handler failed with status %d", int32(status))
 	}
 	return PlayerSleepOutput{Cancelled: state.cancelled != 0, SendReminder: state.send_reminder != 0}, nil
+}
+
+func (r *Runtime) HandlePlayerBlockPick(input PlayerBlockPickInput, cancelled bool) (bool, error) {
+	if r == nil || r.ptr == nil {
+		return cancelled, errors.New("native runtime is closed")
+	}
+	block := unsafe.StringData(input.Block)
+	nativeInput := C.DfPlayerBlockPickInput{position: nativeBlockPos(input.Position), block: C.DfStringView{data: (*C.uint8_t)(unsafe.Pointer(block)), len: C.uint64_t(len(input.Block))}}
+	fillPlayerID(&nativeInput.player, input.Player)
+	var state C.DfPlayerBlockPickState
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_BLOCK_PICK, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+		return state.cancelled != 0, fmt.Errorf("native block-pick handler failed with status %d", int32(status))
+	}
+	return state.cancelled != 0, nil
+}
+
+func (r *Runtime) HandlePlayerLecternPageTurn(input PlayerLecternPageTurnInput, cancelled bool) (PlayerLecternPageTurnOutput, error) {
+	output := PlayerLecternPageTurnOutput{Cancelled: cancelled, NewPage: input.NewPage}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	var nativeInput C.DfPlayerLecternPageTurnInput
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.position = nativeBlockPos(input.Position)
+	nativeInput.old_page = C.int32_t(input.OldPage)
+	state := C.DfPlayerLecternPageTurnState{new_page: C.int32_t(input.NewPage)}
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_LECTERN_PAGE_TURN, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("native lectern-page-turn handler failed with status %d", int32(status))
+	}
+	return PlayerLecternPageTurnOutput{Cancelled: state.cancelled != 0, NewPage: int(state.new_page)}, nil
 }
 
 func nativeBlockPos(position BlockPos) C.DfBlockPos {

@@ -36,6 +36,8 @@ type playerRuntime interface {
 	HandlePlayerPunchAir(native.PlayerID, bool) (bool, error)
 	HandlePlayerHeldSlotChange(native.PlayerHeldSlotChangeInput, bool) (bool, error)
 	HandlePlayerSleep(native.PlayerID, bool, bool) (native.PlayerSleepOutput, error)
+	HandlePlayerBlockPick(native.PlayerBlockPickInput, bool) (bool, error)
+	HandlePlayerLecternPageTurn(native.PlayerLecternPageTurnInput, bool) (native.PlayerLecternPageTurnOutput, error)
 }
 
 func (h *PlayerHandler) HandleJump(p *player.Player) {
@@ -263,6 +265,37 @@ func (h *PlayerHandler) HandleBlockPlace(ctx *player.Context, position cube.Pos,
 		return
 	}
 	if cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandleBlockPick(ctx *player.Context, position cube.Pos, block world.Block) {
+	if h.runtime.Subscriptions()&native.PlayerBlockPickSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	cancelled, err := h.runtime.HandlePlayerBlockPick(native.PlayerBlockPickInput{Player: h.playerID(p), Position: nativeBlockPos(position), Block: blockName(block)}, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin block-pick handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandleLecternPageTurn(ctx *player.Context, position cube.Pos, oldPage int, newPage *int) {
+	if h.runtime.Subscriptions()&native.PlayerLecternPageTurnSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	output, err := h.runtime.HandlePlayerLecternPageTurn(native.PlayerLecternPageTurnInput{Player: h.playerID(p), Position: nativeBlockPos(position), OldPage: oldPage, NewPage: *newPage}, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin lectern-page handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	*newPage = output.NewPage
+	if output.Cancelled {
 		ctx.Cancel()
 	}
 }

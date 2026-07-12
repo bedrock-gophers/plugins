@@ -360,6 +360,37 @@ pub struct DfPlayerSleepState {
     pub send_reminder: u8,
 }
 
+pub const DF_EVENT_PLAYER_BLOCK_PICK: DfEventId = 21;
+pub const DF_SUBSCRIPTION_PLAYER_BLOCK_PICK: u64 = 1u64 << 20;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerBlockPickInput {
+    pub player: DfPlayerId,
+    pub position: DfBlockPos,
+    pub block: DfStringView,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerBlockPickState {
+    pub cancelled: u8,
+}
+
+pub const DF_EVENT_PLAYER_LECTERN_PAGE_TURN: DfEventId = 22;
+pub const DF_SUBSCRIPTION_PLAYER_LECTERN_PAGE_TURN: u64 = 1u64 << 21;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerLecternPageTurnInput {
+    pub player: DfPlayerId,
+    pub position: DfBlockPos,
+    pub old_page: i32,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerLecternPageTurnState {
+    pub cancelled: u8,
+    pub new_page: i32,
+}
+
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;

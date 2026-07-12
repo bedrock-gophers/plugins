@@ -2,34 +2,38 @@ use dragonfly_plugin_sys::{
     DF_ABI_VERSION, DF_COMMAND_PARAMETER_BOOL, DF_COMMAND_PARAMETER_DYNAMIC_ENUM,
     DF_COMMAND_PARAMETER_ENUM, DF_COMMAND_PARAMETER_FLOAT, DF_COMMAND_PARAMETER_INTEGER,
     DF_COMMAND_PARAMETER_PLAYER, DF_COMMAND_PARAMETER_RAW_TEXT, DF_COMMAND_PARAMETER_STRING,
-    DF_COMMAND_PARAMETER_SUBCOMMAND, DF_EVENT_PLAYER_BLOCK_BREAK, DF_EVENT_PLAYER_BLOCK_PLACE,
-    DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_DEATH, DF_EVENT_PLAYER_EXPERIENCE_GAIN,
-    DF_EVENT_PLAYER_FIRE_EXTINGUISH, DF_EVENT_PLAYER_FOOD_LOSS, DF_EVENT_PLAYER_HEAL,
-    DF_EVENT_PLAYER_HELD_SLOT_CHANGE, DF_EVENT_PLAYER_HURT, DF_EVENT_PLAYER_JOIN,
-    DF_EVENT_PLAYER_JUMP, DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_PUNCH_AIR, DF_EVENT_PLAYER_QUIT,
-    DF_EVENT_PLAYER_SLEEP, DF_EVENT_PLAYER_START_BREAK, DF_EVENT_PLAYER_TELEPORT,
-    DF_EVENT_PLAYER_TOGGLE_SNEAK, DF_EVENT_PLAYER_TOGGLE_SPRINT, DF_STATUS_ERROR, DF_STATUS_OK,
-    DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK, DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE,
-    DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_DEATH,
+    DF_COMMAND_PARAMETER_SUBCOMMAND, DF_EVENT_PLAYER_BLOCK_BREAK, DF_EVENT_PLAYER_BLOCK_PICK,
+    DF_EVENT_PLAYER_BLOCK_PLACE, DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_DEATH,
+    DF_EVENT_PLAYER_EXPERIENCE_GAIN, DF_EVENT_PLAYER_FIRE_EXTINGUISH, DF_EVENT_PLAYER_FOOD_LOSS,
+    DF_EVENT_PLAYER_HEAL, DF_EVENT_PLAYER_HELD_SLOT_CHANGE, DF_EVENT_PLAYER_HURT,
+    DF_EVENT_PLAYER_JOIN, DF_EVENT_PLAYER_JUMP, DF_EVENT_PLAYER_LECTERN_PAGE_TURN,
+    DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_PUNCH_AIR, DF_EVENT_PLAYER_QUIT, DF_EVENT_PLAYER_SLEEP,
+    DF_EVENT_PLAYER_START_BREAK, DF_EVENT_PLAYER_TELEPORT, DF_EVENT_PLAYER_TOGGLE_SNEAK,
+    DF_EVENT_PLAYER_TOGGLE_SPRINT, DF_STATUS_ERROR, DF_STATUS_OK,
+    DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK, DF_SUBSCRIPTION_PLAYER_BLOCK_PICK,
+    DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE, DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_DEATH,
     DF_SUBSCRIPTION_PLAYER_EXPERIENCE_GAIN, DF_SUBSCRIPTION_PLAYER_FIRE_EXTINGUISH,
     DF_SUBSCRIPTION_PLAYER_FOOD_LOSS, DF_SUBSCRIPTION_PLAYER_HEAL,
     DF_SUBSCRIPTION_PLAYER_HELD_SLOT_CHANGE, DF_SUBSCRIPTION_PLAYER_HURT,
-    DF_SUBSCRIPTION_PLAYER_JOIN, DF_SUBSCRIPTION_PLAYER_JUMP, DF_SUBSCRIPTION_PLAYER_MOVE,
+    DF_SUBSCRIPTION_PLAYER_JOIN, DF_SUBSCRIPTION_PLAYER_JUMP,
+    DF_SUBSCRIPTION_PLAYER_LECTERN_PAGE_TURN, DF_SUBSCRIPTION_PLAYER_MOVE,
     DF_SUBSCRIPTION_PLAYER_PUNCH_AIR, DF_SUBSCRIPTION_PLAYER_QUIT, DF_SUBSCRIPTION_PLAYER_SLEEP,
     DF_SUBSCRIPTION_PLAYER_START_BREAK, DF_SUBSCRIPTION_PLAYER_TELEPORT,
     DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK, DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT, DfCommandDescriptor,
     DfCommandInput, DfCommandState, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
-    DfPlayerBlockPlaceInput, DfPlayerBlockPlaceState, DfPlayerChatInput, DfPlayerChatState,
-    DfPlayerDeathInput, DfPlayerDeathState, DfPlayerExperienceGainInput,
-    DfPlayerExperienceGainState, DfPlayerFireExtinguishInput, DfPlayerFireExtinguishState,
-    DfPlayerFoodLossInput, DfPlayerFoodLossState, DfPlayerHealInput, DfPlayerHealState,
-    DfPlayerHeldSlotChangeInput, DfPlayerHeldSlotChangeState, DfPlayerHurtInput, DfPlayerHurtState,
-    DfPlayerJoinInput, DfPlayerJoinState, DfPlayerJumpInput, DfPlayerJumpState, DfPlayerMoveInput,
-    DfPlayerMoveState, DfPlayerPunchAirInput, DfPlayerPunchAirState, DfPlayerQuitInput,
-    DfPlayerQuitState, DfPlayerSleepInput, DfPlayerSleepState, DfPlayerStartBreakInput,
-    DfPlayerStartBreakState, DfPlayerTeleportInput, DfPlayerTeleportState,
-    DfPlayerToggleSneakInput, DfPlayerToggleSneakState, DfPlayerToggleSprintInput,
-    DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
+    DfPlayerBlockPickInput, DfPlayerBlockPickState, DfPlayerBlockPlaceInput,
+    DfPlayerBlockPlaceState, DfPlayerChatInput, DfPlayerChatState, DfPlayerDeathInput,
+    DfPlayerDeathState, DfPlayerExperienceGainInput, DfPlayerExperienceGainState,
+    DfPlayerFireExtinguishInput, DfPlayerFireExtinguishState, DfPlayerFoodLossInput,
+    DfPlayerFoodLossState, DfPlayerHealInput, DfPlayerHealState, DfPlayerHeldSlotChangeInput,
+    DfPlayerHeldSlotChangeState, DfPlayerHurtInput, DfPlayerHurtState, DfPlayerJoinInput,
+    DfPlayerJoinState, DfPlayerJumpInput, DfPlayerJumpState, DfPlayerLecternPageTurnInput,
+    DfPlayerLecternPageTurnState, DfPlayerMoveInput, DfPlayerMoveState, DfPlayerPunchAirInput,
+    DfPlayerPunchAirState, DfPlayerQuitInput, DfPlayerQuitState, DfPlayerSleepInput,
+    DfPlayerSleepState, DfPlayerStartBreakInput, DfPlayerStartBreakState, DfPlayerTeleportInput,
+    DfPlayerTeleportState, DfPlayerToggleSneakInput, DfPlayerToggleSneakState,
+    DfPlayerToggleSprintInput, DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn,
+    DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -855,6 +859,73 @@ impl DfRuntime {
         }
         DF_STATUS_OK
     }
+
+    fn handle_block_pick(
+        &self,
+        input: &DfPlayerBlockPickInput,
+        state: &mut DfPlayerBlockPickState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_BLOCK_PICK == 0
+            {
+                continue;
+            }
+            let was_cancelled = state.cancelled != 0;
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_BLOCK_PICK,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if status != DF_STATUS_OK {
+                return status;
+            }
+        }
+        DF_STATUS_OK
+    }
+
+    fn handle_lectern_page_turn(
+        &self,
+        input: &DfPlayerLecternPageTurnInput,
+        state: &mut DfPlayerLecternPageTurnState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_LECTERN_PAGE_TURN == 0
+            {
+                continue;
+            }
+            let was_cancelled = state.cancelled != 0;
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_LECTERN_PAGE_TURN,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            state.new_page = state.new_page.max(0);
+            if status != DF_STATUS_OK {
+                return status;
+            }
+        }
+        DF_STATUS_OK
+    }
 }
 
 impl Drop for DfRuntime {
@@ -1376,6 +1447,35 @@ pub unsafe extern "C" fn df_runtime_handle_event(
             };
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 runtime.handle_sleep(input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR)
+        }
+        DF_EVENT_PLAYER_BLOCK_PICK => {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.cast::<DfPlayerBlockPickInput>().as_ref() },
+                unsafe { state.cast::<DfPlayerBlockPickState>().as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            if unsafe { string_view(input.block) }.is_err() {
+                return DF_STATUS_ERROR;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime.handle_block_pick(input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR)
+        }
+        DF_EVENT_PLAYER_LECTERN_PAGE_TURN => {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.cast::<DfPlayerLecternPageTurnInput>().as_ref() },
+                unsafe { state.cast::<DfPlayerLecternPageTurnState>().as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime.handle_lectern_page_turn(input, state)
             }))
             .unwrap_or(DF_STATUS_ERROR)
         }

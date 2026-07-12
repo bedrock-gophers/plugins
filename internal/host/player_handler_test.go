@@ -97,6 +97,12 @@ func (r *runtimeStub) HandlePlayerHeldSlotChange(_ native.PlayerHeldSlotChangeIn
 func (r *runtimeStub) HandlePlayerSleep(_ native.PlayerID, sendReminder, cancelled bool) (native.PlayerSleepOutput, error) {
 	return native.PlayerSleepOutput{Cancelled: cancelled, SendReminder: sendReminder}, nil
 }
+func (r *runtimeStub) HandlePlayerBlockPick(_ native.PlayerBlockPickInput, cancelled bool) (bool, error) {
+	return cancelled, nil
+}
+func (r *runtimeStub) HandlePlayerLecternPageTurn(input native.PlayerLecternPageTurnInput, cancelled bool) (native.PlayerLecternPageTurnOutput, error) {
+	return native.PlayerLecternPageTurnOutput{Cancelled: cancelled, NewPage: input.NewPage}, nil
+}
 
 func (r *runtimeStub) Subscriptions() uint64 { return r.subscriptions }
 func (r *runtimeStub) HandlePlayerMove(input native.PlayerMoveInput, _ bool) (bool, error) {

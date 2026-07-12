@@ -1269,6 +1269,76 @@ impl<'a> PlayerPunchAirEvent<'a> {
     }
 }
 
+pub struct PlayerBlockPickEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerBlockPickInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerBlockPickState,
+}
+
+impl<'a> PlayerBlockPickEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active block-pick callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerBlockPickInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerBlockPickState,
+    ) -> Self {
+        Self { input, state }
+    }
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn position(&self) -> BlockPos {
+        self.input.position.into()
+    }
+    pub fn block(&self) -> &str {
+        unsafe { string_view(self.input.block) }
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
+pub struct PlayerLecternPageTurnEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerLecternPageTurnInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerLecternPageTurnState,
+}
+
+impl<'a> PlayerLecternPageTurnEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active lectern callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerLecternPageTurnInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerLecternPageTurnState,
+    ) -> Self {
+        Self { input, state }
+    }
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn position(&self) -> BlockPos {
+        self.input.position.into()
+    }
+    pub fn old_page(&self) -> i32 {
+        self.input.old_page
+    }
+    pub fn new_page(&self) -> i32 {
+        self.state.new_page
+    }
+    pub fn set_new_page(&mut self, page: i32) {
+        self.state.new_page = page.max(0);
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
 pub trait Plugin: Default + Send + Sync + 'static {
     fn on_enable(&self) {}
     fn on_disable(&self) {}
@@ -1292,6 +1362,8 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_punch_air(&self, _event: &mut PlayerPunchAirEvent<'_>) {}
     fn on_held_slot_change(&self, _event: &mut PlayerHeldSlotChangeEvent<'_>) {}
     fn on_sleep(&self, _event: &mut PlayerSleepEvent<'_>) {}
+    fn on_block_pick(&self, _event: &mut PlayerBlockPickEvent<'_>) {}
+    fn on_lectern_page_turn(&self, _event: &mut PlayerLecternPageTurnEvent<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }
