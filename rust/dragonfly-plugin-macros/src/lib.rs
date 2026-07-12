@@ -823,6 +823,13 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_toggle_sneak = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_toggle_sneak"),
     );
+    let handles_jump = implementation
+        .items
+        .iter()
+        .any(|item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_jump"));
+    let handles_teleport = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_teleport"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -836,7 +843,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_start_break) << 10)
         | (u64::from(handles_fire_extinguish) << 11)
         | (u64::from(handles_toggle_sprint) << 12)
-        | (u64::from(handles_toggle_sneak) << 13);
+        | (u64::from(handles_toggle_sneak) << 13)
+        | (u64::from(handles_jump) << 14)
+        | (u64::from(handles_teleport) << 15);
 
     quote! {
         #[doc(hidden)]
@@ -1101,6 +1110,21 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerToggleSneakState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerToggleSneakEvent::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_toggle_sneak(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_JUMP => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerJumpInput>() };
+                        let event = unsafe { ::dragonfly_plugin::PlayerJumpEvent::from_raw(input) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_jump(plugin, &event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_TELEPORT => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerTeleportInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerTeleportState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerTeleportEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_teleport(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

@@ -1,7 +1,8 @@
 use dragonfly::{
     PlayerBlockBreakEvent, PlayerBlockPlaceEvent, PlayerDeathEvent, PlayerFireExtinguishEvent,
-    PlayerFoodLossEvent, PlayerHealEvent, PlayerHurtEvent, PlayerJoinEvent, PlayerQuitEvent,
-    PlayerStartBreakEvent, PlayerToggleSneakEvent, PlayerToggleSprintEvent, Plugin, plugin,
+    PlayerFoodLossEvent, PlayerHealEvent, PlayerHurtEvent, PlayerJoinEvent, PlayerJumpEvent,
+    PlayerQuitEvent, PlayerStartBreakEvent, PlayerTeleportEvent, PlayerToggleSneakEvent,
+    PlayerToggleSprintEvent, Plugin, plugin,
 };
 
 #[derive(Default)]
@@ -61,5 +62,13 @@ impl Plugin for LifecycleLogger {
     }
     fn on_toggle_sneak(&self, event: &mut PlayerToggleSneakEvent<'_>) {
         eprintln!("sneak={}", event.after());
+    }
+    fn on_jump(&self, event: &PlayerJumpEvent<'_>) {
+        if let Some(name) = event.player().name() {
+            eprintln!("{name} jumped");
+        }
+    }
+    fn on_teleport(&self, event: &mut PlayerTeleportEvent<'_>) {
+        eprintln!("teleporting to {:?}", event.position());
     }
 }

@@ -33,6 +33,8 @@ const (
 	PlayerFireExtinguishSubscription uint64 = 2048
 	PlayerToggleSprintSubscription   uint64 = 4096
 	PlayerToggleSneakSubscription    uint64 = 8192
+	PlayerJumpSubscription           uint64 = 16384
+	PlayerTeleportSubscription       uint64 = 32768
 	MaxChatReplacementBytes                 = 4096
 	MaxCommandOutputBytes                   = 4096
 	MaxCommandEnumBytes                     = 4096
@@ -148,6 +150,10 @@ type PlayerPositionInput struct {
 type PlayerToggleInput struct {
 	Player PlayerID
 	After  bool
+}
+type PlayerTeleportInput struct {
+	Player   PlayerID
+	Position Vec3
 }
 
 type Command struct {
@@ -736,6 +742,36 @@ func (r *Runtime) HandlePlayerToggleSneak(input PlayerToggleInput, cancelled boo
 	}
 	if status := C.bg_runtime_handle_player_toggle_sneak(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native toggle-sneak handler failed with status %d", int32(status))
+	}
+	return state.cancelled != 0, nil
+}
+
+func (r *Runtime) HandlePlayerJump(player PlayerID) error {
+	if r == nil || r.ptr == nil {
+		return errors.New("native runtime is closed")
+	}
+	var input C.DfPlayerJumpInput
+	fillPlayerID(&input.player, player)
+	var state C.DfPlayerJumpState
+	if status := C.bg_runtime_handle_player_jump(r.ptr, &input, &state); status != C.DF_STATUS_OK {
+		return fmt.Errorf("native jump handler failed with status %d", int32(status))
+	}
+	return nil
+}
+
+func (r *Runtime) HandlePlayerTeleport(input PlayerTeleportInput, cancelled bool) (bool, error) {
+	if r == nil || r.ptr == nil {
+		return cancelled, errors.New("native runtime is closed")
+	}
+	var nativeInput C.DfPlayerTeleportInput
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.position = C.DfVec3{x: C.double(input.Position.X), y: C.double(input.Position.Y), z: C.double(input.Position.Z)}
+	var state C.DfPlayerTeleportState
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_player_teleport(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+		return state.cancelled != 0, fmt.Errorf("native teleport handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
 }

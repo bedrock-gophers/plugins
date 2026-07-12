@@ -200,6 +200,53 @@ impl<'a> PlayerMoveEvent<'a> {
     }
 }
 
+pub struct PlayerJumpEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerJumpInput,
+}
+
+impl<'a> PlayerJumpEvent<'a> {
+    /// # Safety
+    /// The input must belong to the active jump callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(input: &'a dragonfly_plugin_sys::DfPlayerJumpInput) -> Self {
+        Self { input }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+}
+
+pub struct PlayerTeleportEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerTeleportInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerTeleportState,
+}
+
+impl<'a> PlayerTeleportEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active teleport callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerTeleportInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerTeleportState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn position(&self) -> Vec3 {
+        self.input.position.into()
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MessageTooLong {
     pub length: usize,
@@ -1117,6 +1164,8 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_fire_extinguish(&self, _event: &mut PlayerFireExtinguishEvent<'_>) {}
     fn on_toggle_sprint(&self, _event: &mut PlayerToggleSprintEvent<'_>) {}
     fn on_toggle_sneak(&self, _event: &mut PlayerToggleSneakEvent<'_>) {}
+    fn on_jump(&self, _event: &PlayerJumpEvent<'_>) {}
+    fn on_teleport(&self, _event: &mut PlayerTeleportEvent<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }

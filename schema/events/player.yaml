@@ -109,3 +109,15 @@ events:
       - { name: after, type: bool }
     state:
       - { name: cancelled, type: bool }
+  - name: jump
+    id: 15
+    input:
+      - { name: player, type: player_id }
+    state: []
+  - name: teleport
+    id: 16
+    input:
+      - { name: player, type: player_id }
+      - { name: position, type: vec3 }
+    state:
+      - { name: cancelled, type: bool }

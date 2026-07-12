@@ -213,6 +213,27 @@ typedef struct {
     uint8_t cancelled;
 } DfPlayerToggleSneakState;
 
+#define DF_EVENT_PLAYER_JUMP 15u
+
+typedef struct {
+    DfPlayerId player;
+} DfPlayerJumpInput;
+
+typedef struct {
+    uint8_t _reserved;
+} DfPlayerJumpState;
+
+#define DF_EVENT_PLAYER_TELEPORT 16u
+
+typedef struct {
+    DfPlayerId player;
+    DfVec3 position;
+} DfPlayerTeleportInput;
+
+typedef struct {
+    uint8_t cancelled;
+} DfPlayerTeleportState;
+
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
@@ -263,6 +284,8 @@ DfStatus df_runtime_handle_player_start_break(DfRuntime *runtime, const DfPlayer
 DfStatus df_runtime_handle_player_fire_extinguish(DfRuntime *runtime, const DfPlayerFireExtinguishInput *input, DfPlayerFireExtinguishState *state);
 DfStatus df_runtime_handle_player_toggle_sprint(DfRuntime *runtime, const DfPlayerToggleSprintInput *input, DfPlayerToggleSprintState *state);
 DfStatus df_runtime_handle_player_toggle_sneak(DfRuntime *runtime, const DfPlayerToggleSneakInput *input, DfPlayerToggleSneakState *state);
+DfStatus df_runtime_handle_player_jump(DfRuntime *runtime, const DfPlayerJumpInput *input, DfPlayerJumpState *state);
+DfStatus df_runtime_handle_player_teleport(DfRuntime *runtime, const DfPlayerTeleportInput *input, DfPlayerTeleportState *state);
 
 #ifdef __cplusplus
 }

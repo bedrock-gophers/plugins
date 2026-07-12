@@ -30,6 +30,32 @@ type playerRuntime interface {
 	HandlePlayerFireExtinguish(native.PlayerPositionInput, bool) (bool, error)
 	HandlePlayerToggleSprint(native.PlayerToggleInput, bool) (bool, error)
 	HandlePlayerToggleSneak(native.PlayerToggleInput, bool) (bool, error)
+	HandlePlayerJump(native.PlayerID) error
+	HandlePlayerTeleport(native.PlayerTeleportInput, bool) (bool, error)
+}
+
+func (h *PlayerHandler) HandleJump(p *player.Player) {
+	if h.runtime.Subscriptions()&native.PlayerJumpSubscription == 0 {
+		return
+	}
+	if err := h.runtime.HandlePlayerJump(h.playerID(p)); err != nil {
+		h.log.Error("native plugin jump handler failed", "player", p.Name(), "error", err)
+	}
+}
+
+func (h *PlayerHandler) HandleTeleport(ctx *player.Context, position mgl64.Vec3) {
+	if h.runtime.Subscriptions()&native.PlayerTeleportSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	cancelled, err := h.runtime.HandlePlayerTeleport(native.PlayerTeleportInput{Player: h.playerID(p), Position: native.Vec3{X: position.X(), Y: position.Y(), Z: position.Z()}}, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin teleport handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if cancelled {
+		ctx.Cancel()
+	}
 }
 
 // PlayerHandler forwards supported Dragonfly player events into the native runtime.

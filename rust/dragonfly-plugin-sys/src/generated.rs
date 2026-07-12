@@ -277,6 +277,33 @@ pub struct DfPlayerToggleSneakState {
     pub cancelled: u8,
 }
 
+pub const DF_EVENT_PLAYER_JUMP: DfEventId = 15;
+pub const DF_SUBSCRIPTION_PLAYER_JUMP: u64 = 1u64 << 14;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerJumpInput {
+    pub player: DfPlayerId,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerJumpState {
+    pub _reserved: u8,
+}
+
+pub const DF_EVENT_PLAYER_TELEPORT: DfEventId = 16;
+pub const DF_SUBSCRIPTION_PLAYER_TELEPORT: u64 = 1u64 << 15;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerTeleportInput {
+    pub player: DfPlayerId,
+    pub position: DfVec3,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerTeleportState {
+    pub cancelled: u8,
+}
+
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;

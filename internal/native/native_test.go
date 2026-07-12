@@ -271,6 +271,23 @@ func TestPlayerToggleSprintAndSneak(t *testing.T) {
 	}
 }
 
+func TestPlayerJumpAndTeleport(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerJumpSubscription == 0 || runtime.Subscriptions()&PlayerTeleportSubscription == 0 {
+		t.Fatal("jump or teleport subscription missing")
+	}
+	if err := runtime.HandlePlayerJump(PlayerID{}); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := runtime.HandlePlayerTeleport(PlayerTeleportInput{Position: Vec3{X: 1, Y: 64, Z: 2}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled {
+		t.Fatal("teleport cancelled")
+	}
+}
+
 func TestCancellationIsMonotonic(t *testing.T) {
 	runtime := openTestRuntime(t)
 	cancelled, err := runtime.HandlePlayerMove(PlayerMoveInput{NewPosition: Vec3{Y: 64}}, true)
