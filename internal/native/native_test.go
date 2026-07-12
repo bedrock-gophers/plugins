@@ -58,6 +58,8 @@ type recordingHost struct {
 	values     []PlayerStateValue
 	state      PlayerStateValue
 	reads      []PlayerStateKind
+	effectOps  []PlayerEffectOperation
+	effects    []PlayerEffect
 }
 
 func (h *recordingHost) SendPlayerText(player PlayerID, kind PlayerTextKind, message string) bool {
@@ -93,6 +95,12 @@ func (h *recordingHost) SetPlayerState(_ PlayerID, kind PlayerStateKind, value P
 func (h *recordingHost) PlayerState(_ PlayerID, kind PlayerStateKind) (PlayerStateValue, bool) {
 	h.reads = append(h.reads, kind)
 	return h.state, true
+}
+
+func (h *recordingHost) ChangePlayerEffect(_ PlayerID, operation PlayerEffectOperation, effect PlayerEffect) bool {
+	h.effectOps = append(h.effectOps, operation)
+	h.effects = append(h.effects, effect)
+	return true
 }
 
 func TestPluginCanMessagePlayer(t *testing.T) {
@@ -223,6 +231,39 @@ func TestPlayerStateHostCalls(t *testing.T) {
 	wantReads := []PlayerStateKind{PlayerStateHealth, PlayerStateHealth, PlayerStateFood, PlayerStateMaxHealth, PlayerStateExperienceLevel, PlayerStateExperienceProgress}
 	if !slices.Equal(host.reads, wantReads) {
 		t.Fatalf("reads = %v, want %v", host.reads, wantReads)
+	}
+}
+
+func TestPlayerEffectHostCalls(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := PlayerID{Generation: 9}
+	for _, arguments := range []string{"speed 2 30", "clear-speed"} {
+		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
+		})
+		if err != nil || output.Failed {
+			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
+		}
+	}
+	if !slices.Equal(host.effectOps, []PlayerEffectOperation{PlayerEffectAdd, PlayerEffectRemove}) {
+		t.Fatalf("operations = %v", host.effectOps)
+	}
+	if host.effects[0].Type != EffectSpeed || host.effects[0].Level != 2 || host.effects[0].Duration != 30*time.Second {
+		t.Fatalf("effect = %+v", host.effects[0])
 	}
 }
 

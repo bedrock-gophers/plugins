@@ -37,15 +37,47 @@ typedef struct { DfStringView identifier; int32_t metadata; int32_t count; int32
 #define DF_PLAYER_STATE_HEALTH 5u
 #define DF_PLAYER_STATE_EXPERIENCE_LEVEL 6u
 #define DF_PLAYER_STATE_EXPERIENCE_PROGRESS 7u
+#define DF_EFFECT_SPEED 1u
+#define DF_EFFECT_SLOWNESS 2u
+#define DF_EFFECT_HASTE 3u
+#define DF_EFFECT_MINING_FATIGUE 4u
+#define DF_EFFECT_STRENGTH 5u
+#define DF_EFFECT_INSTANT_HEALTH 6u
+#define DF_EFFECT_INSTANT_DAMAGE 7u
+#define DF_EFFECT_JUMP_BOOST 8u
+#define DF_EFFECT_NAUSEA 9u
+#define DF_EFFECT_REGENERATION 10u
+#define DF_EFFECT_RESISTANCE 11u
+#define DF_EFFECT_FIRE_RESISTANCE 12u
+#define DF_EFFECT_WATER_BREATHING 13u
+#define DF_EFFECT_INVISIBILITY 14u
+#define DF_EFFECT_BLINDNESS 15u
+#define DF_EFFECT_NIGHT_VISION 16u
+#define DF_EFFECT_HUNGER 17u
+#define DF_EFFECT_WEAKNESS 18u
+#define DF_EFFECT_POISON 19u
+#define DF_EFFECT_WITHER 20u
+#define DF_EFFECT_HEALTH_BOOST 21u
+#define DF_EFFECT_ABSORPTION 22u
+#define DF_EFFECT_SATURATION 23u
+#define DF_EFFECT_LEVITATION 24u
+#define DF_EFFECT_FATAL_POISON 25u
+#define DF_EFFECT_CONDUIT_POWER 26u
+#define DF_EFFECT_SLOW_FALLING 27u
+#define DF_EFFECT_DARKNESS 30u
 
 typedef struct { DfStringView text; DfStringView subtitle; DfStringView action_text; uint64_t fade_in_milliseconds; uint64_t duration_milliseconds; uint64_t fade_out_milliseconds; } DfTitleView;
 typedef struct { double number; int64_t integer; } DfPlayerStateValue;
+#define DF_PLAYER_EFFECT_ADD 0u
+#define DF_PLAYER_EFFECT_REMOVE 1u
+typedef struct { uint32_t effect_type; int32_t level; uint64_t duration_milliseconds; uint8_t ambient; uint8_t infinite; uint8_t particles_hidden; } DfEffectView;
 typedef DfStatus (*DfHostPlayerTextFn)(uint64_t context, DfPlayerId player, uint32_t kind, DfStringView message);
 typedef DfStatus (*DfHostPlayerTitleFn)(uint64_t context, DfPlayerId player, DfTitleView title);
 typedef DfStatus (*DfHostPlayerTransformFn)(uint64_t context, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch);
 typedef DfStatus (*DfHostPlayerRotationFn)(uint64_t context, DfPlayerId player, DfRotation *rotation);
 typedef DfStatus (*DfHostPlayerStateSetFn)(uint64_t context, DfPlayerId player, uint32_t kind, DfPlayerStateValue value);
 typedef DfStatus (*DfHostPlayerStateGetFn)(uint64_t context, DfPlayerId player, uint32_t kind, DfPlayerStateValue *value);
+typedef DfStatus (*DfHostPlayerEffectFn)(uint64_t context, DfPlayerId player, uint32_t operation, DfEffectView effect);
 typedef struct {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -56,6 +88,7 @@ typedef struct {
     DfHostPlayerRotationFn player_rotation;
     DfHostPlayerStateSetFn player_state_set;
     DfHostPlayerStateGetFn player_state_get;
+    DfHostPlayerEffectFn player_effect;
 } DfHostApiV1;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u

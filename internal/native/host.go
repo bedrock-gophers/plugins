@@ -39,6 +39,7 @@ type Host interface {
 	PlayerRotation(PlayerID) (Rotation, bool)
 	SetPlayerState(PlayerID, PlayerStateKind, PlayerStateValue) bool
 	PlayerState(PlayerID, PlayerStateKind) (PlayerStateValue, bool)
+	ChangePlayerEffect(PlayerID, PlayerEffectOperation, PlayerEffect) bool
 }
 
 type noopHost struct{}
@@ -53,6 +54,7 @@ func (noopHost) SetPlayerState(PlayerID, PlayerStateKind, PlayerStateValue) bool
 func (noopHost) PlayerState(PlayerID, PlayerStateKind) (PlayerStateValue, bool) {
 	return PlayerStateValue{}, false
 }
+func (noopHost) ChangePlayerEffect(PlayerID, PlayerEffectOperation, PlayerEffect) bool { return false }
 
 var (
 	hostSequence atomic.Uint64

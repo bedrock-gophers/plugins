@@ -57,3 +57,33 @@ states:
     rust_set: set_experience_progress
     rust_get: experience_progress
     validate: unit_interval
+
+effects:
+  - { name: speed, id: 1, kind: lasting }
+  - { name: slowness, id: 2, kind: lasting }
+  - { name: haste, id: 3, kind: lasting }
+  - { name: mining_fatigue, id: 4, kind: lasting }
+  - { name: strength, id: 5, kind: lasting }
+  - { name: instant_health, id: 6, kind: instant }
+  - { name: instant_damage, id: 7, kind: instant }
+  - { name: jump_boost, id: 8, kind: lasting }
+  - { name: nausea, id: 9, kind: lasting }
+  - { name: regeneration, id: 10, kind: lasting }
+  - { name: resistance, id: 11, kind: lasting }
+  - { name: fire_resistance, id: 12, kind: lasting }
+  - { name: water_breathing, id: 13, kind: lasting }
+  - { name: invisibility, id: 14, kind: lasting }
+  - { name: blindness, id: 15, kind: lasting }
+  - { name: night_vision, id: 16, kind: lasting }
+  - { name: hunger, id: 17, kind: lasting }
+  - { name: weakness, id: 18, kind: lasting }
+  - { name: poison, id: 19, kind: lasting }
+  - { name: wither, id: 20, kind: lasting }
+  - { name: health_boost, id: 21, kind: lasting }
+  - { name: absorption, id: 22, kind: lasting }
+  - { name: saturation, id: 23, kind: instant }
+  - { name: levitation, id: 24, kind: lasting }
+  - { name: fatal_poison, id: 25, kind: lasting }
+  - { name: conduit_power, id: 26, kind: lasting }
+  - { name: slow_falling, id: 27, kind: lasting }
+  - { name: darkness, id: 30, kind: lasting }

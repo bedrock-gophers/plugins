@@ -103,6 +103,19 @@ func bg_go_player_state_get(context C.uint64_t, player C.DfPlayerId, kind C.uint
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_player_effect
+func bg_go_player_effect(context C.uint64_t, player C.DfPlayerId, operation C.uint32_t, value C.DfEffectView) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || !host.ChangePlayerEffect(playerID(player), PlayerEffectOperation(operation), PlayerEffect{
+		Type: EffectType(value.effect_type), Level: int32(value.level),
+		Duration: milliseconds(value.duration_milliseconds), Ambient: value.ambient != 0,
+		Infinite: value.infinite != 0, ParticlesHidden: value.particles_hidden != 0,
+	}) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
 func playerID(player C.DfPlayerId) PlayerID {
 	var id PlayerID
 	for index := range id.UUID {

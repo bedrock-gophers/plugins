@@ -11,6 +11,7 @@ extern DfStatus bg_go_player_transform(uint64_t context, DfPlayerId player, uint
 extern DfStatus bg_go_player_rotation(uint64_t context, DfPlayerId player, DfRotation *rotation);
 extern DfStatus bg_go_player_state_set(uint64_t context, DfPlayerId player, uint32_t kind, DfPlayerStateValue value);
 extern DfStatus bg_go_player_state_get(uint64_t context, DfPlayerId player, uint32_t kind, DfPlayerStateValue *value);
+extern DfStatus bg_go_player_effect(uint64_t context, DfPlayerId player, uint32_t operation, DfEffectView effect);
 
 static DfStatus host_player_text(uint64_t context, DfPlayerId player, uint32_t kind, DfStringView message) {
     return bg_go_player_text(context, player, kind, message);
@@ -34,6 +35,10 @@ static DfStatus host_player_state_set(uint64_t context, DfPlayerId player, uint3
 
 static DfStatus host_player_state_get(uint64_t context, DfPlayerId player, uint32_t kind, DfPlayerStateValue *value) {
     return bg_go_player_state_get(context, player, kind, value);
+}
+
+static DfStatus host_player_effect(uint64_t context, DfPlayerId player, uint32_t operation, DfEffectView effect) {
+    return bg_go_player_effect(context, player, operation, effect);
 }
 
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
@@ -132,6 +137,7 @@ DfStatus bg_runtime_open(
         .player_rotation = host_player_rotation,
         .player_state_set = host_player_state_set,
         .player_state_get = host_player_state_get,
+        .player_effect = host_player_effect,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

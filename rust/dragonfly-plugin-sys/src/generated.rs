@@ -50,6 +50,34 @@ pub const DF_PLAYER_STATE_MAX_HEALTH: u32 = 4;
 pub const DF_PLAYER_STATE_HEALTH: u32 = 5;
 pub const DF_PLAYER_STATE_EXPERIENCE_LEVEL: u32 = 6;
 pub const DF_PLAYER_STATE_EXPERIENCE_PROGRESS: u32 = 7;
+pub const DF_EFFECT_SPEED: u32 = 1;
+pub const DF_EFFECT_SLOWNESS: u32 = 2;
+pub const DF_EFFECT_HASTE: u32 = 3;
+pub const DF_EFFECT_MINING_FATIGUE: u32 = 4;
+pub const DF_EFFECT_STRENGTH: u32 = 5;
+pub const DF_EFFECT_INSTANT_HEALTH: u32 = 6;
+pub const DF_EFFECT_INSTANT_DAMAGE: u32 = 7;
+pub const DF_EFFECT_JUMP_BOOST: u32 = 8;
+pub const DF_EFFECT_NAUSEA: u32 = 9;
+pub const DF_EFFECT_REGENERATION: u32 = 10;
+pub const DF_EFFECT_RESISTANCE: u32 = 11;
+pub const DF_EFFECT_FIRE_RESISTANCE: u32 = 12;
+pub const DF_EFFECT_WATER_BREATHING: u32 = 13;
+pub const DF_EFFECT_INVISIBILITY: u32 = 14;
+pub const DF_EFFECT_BLINDNESS: u32 = 15;
+pub const DF_EFFECT_NIGHT_VISION: u32 = 16;
+pub const DF_EFFECT_HUNGER: u32 = 17;
+pub const DF_EFFECT_WEAKNESS: u32 = 18;
+pub const DF_EFFECT_POISON: u32 = 19;
+pub const DF_EFFECT_WITHER: u32 = 20;
+pub const DF_EFFECT_HEALTH_BOOST: u32 = 21;
+pub const DF_EFFECT_ABSORPTION: u32 = 22;
+pub const DF_EFFECT_SATURATION: u32 = 23;
+pub const DF_EFFECT_LEVITATION: u32 = 24;
+pub const DF_EFFECT_FATAL_POISON: u32 = 25;
+pub const DF_EFFECT_CONDUIT_POWER: u32 = 26;
+pub const DF_EFFECT_SLOW_FALLING: u32 = 27;
+pub const DF_EFFECT_DARKNESS: u32 = 30;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -57,15 +85,21 @@ pub struct DfTitleView { pub text: DfStringView, pub subtitle: DfStringView, pub
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfPlayerStateValue { pub number: f64, pub integer: i64 }
+pub const DF_PLAYER_EFFECT_ADD: u32 = 0;
+pub const DF_PLAYER_EFFECT_REMOVE: u32 = 1;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfEffectView { pub effect_type: u32, pub level: i32, pub duration_milliseconds: u64, pub ambient: u8, pub infinite: u8, pub particles_hidden: u8 }
 pub type DfHostPlayerTextFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, kind: u32, message: DfStringView) -> DfStatus;
 pub type DfHostPlayerTitleFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, title: DfTitleView) -> DfStatus;
 pub type DfHostPlayerTransformFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, kind: u32, vector: DfVec3, yaw: f64, pitch: f64) -> DfStatus;
 pub type DfHostPlayerRotationFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, rotation: *mut DfRotation) -> DfStatus;
 pub type DfHostPlayerStateSetFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, kind: u32, value: DfPlayerStateValue) -> DfStatus;
 pub type DfHostPlayerStateGetFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, kind: u32, value: *mut DfPlayerStateValue) -> DfStatus;
+pub type DfHostPlayerEffectFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, operation: u32, effect: DfEffectView) -> DfStatus;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfHostApiV1 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn> }
+pub struct DfHostApiV1 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn> }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandParameter { pub kind: u32, pub optional: u8, pub name: DfStringView, pub values: *const DfStringView, pub value_count: u64 }

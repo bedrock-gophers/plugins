@@ -1,6 +1,6 @@
 use dragonfly::{
-    CommandEnum, CommandSource, Context, Dynamic, DynamicCommandEnum, GameMode, Player, Plugin,
-    Rotation, Varargs, Vec3, plugin,
+    CommandEnum, CommandSource, Context, Dynamic, DynamicCommandEnum, Effect, EffectType, GameMode,
+    Player, Plugin, Rotation, Varargs, Vec3, plugin,
 };
 
 struct GreetingTargets;
@@ -170,5 +170,20 @@ impl Plugin for HelloCommand {
             "Progress: {}",
             context.source().experience_progress()
         ));
+    }
+
+    #[subcommand("speed")]
+    fn speed(&self, context: &mut Context<'_, Player>, level: i32, seconds: i32) {
+        let duration = std::time::Duration::from_secs(seconds.max(0) as u64);
+        context
+            .source()
+            .add_effect(Effect::new(EffectType::Speed, level, duration));
+        context.reply("Speed effect added.");
+    }
+
+    #[subcommand("clear-speed")]
+    fn clear_speed(&self, context: &mut Context<'_, Player>) {
+        context.source().remove_effect(EffectType::Speed);
+        context.reply("Speed effect removed.");
     }
 }

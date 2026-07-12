@@ -3,8 +3,10 @@ package host
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
+	"github.com/df-mc/dragonfly/server/entity/effect"
 	"github.com/df-mc/dragonfly/server/player"
 )
 
@@ -82,6 +84,21 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		progress, _ := players.PlayerState(id, native.PlayerStateExperienceProgress)
 		if gameMode.Integer != 1 || food.Integer != 12 || maxHealth.Number != 40 || health.Number != 19 || level.Integer != 12 || math.Abs(progress.Number-0.5) > 0.02 {
 			t.Fatalf("game mode=%+v food=%+v max=%+v health=%+v level=%+v progress=%+v", gameMode, food, maxHealth, health, level, progress)
+		}
+		if !players.ChangePlayerEffect(id, native.PlayerEffectAdd, native.PlayerEffect{
+			Type: native.EffectSpeed, Level: 2, Duration: 30 * time.Second,
+		}) {
+			t.Fatal("add effect failed")
+		}
+		applied, ok := player.Effect(effect.Speed)
+		if !ok || applied.Level() != 2 {
+			t.Fatalf("effect = %+v ok=%v", applied, ok)
+		}
+		if !players.ChangePlayerEffect(id, native.PlayerEffectRemove, native.PlayerEffect{Type: native.EffectSpeed}) {
+			t.Fatal("remove effect failed")
+		}
+		if _, ok := player.Effect(effect.Speed); ok {
+			t.Fatal("effect still present")
 		}
 	})
 }

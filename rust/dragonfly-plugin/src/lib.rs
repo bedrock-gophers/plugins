@@ -415,6 +415,78 @@ impl Player {
 
 include!("player_state_generated.rs");
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Effect {
+    effect_type: EffectType,
+    level: i32,
+    duration: std::time::Duration,
+    ambient: bool,
+    infinite: bool,
+    particles_hidden: bool,
+}
+
+impl Effect {
+    pub fn new(effect_type: EffectType, level: i32, duration: std::time::Duration) -> Self {
+        Self {
+            effect_type,
+            level,
+            duration,
+            ambient: false,
+            infinite: false,
+            particles_hidden: false,
+        }
+    }
+
+    pub fn infinite(effect_type: EffectType, level: i32) -> Self {
+        Self {
+            infinite: true,
+            ..Self::new(effect_type, level, std::time::Duration::ZERO)
+        }
+    }
+
+    pub fn ambient(mut self) -> Self {
+        self.ambient = true;
+        self
+    }
+
+    pub fn without_particles(mut self) -> Self {
+        self.particles_hidden = true;
+        self
+    }
+}
+
+impl Player {
+    pub fn add_effect(&self, effect: Effect) {
+        self.change_effect(dragonfly_plugin_sys::DF_PLAYER_EFFECT_ADD, effect);
+    }
+
+    pub fn remove_effect(&self, effect_type: EffectType) {
+        self.change_effect(
+            dragonfly_plugin_sys::DF_PLAYER_EFFECT_REMOVE,
+            Effect::new(effect_type, 0, std::time::Duration::ZERO),
+        );
+    }
+
+    fn change_effect(&self, operation: u32, effect: Effect) {
+        let host = HOST_API.load(Ordering::Acquire);
+        let Some(host) = (unsafe { host.as_ref() }) else {
+            return;
+        };
+        let Some(change) = host.player_effect else {
+            return;
+        };
+        let raw = dragonfly_plugin_sys::DfEffectView {
+            effect_type: effect.effect_type as u32,
+            level: effect.level,
+            duration_milliseconds: duration_milliseconds(effect.duration),
+            ambient: u8::from(effect.ambient),
+            infinite: u8::from(effect.infinite),
+            particles_hidden: u8::from(effect.particles_hidden),
+        };
+        let _ = unsafe { change(host.context, self.raw_id(), operation, raw) };
+    }
+}
+
 impl From<dragonfly_plugin_sys::DfVec3> for Vec3 {
     fn from(value: dragonfly_plugin_sys::DfVec3) -> Self {
         Self {

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
+	"github.com/df-mc/dragonfly/server/entity/effect"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/player/title"
 	"github.com/go-gl/mathgl/mgl64"
@@ -183,6 +184,42 @@ func (p *Players) PlayerState(id native.PlayerID, kind native.PlayerStateKind) (
 		return native.PlayerStateValue{}, false
 	}
 	return readPlayerState(connected, kind)
+}
+
+func (p *Players) ChangePlayerEffect(id native.PlayerID, operation native.PlayerEffectOperation, value native.PlayerEffect) bool {
+	connected, ok := p.ResolveID(id)
+	if !ok {
+		return false
+	}
+	effectType, ok := effect.ByID(int(value.Type))
+	if !ok {
+		return false
+	}
+	if operation == native.PlayerEffectRemove {
+		connected.RemoveEffect(effectType)
+		return true
+	}
+	if operation != native.PlayerEffectAdd || value.Level < 0 || value.Duration < 0 {
+		return false
+	}
+	var applied effect.Effect
+	if lasting, ok := effectType.(effect.LastingType); ok {
+		switch {
+		case value.Infinite:
+			applied = effect.NewInfinite(lasting, int(value.Level))
+		case value.Ambient:
+			applied = effect.NewAmbient(lasting, int(value.Level), value.Duration)
+		default:
+			applied = effect.New(lasting, int(value.Level), value.Duration)
+		}
+	} else {
+		applied = effect.NewInstant(effectType, int(value.Level))
+	}
+	if value.ParticlesHidden {
+		applied = applied.WithoutParticles()
+	}
+	connected.AddEffect(applied)
+	return true
 }
 
 type pluginHealingSource struct{}

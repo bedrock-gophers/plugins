@@ -2,6 +2,8 @@
 
 package native
 
+import "time"
+
 type PlayerStateKind uint32
 
 const (
@@ -18,4 +20,53 @@ const (
 type PlayerStateValue struct {
 	Number  float64
 	Integer int64
+}
+
+type EffectType uint32
+
+const (
+	EffectSpeed          EffectType = 1
+	EffectSlowness       EffectType = 2
+	EffectHaste          EffectType = 3
+	EffectMiningFatigue  EffectType = 4
+	EffectStrength       EffectType = 5
+	EffectInstantHealth  EffectType = 6
+	EffectInstantDamage  EffectType = 7
+	EffectJumpBoost      EffectType = 8
+	EffectNausea         EffectType = 9
+	EffectRegeneration   EffectType = 10
+	EffectResistance     EffectType = 11
+	EffectFireResistance EffectType = 12
+	EffectWaterBreathing EffectType = 13
+	EffectInvisibility   EffectType = 14
+	EffectBlindness      EffectType = 15
+	EffectNightVision    EffectType = 16
+	EffectHunger         EffectType = 17
+	EffectWeakness       EffectType = 18
+	EffectPoison         EffectType = 19
+	EffectWither         EffectType = 20
+	EffectHealthBoost    EffectType = 21
+	EffectAbsorption     EffectType = 22
+	EffectSaturation     EffectType = 23
+	EffectLevitation     EffectType = 24
+	EffectFatalPoison    EffectType = 25
+	EffectConduitPower   EffectType = 26
+	EffectSlowFalling    EffectType = 27
+	EffectDarkness       EffectType = 30
+)
+
+type PlayerEffectOperation uint32
+
+const (
+	PlayerEffectAdd PlayerEffectOperation = iota
+	PlayerEffectRemove
+)
+
+type PlayerEffect struct {
+	Type            EffectType
+	Level           int32
+	Duration        time.Duration
+	Ambient         bool
+	Infinite        bool
+	ParticlesHidden bool
 }
