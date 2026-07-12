@@ -6,4 +6,4 @@ Consumer-only example. This branch contains no bedrock-gophers framework/runtime
 make run
 ```
 
-Examples cover every current SDK area: lifecycle, join/quit, hurt/heal, block break/place, movement, mutable chat, typed command contexts, subcommands, enum parameters, and player latency. Each plugin owns its Cargo manifest, lockfile, source, and target. Build fetches pinned bedrock-gophers revision, compiles runtime and plugins, then starts server.
+Examples cover every current SDK area: lifecycle, join/quit, hurt/heal, food loss/death, block break/place, movement, mutable chat, typed command contexts, subcommands, enum parameters, and player latency. Each plugin owns its Cargo manifest, lockfile, source, and target. Build fetches pinned bedrock-gophers revision, compiles runtime and plugins, then starts server.
