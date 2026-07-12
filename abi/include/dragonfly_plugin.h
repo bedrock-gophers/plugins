@@ -327,6 +327,19 @@ typedef struct {
     uint8_t cancelled;
 } DfPlayerItemUseState;
 
+#define DF_EVENT_PLAYER_ITEM_USE_ON_BLOCK 25u
+
+typedef struct {
+    DfPlayerId player;
+    DfBlockPos position;
+    int32_t face;
+    DfVec3 click_position;
+} DfPlayerItemUseOnBlockInput;
+
+typedef struct {
+    uint8_t cancelled;
+} DfPlayerItemUseOnBlockState;
+
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);

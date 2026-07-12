@@ -40,6 +40,7 @@ type playerRuntime interface {
 	HandlePlayerLecternPageTurn(native.PlayerLecternPageTurnInput, bool) (native.PlayerLecternPageTurnOutput, error)
 	HandlePlayerSignEdit(native.PlayerSignEditInput, bool) (bool, error)
 	HandlePlayerItemUse(native.PlayerID, bool) (bool, error)
+	HandlePlayerItemUseOnBlock(native.PlayerItemUseOnBlockInput, bool) (bool, error)
 }
 
 func (h *PlayerHandler) HandleJump(p *player.Player) {
@@ -325,6 +326,24 @@ func (h *PlayerHandler) HandleItemUse(ctx *player.Context) {
 	cancelled, err := h.runtime.HandlePlayerItemUse(h.playerID(p), ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin item-use handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandleItemUseOnBlock(ctx *player.Context, position cube.Pos, face cube.Face, clickPosition mgl64.Vec3) {
+	if h.runtime.Subscriptions()&native.PlayerItemUseOnBlockSubscription == 0 {
+		return
+	}
+	p := ctx.Val()
+	cancelled, err := h.runtime.HandlePlayerItemUseOnBlock(native.PlayerItemUseOnBlockInput{
+		Player: h.playerID(p), Position: nativeBlockPos(position), Face: int(face),
+		ClickPosition: native.Vec3{X: clickPosition.X(), Y: clickPosition.Y(), Z: clickPosition.Z()},
+	}, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin item-use-on-block handler failed", "player", p.Name(), "error", err)
 		return
 	}
 	if cancelled {

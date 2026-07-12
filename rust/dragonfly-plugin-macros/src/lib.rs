@@ -854,6 +854,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_item_use = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_item_use"),
     );
+    let handles_item_use_on_block = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_item_use_on_block"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -877,7 +880,8 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_block_pick) << 20)
         | (u64::from(handles_lectern_page_turn) << 21)
         | (u64::from(handles_sign_edit) << 22)
-        | (u64::from(handles_item_use) << 23);
+        | (u64::from(handles_item_use) << 23)
+        | (u64::from(handles_item_use_on_block) << 24);
 
     quote! {
         #[doc(hidden)]
@@ -1221,6 +1225,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemUseState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerItemUseEvent::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_use(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_ITEM_USE_ON_BLOCK => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerItemUseOnBlockInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerItemUseOnBlockState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemUseOnBlockEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_item_use_on_block(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

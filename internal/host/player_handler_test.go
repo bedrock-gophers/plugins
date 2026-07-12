@@ -109,6 +109,9 @@ func (r *runtimeStub) HandlePlayerSignEdit(_ native.PlayerSignEditInput, cancell
 func (r *runtimeStub) HandlePlayerItemUse(_ native.PlayerID, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
+func (r *runtimeStub) HandlePlayerItemUseOnBlock(_ native.PlayerItemUseOnBlockInput, cancelled bool) (bool, error) {
+	return cancelled, nil
+}
 
 func (r *runtimeStub) Subscriptions() uint64 { return r.subscriptions }
 func (r *runtimeStub) HandlePlayerMove(input native.PlayerMoveInput, _ bool) (bool, error) {

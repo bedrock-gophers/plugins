@@ -182,3 +182,12 @@ events:
       - { name: player, type: player_id }
     state:
       - { name: cancelled, type: bool }
+  - name: item_use_on_block
+    id: 25
+    input:
+      - { name: player, type: player_id }
+      - { name: position, type: block_pos }
+      - { name: face, type: i32 }
+      - { name: click_position, type: vec3 }
+    state:
+      - { name: cancelled, type: bool }

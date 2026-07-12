@@ -372,6 +372,20 @@ func TestPlayerSignEditAndItemUse(t *testing.T) {
 	}
 }
 
+func TestPlayerItemUseOnBlock(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerItemUseOnBlockSubscription == 0 {
+		t.Fatal("item-use-on-block subscription missing")
+	}
+	cancelled, err := runtime.HandlePlayerItemUseOnBlock(PlayerItemUseOnBlockInput{Face: 1, ClickPosition: Vec3{X: 0.5, Y: 1, Z: 0.5}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled {
+		t.Fatal("item use on block cancelled")
+	}
+}
+
 func TestCancellationIsMonotonic(t *testing.T) {
 	runtime := openTestRuntime(t)
 	cancelled, err := runtime.HandlePlayerMove(PlayerMoveInput{NewPosition: Vec3{Y: 64}}, true)

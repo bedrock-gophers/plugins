@@ -421,6 +421,22 @@ pub struct DfPlayerItemUseState {
     pub cancelled: u8,
 }
 
+pub const DF_EVENT_PLAYER_ITEM_USE_ON_BLOCK: DfEventId = 25;
+pub const DF_SUBSCRIPTION_PLAYER_ITEM_USE_ON_BLOCK: u64 = 1u64 << 24;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerItemUseOnBlockInput {
+    pub player: DfPlayerId,
+    pub position: DfBlockPos,
+    pub face: i32,
+    pub click_position: DfVec3,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerItemUseOnBlockState {
+    pub cancelled: u8,
+}
+
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;

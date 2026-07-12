@@ -24,6 +24,17 @@ pub struct BlockPos {
     pub z: i32,
 }
 
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum BlockFace {
+    Down = 0,
+    Up = 1,
+    North = 2,
+    South = 3,
+    West = 4,
+    East = 5,
+}
+
 impl From<dragonfly_plugin_sys::DfBlockPos> for BlockPos {
     fn from(value: dragonfly_plugin_sys::DfBlockPos) -> Self {
         Self {
@@ -1349,6 +1360,42 @@ pub struct PlayerItemUseEvent<'a> {
     state: &'a mut dragonfly_plugin_sys::DfPlayerItemUseState,
 }
 
+pub struct PlayerItemUseOnBlockEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerItemUseOnBlockInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerItemUseOnBlockState,
+}
+
+impl<'a> PlayerItemUseOnBlockEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active item-use-on-block callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerItemUseOnBlockInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerItemUseOnBlockState,
+    ) -> Self {
+        Self { input, state }
+    }
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn position(&self) -> BlockPos {
+        self.input.position.into()
+    }
+    pub fn face(&self) -> BlockFace {
+        // Runtime validates the generated integer before constructing this event.
+        unsafe { core::mem::transmute(self.input.face) }
+    }
+    pub fn click_position(&self) -> Vec3 {
+        self.input.click_position.into()
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
 impl<'a> PlayerItemUseEvent<'a> {
     /// # Safety
     /// Both references must belong to the same active item-use callback.
@@ -1430,6 +1477,7 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_lectern_page_turn(&self, _event: &mut PlayerLecternPageTurnEvent<'_>) {}
     fn on_sign_edit(&self, _event: &mut PlayerSignEditEvent<'_>) {}
     fn on_item_use(&self, _event: &mut PlayerItemUseEvent<'_>) {}
+    fn on_item_use_on_block(&self, _event: &mut PlayerItemUseOnBlockEvent<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }

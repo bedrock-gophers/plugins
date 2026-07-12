@@ -43,6 +43,7 @@ const (
 	PlayerLecternPageTurnSubscription uint64 = 2097152
 	PlayerSignEditSubscription        uint64 = 4194304
 	PlayerItemUseSubscription         uint64 = 8388608
+	PlayerItemUseOnBlockSubscription  uint64 = 16777216
 	MaxChatReplacementBytes                  = 4096
 	MaxCommandOutputBytes                    = 4096
 	MaxCommandEnumBytes                      = 4096
@@ -197,6 +198,12 @@ type PlayerSignEditInput struct {
 	FrontSide bool
 	OldText   string
 	NewText   string
+}
+type PlayerItemUseOnBlockInput struct {
+	Player        PlayerID
+	Position      BlockPos
+	Face          int
+	ClickPosition Vec3
 }
 
 type Command struct {
@@ -957,6 +964,25 @@ func (r *Runtime) HandlePlayerItemUse(player PlayerID, cancelled bool) (bool, er
 	}
 	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_ITEM_USE, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native item-use handler failed with status %d", int32(status))
+	}
+	return state.cancelled != 0, nil
+}
+
+func (r *Runtime) HandlePlayerItemUseOnBlock(input PlayerItemUseOnBlockInput, cancelled bool) (bool, error) {
+	if r == nil || r.ptr == nil {
+		return cancelled, errors.New("native runtime is closed")
+	}
+	var nativeInput C.DfPlayerItemUseOnBlockInput
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.position = nativeBlockPos(input.Position)
+	nativeInput.face = C.int32_t(input.Face)
+	nativeInput.click_position = C.DfVec3{x: C.double(input.ClickPosition.X), y: C.double(input.ClickPosition.Y), z: C.double(input.ClickPosition.Z)}
+	var state C.DfPlayerItemUseOnBlockState
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_ITEM_USE_ON_BLOCK, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+		return state.cancelled != 0, fmt.Errorf("native item-use-on-block handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
 }
