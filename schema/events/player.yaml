@@ -66,3 +66,18 @@ events:
       - { name: block, type: string_view }
     state:
       - { name: cancelled, type: bool }
+  - name: food_loss
+    id: 9
+    input:
+      - { name: player, type: player_id }
+      - { name: from, type: i32 }
+    state:
+      - { name: cancelled, type: bool }
+      - { name: to, type: i32 }
+  - name: death
+    id: 10
+    input:
+      - { name: player, type: player_id }
+      - { name: source, type: string_view }
+    state:
+      - { name: keep_inventory, type: bool }

@@ -3,16 +3,18 @@ use dragonfly_plugin_sys::{
     DF_COMMAND_PARAMETER_ENUM, DF_COMMAND_PARAMETER_FLOAT, DF_COMMAND_PARAMETER_INTEGER,
     DF_COMMAND_PARAMETER_PLAYER, DF_COMMAND_PARAMETER_RAW_TEXT, DF_COMMAND_PARAMETER_STRING,
     DF_COMMAND_PARAMETER_SUBCOMMAND, DF_EVENT_PLAYER_BLOCK_BREAK, DF_EVENT_PLAYER_BLOCK_PLACE,
-    DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_HEAL, DF_EVENT_PLAYER_HURT, DF_EVENT_PLAYER_JOIN,
-    DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_QUIT, DF_STATUS_ERROR, DF_STATUS_OK,
-    DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK, DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE,
-    DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_HEAL, DF_SUBSCRIPTION_PLAYER_HURT,
+    DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_DEATH, DF_EVENT_PLAYER_FOOD_LOSS, DF_EVENT_PLAYER_HEAL,
+    DF_EVENT_PLAYER_HURT, DF_EVENT_PLAYER_JOIN, DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_QUIT,
+    DF_STATUS_ERROR, DF_STATUS_OK, DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK,
+    DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE, DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_DEATH,
+    DF_SUBSCRIPTION_PLAYER_FOOD_LOSS, DF_SUBSCRIPTION_PLAYER_HEAL, DF_SUBSCRIPTION_PLAYER_HURT,
     DF_SUBSCRIPTION_PLAYER_JOIN, DF_SUBSCRIPTION_PLAYER_MOVE, DF_SUBSCRIPTION_PLAYER_QUIT,
     DfCommandDescriptor, DfCommandInput, DfCommandState, DfPlayerBlockBreakInput,
     DfPlayerBlockBreakState, DfPlayerBlockPlaceInput, DfPlayerBlockPlaceState, DfPlayerChatInput,
-    DfPlayerChatState, DfPlayerHealInput, DfPlayerHealState, DfPlayerHurtInput, DfPlayerHurtState,
-    DfPlayerJoinInput, DfPlayerJoinState, DfPlayerMoveInput, DfPlayerMoveState, DfPlayerQuitInput,
-    DfPlayerQuitState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
+    DfPlayerChatState, DfPlayerDeathInput, DfPlayerDeathState, DfPlayerFoodLossInput,
+    DfPlayerFoodLossState, DfPlayerHealInput, DfPlayerHealState, DfPlayerHurtInput,
+    DfPlayerHurtState, DfPlayerJoinInput, DfPlayerJoinState, DfPlayerMoveInput, DfPlayerMoveState,
+    DfPlayerQuitInput, DfPlayerQuitState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -455,6 +457,65 @@ impl DfRuntime {
             if was_cancelled {
                 state.cancelled = 1;
             }
+            if status != DF_STATUS_OK {
+                return status;
+            }
+        }
+        DF_STATUS_OK
+    }
+
+    fn handle_food_loss(
+        &self,
+        input: &DfPlayerFoodLossInput,
+        state: &mut DfPlayerFoodLossState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_FOOD_LOSS == 0
+            {
+                continue;
+            }
+            let was_cancelled = state.cancelled != 0;
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_FOOD_LOSS,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if status != DF_STATUS_OK {
+                return status;
+            }
+            state.to = state.to.clamp(0, 20);
+        }
+        DF_STATUS_OK
+    }
+
+    fn handle_death(&self, input: &DfPlayerDeathInput, state: &mut DfPlayerDeathState) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_DEATH == 0
+            {
+                continue;
+            }
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_DEATH,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
             if status != DF_STATUS_OK {
                 return status;
             }
@@ -1082,6 +1143,55 @@ pub unsafe extern "C" fn df_runtime_handle_player_block_place(
     }
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         runtime.handle_block_place(input, state)
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+#[unsafe(no_mangle)]
+/// Dispatches a player food-loss event.
+///
+/// # Safety
+/// All pointers must remain valid for this synchronous call.
+pub unsafe extern "C" fn df_runtime_handle_player_food_loss(
+    runtime: *mut DfRuntime,
+    input: *const DfPlayerFoodLossInput,
+    state: *mut DfPlayerFoodLossState,
+) -> DfStatus {
+    let (Some(runtime), Some(input), Some(state)) = (
+        unsafe { runtime.as_ref() },
+        unsafe { input.as_ref() },
+        unsafe { state.as_mut() },
+    ) else {
+        return DF_STATUS_ERROR;
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.handle_food_loss(input, state)
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+#[unsafe(no_mangle)]
+/// Dispatches a player death event.
+///
+/// # Safety
+/// All pointers and string views must remain valid for this synchronous call.
+pub unsafe extern "C" fn df_runtime_handle_player_death(
+    runtime: *mut DfRuntime,
+    input: *const DfPlayerDeathInput,
+    state: *mut DfPlayerDeathState,
+) -> DfStatus {
+    let (Some(runtime), Some(input), Some(state)) = (
+        unsafe { runtime.as_ref() },
+        unsafe { input.as_ref() },
+        unsafe { state.as_mut() },
+    ) else {
+        return DF_STATUS_ERROR;
+    };
+    if unsafe { string_view(input.source) }.is_err() {
+        return DF_STATUS_ERROR;
+    }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.handle_death(input, state)
     }))
     .unwrap_or(DF_STATUS_ERROR)
 }

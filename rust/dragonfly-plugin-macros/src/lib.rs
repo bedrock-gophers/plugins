@@ -805,6 +805,12 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_block_place = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_block_place"),
     );
+    let handles_food_loss = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_food_loss"),
+    );
+    let handles_death = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_death"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -812,7 +818,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_hurt) << 4)
         | (u64::from(handles_heal) << 5)
         | (u64::from(handles_block_break) << 6)
-        | (u64::from(handles_block_place) << 7);
+        | (u64::from(handles_block_place) << 7)
+        | (u64::from(handles_food_loss) << 8)
+        | (u64::from(handles_death) << 9);
 
     quote! {
         #[doc(hidden)]
@@ -1029,6 +1037,22 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerBlockPlaceState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerBlockPlaceEvent::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_block_place(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_FOOD_LOSS => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerFoodLossInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerFoodLossState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerFoodLossEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_food_loss(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_DEATH => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerDeathInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerDeathState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerDeathEvent::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_death(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

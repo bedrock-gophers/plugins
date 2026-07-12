@@ -78,6 +78,16 @@ DfStatus bg_runtime_handle_player_block_place(
     const DfPlayerBlockPlaceInput *input,
     DfPlayerBlockPlaceState *state
 );
+DfStatus bg_runtime_handle_player_food_loss(
+    BgRuntimeLibrary *library,
+    const DfPlayerFoodLossInput *input,
+    DfPlayerFoodLossState *state
+);
+DfStatus bg_runtime_handle_player_death(
+    BgRuntimeLibrary *library,
+    const DfPlayerDeathInput *input,
+    DfPlayerDeathState *state
+);
 uint64_t bg_runtime_handle_player_move_value(
     BgRuntimeLibrary *library,
     DfPlayerMoveInput input,

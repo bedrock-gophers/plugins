@@ -27,6 +27,8 @@ const (
 	PlayerHealSubscription       uint64 = 32
 	PlayerBlockBreakSubscription uint64 = 64
 	PlayerBlockPlaceSubscription uint64 = 128
+	PlayerFoodLossSubscription   uint64 = 256
+	PlayerDeathSubscription      uint64 = 512
 	MaxChatReplacementBytes             = 4096
 	MaxCommandOutputBytes               = 4096
 	MaxCommandEnumBytes                 = 4096
@@ -117,6 +119,22 @@ type PlayerBlockPlaceInput struct {
 	Player   PlayerID
 	Position BlockPos
 	Block    string
+}
+
+type PlayerFoodLossInput struct {
+	Player PlayerID
+	From   int32
+	To     int32
+}
+
+type PlayerFoodLossOutput struct {
+	Cancelled bool
+	To        int32
+}
+
+type PlayerDeathInput struct {
+	Player PlayerID
+	Source string
 }
 
 type Command struct {
@@ -601,6 +619,45 @@ func (r *Runtime) HandlePlayerBlockPlace(input PlayerBlockPlaceInput, cancelled 
 		return state.cancelled != 0, fmt.Errorf("native block-place handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
+}
+
+func (r *Runtime) HandlePlayerFoodLoss(input PlayerFoodLossInput, cancelled bool) (PlayerFoodLossOutput, error) {
+	output := PlayerFoodLossOutput{Cancelled: cancelled, To: input.To}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	var nativeInput C.DfPlayerFoodLossInput
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.from = C.int32_t(input.From)
+	state := C.DfPlayerFoodLossState{to: C.int32_t(input.To)}
+	if cancelled {
+		state.cancelled = 1
+	}
+	if status := C.bg_runtime_handle_player_food_loss(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("native food-loss handler failed with status %d", int32(status))
+	}
+	output.Cancelled = state.cancelled != 0
+	output.To = int32(state.to)
+	return output, nil
+}
+
+func (r *Runtime) HandlePlayerDeath(input PlayerDeathInput, keepInventory bool) (bool, error) {
+	if r == nil || r.ptr == nil {
+		return keepInventory, errors.New("native runtime is closed")
+	}
+	source := C.CBytes([]byte(input.Source))
+	defer C.free(source)
+	var nativeInput C.DfPlayerDeathInput
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.source = C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))}
+	var state C.DfPlayerDeathState
+	if keepInventory {
+		state.keep_inventory = 1
+	}
+	if status := C.bg_runtime_handle_player_death(r.ptr, &nativeInput, &state); status != C.DF_STATUS_OK {
+		return keepInventory, fmt.Errorf("native death handler failed with status %d", int32(status))
+	}
+	return state.keep_inventory != 0, nil
 }
 
 func nativeBlockPos(position BlockPos) C.DfBlockPos {

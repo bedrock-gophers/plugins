@@ -21,6 +21,8 @@ typedef DfStatus (*RuntimeHurtFn)(DfRuntime *, const DfPlayerHurtInput *, DfPlay
 typedef DfStatus (*RuntimeHealFn)(DfRuntime *, const DfPlayerHealInput *, DfPlayerHealState *);
 typedef DfStatus (*RuntimeBlockBreakFn)(DfRuntime *, const DfPlayerBlockBreakInput *, DfPlayerBlockBreakState *);
 typedef DfStatus (*RuntimeBlockPlaceFn)(DfRuntime *, const DfPlayerBlockPlaceInput *, DfPlayerBlockPlaceState *);
+typedef DfStatus (*RuntimeFoodLossFn)(DfRuntime *, const DfPlayerFoodLossInput *, DfPlayerFoodLossState *);
+typedef DfStatus (*RuntimeDeathFn)(DfRuntime *, const DfPlayerDeathInput *, DfPlayerDeathState *);
 
 struct BgRuntimeLibrary {
     void *handle;
@@ -42,6 +44,8 @@ struct BgRuntimeLibrary {
     RuntimeHealFn handle_heal;
     RuntimeBlockBreakFn handle_block_break;
     RuntimeBlockPlaceFn handle_block_place;
+    RuntimeFoodLossFn handle_food_loss;
+    RuntimeDeathFn handle_death;
 };
 
 static void write_error(uint8_t *error, uint64_t capacity, const char *message) {
@@ -98,7 +102,9 @@ DfStatus bg_runtime_open(
     RuntimeHealFn handle_heal = (RuntimeHealFn) load_symbol(handle, "df_runtime_handle_player_heal", error, error_capacity);
     RuntimeBlockBreakFn handle_block_break = (RuntimeBlockBreakFn) load_symbol(handle, "df_runtime_handle_player_block_break", error, error_capacity);
     RuntimeBlockPlaceFn handle_block_place = (RuntimeBlockPlaceFn) load_symbol(handle, "df_runtime_handle_player_block_place", error, error_capacity);
-    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_move == NULL || handle_chat == NULL || handle_join == NULL || handle_quit == NULL || handle_hurt == NULL || handle_heal == NULL || handle_block_break == NULL || handle_block_place == NULL) {
+    RuntimeFoodLossFn handle_food_loss = (RuntimeFoodLossFn) load_symbol(handle, "df_runtime_handle_player_food_loss", error, error_capacity);
+    RuntimeDeathFn handle_death = (RuntimeDeathFn) load_symbol(handle, "df_runtime_handle_player_death", error, error_capacity);
+    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_move == NULL || handle_chat == NULL || handle_join == NULL || handle_quit == NULL || handle_hurt == NULL || handle_heal == NULL || handle_block_break == NULL || handle_block_place == NULL || handle_food_loss == NULL || handle_death == NULL) {
         dlclose(handle);
         return DF_STATUS_ERROR;
     }
@@ -140,6 +146,8 @@ DfStatus bg_runtime_open(
     library->handle_heal = handle_heal;
     library->handle_block_break = handle_block_break;
     library->handle_block_place = handle_block_place;
+    library->handle_food_loss = handle_food_loss;
+    library->handle_death = handle_death;
     *out = library;
     return DF_STATUS_OK;
 }
@@ -298,6 +306,28 @@ DfStatus bg_runtime_handle_player_block_place(
         return DF_STATUS_ERROR;
     }
     return library->handle_block_place(library->runtime, input, state);
+}
+
+DfStatus bg_runtime_handle_player_food_loss(
+    BgRuntimeLibrary *library,
+    const DfPlayerFoodLossInput *input,
+    DfPlayerFoodLossState *state
+) {
+    if (library == NULL || input == NULL || state == NULL) {
+        return DF_STATUS_ERROR;
+    }
+    return library->handle_food_loss(library->runtime, input, state);
+}
+
+DfStatus bg_runtime_handle_player_death(
+    BgRuntimeLibrary *library,
+    const DfPlayerDeathInput *input,
+    DfPlayerDeathState *state
+) {
+    if (library == NULL || input == NULL || state == NULL) {
+        return DF_STATUS_ERROR;
+    }
+    return library->handle_death(library->runtime, input, state);
 }
 
 uint64_t bg_runtime_handle_player_move_value(

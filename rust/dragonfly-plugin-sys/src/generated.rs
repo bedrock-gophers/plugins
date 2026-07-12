@@ -192,6 +192,35 @@ pub struct DfPlayerBlockPlaceState {
     pub cancelled: u8,
 }
 
+pub const DF_EVENT_PLAYER_FOOD_LOSS: DfEventId = 9;
+pub const DF_SUBSCRIPTION_PLAYER_FOOD_LOSS: u64 = 1u64 << 8;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerFoodLossInput {
+    pub player: DfPlayerId,
+    pub from: i32,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerFoodLossState {
+    pub cancelled: u8,
+    pub to: i32,
+}
+
+pub const DF_EVENT_PLAYER_DEATH: DfEventId = 10;
+pub const DF_SUBSCRIPTION_PLAYER_DEATH: u64 = 1u64 << 9;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerDeathInput {
+    pub player: DfPlayerId,
+    pub source: DfStringView,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerDeathState {
+    pub keep_inventory: u8,
+}
+
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;

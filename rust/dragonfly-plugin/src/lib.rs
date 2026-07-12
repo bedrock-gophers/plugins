@@ -936,6 +936,80 @@ impl<'a> PlayerHealEvent<'a> {
     }
 }
 
+pub struct PlayerFoodLossEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerFoodLossInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerFoodLossState,
+}
+
+impl<'a> PlayerFoodLossEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active food-loss callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerFoodLossInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerFoodLossState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+
+    pub fn from(&self) -> i32 {
+        self.input.from
+    }
+
+    pub fn to(&self) -> i32 {
+        self.state.to
+    }
+
+    pub fn set_to(&mut self, food: i32) {
+        self.state.to = food.clamp(0, 20);
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
+pub struct PlayerDeathEvent<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerDeathInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerDeathState,
+}
+
+impl<'a> PlayerDeathEvent<'a> {
+    /// # Safety
+    /// Both references must belong to the same active death callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerDeathInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerDeathState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+
+    pub fn source(&self) -> &str {
+        unsafe { string_view(self.input.source) }
+    }
+
+    pub fn keep_inventory(&self) -> bool {
+        self.state.keep_inventory != 0
+    }
+
+    pub fn set_keep_inventory(&mut self, keep: bool) {
+        self.state.keep_inventory = u8::from(keep);
+    }
+}
+
 pub trait Plugin: Default + Send + Sync + 'static {
     fn on_enable(&self) {}
     fn on_disable(&self) {}
@@ -947,6 +1021,8 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_heal(&self, _event: &mut PlayerHealEvent<'_>) {}
     fn on_block_break(&self, _event: &mut PlayerBlockBreakEvent<'_>) {}
     fn on_block_place(&self, _event: &mut PlayerBlockPlaceEvent<'_>) {}
+    fn on_food_loss(&self, _event: &mut PlayerFoodLossEvent<'_>) {}
+    fn on_death(&self, _event: &mut PlayerDeathEvent<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }

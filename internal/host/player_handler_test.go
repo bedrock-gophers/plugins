@@ -31,6 +31,10 @@ type runtimeStub struct {
 	blockBreakOutput    native.PlayerBlockBreakOutput
 	blockPlaceInput     native.PlayerBlockPlaceInput
 	blockPlaceCancelled bool
+	foodLossInput       native.PlayerFoodLossInput
+	foodLossOutput      native.PlayerFoodLossOutput
+	deathInput          native.PlayerDeathInput
+	keepInventory       bool
 }
 
 func (r *runtimeStub) HandlePlayerJoin(input native.PlayerJoinInput, _ bool) (bool, error) {
@@ -56,6 +60,14 @@ func (r *runtimeStub) HandlePlayerBlockBreak(input native.PlayerBlockBreakInput,
 func (r *runtimeStub) HandlePlayerBlockPlace(input native.PlayerBlockPlaceInput, _ bool) (bool, error) {
 	r.blockPlaceInput = input
 	return r.blockPlaceCancelled, nil
+}
+func (r *runtimeStub) HandlePlayerFoodLoss(input native.PlayerFoodLossInput, _ bool) (native.PlayerFoodLossOutput, error) {
+	r.foodLossInput = input
+	return r.foodLossOutput, nil
+}
+func (r *runtimeStub) HandlePlayerDeath(input native.PlayerDeathInput, _ bool) (bool, error) {
+	r.deathInput = input
+	return r.keepInventory, nil
 }
 
 func (r *runtimeStub) Subscriptions() uint64 { return r.subscriptions }
@@ -199,6 +211,33 @@ func TestPlayerHandlerBlockBreakAndPlace(t *testing.T) {
 		}
 		if runtime.blockBreakInput.Position != (native.BlockPos{X: 1, Y: 2, Z: 3}) || runtime.blockPlaceInput.Position != (native.BlockPos{X: 4, Y: 5, Z: 6}) {
 			t.Fatalf("break=%+v place=%+v", runtime.blockBreakInput, runtime.blockPlaceInput)
+		}
+	})
+}
+
+func TestPlayerHandlerFoodLossAndDeath(t *testing.T) {
+	runtime := &runtimeStub{
+		subscriptions:  native.PlayerFoodLossSubscription | native.PlayerDeathSubscription,
+		foodLossOutput: native.PlayerFoodLossOutput{Cancelled: true, To: 8},
+		keepInventory:  true,
+	}
+	withPlayer(t, func(p *player.Player) {
+		players := NewPlayers()
+		players.Register(p, 15)
+		handler := NewPlayerHandler(runtime, nil, players)
+		foodContext := event.C(p)
+		food := 9
+		handler.HandleFoodLoss(foodContext, 10, &food)
+		if !foodContext.Cancelled() || food != 8 {
+			t.Fatalf("cancelled=%v food=%d", foodContext.Cancelled(), food)
+		}
+		keepInventory := false
+		handler.HandleDeath(p, nil, &keepInventory)
+		if !keepInventory {
+			t.Fatal("keep inventory was not applied")
+		}
+		if runtime.foodLossInput.Player.Generation != 15 || runtime.deathInput.Player.Generation != 15 {
+			t.Fatalf("food=%+v death=%+v", runtime.foodLossInput, runtime.deathInput)
 		}
 	})
 }

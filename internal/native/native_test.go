@@ -231,6 +231,27 @@ func TestPlayerBlockBreakAndPlace(t *testing.T) {
 	}
 }
 
+func TestPlayerFoodLossAndDeath(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerFoodLossSubscription == 0 || runtime.Subscriptions()&PlayerDeathSubscription == 0 {
+		t.Fatal("food-loss or death subscription missing")
+	}
+	food, err := runtime.HandlePlayerFoodLoss(PlayerFoodLossInput{From: 10, To: 9}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if food.Cancelled || food.To != 9 {
+		t.Fatalf("food loss = %+v", food)
+	}
+	keep, err := runtime.HandlePlayerDeath(PlayerDeathInput{Source: "testDamageSource"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keep {
+		t.Fatal("lifecycle logger changed keep inventory")
+	}
+}
+
 func TestCancellationIsMonotonic(t *testing.T) {
 	runtime := openTestRuntime(t)
 	cancelled, err := runtime.HandlePlayerMove(PlayerMoveInput{NewPosition: Vec3{Y: 64}}, true)
