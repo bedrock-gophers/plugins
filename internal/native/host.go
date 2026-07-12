@@ -6,15 +6,7 @@ import (
 	"time"
 )
 
-type PlayerTextKind uint32
 type PlayerTransformKind uint32
-
-const (
-	PlayerTextMessage PlayerTextKind = iota
-	PlayerTextTip
-	PlayerTextPopup
-	PlayerTextJukeboxPopup
-)
 
 const (
 	PlayerTransformTeleport PlayerTransformKind = iota

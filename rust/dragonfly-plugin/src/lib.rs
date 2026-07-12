@@ -194,22 +194,6 @@ impl Player {
         })
     }
 
-    pub fn message(&self, message: &str) {
-        self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_MESSAGE, message);
-    }
-
-    pub fn send_tip(&self, message: &str) {
-        self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_TIP, message);
-    }
-
-    pub fn send_popup(&self, message: &str) {
-        self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_POPUP, message);
-    }
-
-    pub fn send_jukebox_popup(&self, message: &str) {
-        self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_JUKEBOX_POPUP, message);
-    }
-
     pub fn send_title(&self, title: &Title) {
         let host = HOST_API.load(Ordering::Acquire);
         let Some(host) = (unsafe { host.as_ref() }) else {

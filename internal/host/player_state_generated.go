@@ -10,6 +10,24 @@ import (
 	"github.com/df-mc/dragonfly/server/world"
 )
 
+func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, message string) bool {
+	switch kind {
+	case native.PlayerTextMessage:
+		connected.Message(message)
+	case native.PlayerTextTip:
+		connected.SendTip(message)
+	case native.PlayerTextPopup:
+		connected.SendPopup(message)
+	case native.PlayerTextJukeboxPopup:
+		connected.SendJukeboxPopup(message)
+	case native.PlayerTextNameTag:
+		connected.SetNameTag(message)
+	default:
+		return false
+	}
+	return true
+}
+
 func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value native.PlayerStateValue) bool {
 	switch kind {
 	case native.PlayerStateGameMode:
@@ -48,6 +66,29 @@ func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value
 			return false
 		}
 		connected.SetExperienceProgress(value.Number)
+	case native.PlayerStateScale:
+		if math.IsNaN(value.Number) || math.IsInf(value.Number, 0) {
+			return false
+		}
+		connected.SetScale(value.Number)
+	case native.PlayerStateInvisible:
+		if value.Integer != 0 && value.Integer != 1 {
+			return false
+		}
+		if value.Integer != 0 {
+			connected.SetInvisible()
+		} else {
+			connected.SetVisible()
+		}
+	case native.PlayerStateImmobile:
+		if value.Integer != 0 && value.Integer != 1 {
+			return false
+		}
+		if value.Integer != 0 {
+			connected.SetImmobile()
+		} else {
+			connected.SetMobile()
+		}
 	default:
 		return false
 	}
@@ -69,6 +110,18 @@ func readPlayerState(connected *player.Player, kind native.PlayerStateKind) (nat
 		return native.PlayerStateValue{Integer: int64(connected.ExperienceLevel())}, true
 	case native.PlayerStateExperienceProgress:
 		return native.PlayerStateValue{Number: connected.ExperienceProgress()}, true
+	case native.PlayerStateScale:
+		return native.PlayerStateValue{Number: connected.Scale()}, true
+	case native.PlayerStateInvisible:
+		if connected.Invisible() {
+			return native.PlayerStateValue{Integer: 1}, true
+		}
+		return native.PlayerStateValue{}, true
+	case native.PlayerStateImmobile:
+		if connected.Immobile() {
+			return native.PlayerStateValue{Integer: 1}, true
+		}
+		return native.PlayerStateValue{}, true
 	default:
 		return native.PlayerStateValue{}, false
 	}

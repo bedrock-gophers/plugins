@@ -57,6 +57,38 @@ states:
     rust_set: set_experience_progress
     rust_get: experience_progress
     validate: unit_interval
+  - name: scale
+    id: 8
+    type: f64
+    set: SetScale
+    get: Scale
+    rust_set: set_scale
+    rust_get: scale
+  - name: invisible
+    id: 9
+    type: bool
+    set: SetInvisible
+    unset: SetVisible
+    get: Invisible
+    rust_set: set_invisible
+    rust_get: invisible
+    adapter: toggle
+  - name: immobile
+    id: 10
+    type: bool
+    set: SetImmobile
+    unset: SetMobile
+    get: Immobile
+    rust_set: set_immobile
+    rust_get: immobile
+    adapter: toggle
+
+texts:
+  - { name: message, id: 0, set: Message, rust: message }
+  - { name: tip, id: 1, set: SendTip, rust: send_tip }
+  - { name: popup, id: 2, set: SendPopup, rust: send_popup }
+  - { name: jukebox_popup, id: 3, set: SendJukeboxPopup, rust: send_jukebox_popup }
+  - { name: name_tag, id: 4, set: SetNameTag, rust: set_name_tag }
 
 effects:
   - { name: speed, id: 1, kind: lasting }

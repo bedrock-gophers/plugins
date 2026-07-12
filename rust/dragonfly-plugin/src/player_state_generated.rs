@@ -34,6 +34,11 @@ pub enum EffectType {
 }
 
 impl Player {
+    pub fn message(&self, value: &str) { self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_MESSAGE, value); }
+    pub fn send_tip(&self, value: &str) { self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_TIP, value); }
+    pub fn send_popup(&self, value: &str) { self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_POPUP, value); }
+    pub fn send_jukebox_popup(&self, value: &str) { self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_JUKEBOX_POPUP, value); }
+    pub fn set_name_tag(&self, value: &str) { self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_NAME_TAG, value); }
     pub fn set_game_mode(&self, value: GameMode) { self.set_state(dragonfly_plugin_sys::DF_PLAYER_STATE_GAME_MODE, 0.0, value as i64); }
     pub fn game_mode(&self) -> GameMode { match self.state(dragonfly_plugin_sys::DF_PLAYER_STATE_GAME_MODE).integer { 1 => GameMode::Creative, 2 => GameMode::Adventure, 3 => GameMode::Spectator, _ => GameMode::Survival } }
     pub fn heal(&self, value: f64) { self.set_state(dragonfly_plugin_sys::DF_PLAYER_STATE_HEAL, value, 0); }
@@ -47,4 +52,10 @@ impl Player {
     pub fn experience_level(&self) -> i32 { self.state(dragonfly_plugin_sys::DF_PLAYER_STATE_EXPERIENCE_LEVEL).integer as i32 }
     pub fn set_experience_progress(&self, value: f64) { self.set_state(dragonfly_plugin_sys::DF_PLAYER_STATE_EXPERIENCE_PROGRESS, value, 0); }
     pub fn experience_progress(&self) -> f64 { self.state(dragonfly_plugin_sys::DF_PLAYER_STATE_EXPERIENCE_PROGRESS).number }
+    pub fn set_scale(&self, value: f64) { self.set_state(dragonfly_plugin_sys::DF_PLAYER_STATE_SCALE, value, 0); }
+    pub fn scale(&self) -> f64 { self.state(dragonfly_plugin_sys::DF_PLAYER_STATE_SCALE).number }
+    pub fn set_invisible(&self, value: bool) { self.set_state(dragonfly_plugin_sys::DF_PLAYER_STATE_INVISIBLE, 0.0, value as i64); }
+    pub fn invisible(&self) -> bool { self.state(dragonfly_plugin_sys::DF_PLAYER_STATE_INVISIBLE).integer != 0 }
+    pub fn set_immobile(&self, value: bool) { self.set_state(dragonfly_plugin_sys::DF_PLAYER_STATE_IMMOBILE, 0.0, value as i64); }
+    pub fn immobile(&self) -> bool { self.state(dragonfly_plugin_sys::DF_PLAYER_STATE_IMMOBILE).integer != 0 }
 }

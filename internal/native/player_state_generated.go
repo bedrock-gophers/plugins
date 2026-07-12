@@ -15,6 +15,9 @@ const (
 	PlayerStateHealth             PlayerStateKind = 5
 	PlayerStateExperienceLevel    PlayerStateKind = 6
 	PlayerStateExperienceProgress PlayerStateKind = 7
+	PlayerStateScale              PlayerStateKind = 8
+	PlayerStateInvisible          PlayerStateKind = 9
+	PlayerStateImmobile           PlayerStateKind = 10
 )
 
 type PlayerStateValue struct {
@@ -70,3 +73,13 @@ type PlayerEffect struct {
 	Infinite        bool
 	ParticlesHidden bool
 }
+
+type PlayerTextKind uint32
+
+const (
+	PlayerTextMessage      PlayerTextKind = 0
+	PlayerTextTip          PlayerTextKind = 1
+	PlayerTextPopup        PlayerTextKind = 2
+	PlayerTextJukeboxPopup PlayerTextKind = 3
+	PlayerTextNameTag      PlayerTextKind = 4
+)

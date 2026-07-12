@@ -22,13 +22,14 @@ typedef struct { int32_t x; int32_t y; int32_t z; } DfBlockPos;
 typedef struct { const uint8_t *data; uint64_t len; } DfStringView;
 typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffer;
 typedef struct { DfStringView identifier; int32_t metadata; int32_t count; int32_t damage; } DfItemStackView;
+#define DF_PLAYER_TRANSFORM_TELEPORT 0u
+#define DF_PLAYER_TRANSFORM_MOVE 1u
+#define DF_PLAYER_TRANSFORM_VELOCITY 2u
 #define DF_PLAYER_TEXT_MESSAGE 0u
 #define DF_PLAYER_TEXT_TIP 1u
 #define DF_PLAYER_TEXT_POPUP 2u
 #define DF_PLAYER_TEXT_JUKEBOX_POPUP 3u
-#define DF_PLAYER_TRANSFORM_TELEPORT 0u
-#define DF_PLAYER_TRANSFORM_MOVE 1u
-#define DF_PLAYER_TRANSFORM_VELOCITY 2u
+#define DF_PLAYER_TEXT_NAME_TAG 4u
 #define DF_PLAYER_STATE_GAME_MODE 0u
 #define DF_PLAYER_STATE_HEAL 1u
 #define DF_PLAYER_STATE_HURT 2u
@@ -37,6 +38,9 @@ typedef struct { DfStringView identifier; int32_t metadata; int32_t count; int32
 #define DF_PLAYER_STATE_HEALTH 5u
 #define DF_PLAYER_STATE_EXPERIENCE_LEVEL 6u
 #define DF_PLAYER_STATE_EXPERIENCE_PROGRESS 7u
+#define DF_PLAYER_STATE_SCALE 8u
+#define DF_PLAYER_STATE_INVISIBLE 9u
+#define DF_PLAYER_STATE_IMMOBILE 10u
 #define DF_EFFECT_SPEED 1u
 #define DF_EFFECT_SLOWNESS 2u
 #define DF_EFFECT_HASTE 3u

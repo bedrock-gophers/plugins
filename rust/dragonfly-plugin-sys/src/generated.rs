@@ -35,13 +35,14 @@ impl Default for DfStringBuffer {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfItemStackView { pub identifier: DfStringView, pub metadata: i32, pub count: i32, pub damage: i32 }
+pub const DF_PLAYER_TRANSFORM_TELEPORT: u32 = 0;
+pub const DF_PLAYER_TRANSFORM_MOVE: u32 = 1;
+pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
 pub const DF_PLAYER_TEXT_MESSAGE: u32 = 0;
 pub const DF_PLAYER_TEXT_TIP: u32 = 1;
 pub const DF_PLAYER_TEXT_POPUP: u32 = 2;
 pub const DF_PLAYER_TEXT_JUKEBOX_POPUP: u32 = 3;
-pub const DF_PLAYER_TRANSFORM_TELEPORT: u32 = 0;
-pub const DF_PLAYER_TRANSFORM_MOVE: u32 = 1;
-pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
+pub const DF_PLAYER_TEXT_NAME_TAG: u32 = 4;
 pub const DF_PLAYER_STATE_GAME_MODE: u32 = 0;
 pub const DF_PLAYER_STATE_HEAL: u32 = 1;
 pub const DF_PLAYER_STATE_HURT: u32 = 2;
@@ -50,6 +51,9 @@ pub const DF_PLAYER_STATE_MAX_HEALTH: u32 = 4;
 pub const DF_PLAYER_STATE_HEALTH: u32 = 5;
 pub const DF_PLAYER_STATE_EXPERIENCE_LEVEL: u32 = 6;
 pub const DF_PLAYER_STATE_EXPERIENCE_PROGRESS: u32 = 7;
+pub const DF_PLAYER_STATE_SCALE: u32 = 8;
+pub const DF_PLAYER_STATE_INVISIBLE: u32 = 9;
+pub const DF_PLAYER_STATE_IMMOBILE: u32 = 10;
 pub const DF_EFFECT_SPEED: u32 = 1;
 pub const DF_EFFECT_SLOWNESS: u32 = 2;
 pub const DF_EFFECT_HASTE: u32 = 3;

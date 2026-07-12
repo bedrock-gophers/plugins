@@ -37,6 +37,14 @@ type field struct {
 type playerSchema struct {
 	States  []playerState `yaml:"states"`
 	Effects []effectType  `yaml:"effects"`
+	Texts   []playerText  `yaml:"texts"`
+}
+
+type playerText struct {
+	Name string `yaml:"name"`
+	ID   uint32 `yaml:"id"`
+	Set  string `yaml:"set"`
+	Rust string `yaml:"rust"`
 }
 
 type effectType struct {
@@ -50,6 +58,7 @@ type playerState struct {
 	ID       uint32 `yaml:"id"`
 	Type     string `yaml:"type"`
 	Set      string `yaml:"set"`
+	Unset    string `yaml:"unset"`
 	Get      string `yaml:"get"`
 	RustSet  string `yaml:"rust_set"`
 	RustGet  string `yaml:"rust_get"`
@@ -73,7 +82,7 @@ func main() {
 	outputs := map[string][]byte{
 		filepath.Join(*root, "abi", "include", "dragonfly_plugin.h"):                         generateC(events, player),
 		filepath.Join(*root, "rust", "dragonfly-plugin-sys", "src", "generated.rs"):          generateRust(events, player),
-		filepath.Join(*root, "internal", "host", "player_state_generated.go"):                generateGoPlayerStates(player.States),
+		filepath.Join(*root, "internal", "host", "player_state_generated.go"):                generateGoPlayerStates(player),
 		filepath.Join(*root, "internal", "native", "player_state_generated.go"):              generateGoNativePlayerStates(player),
 		filepath.Join(*root, "rust", "dragonfly-plugin", "src", "player_state_generated.rs"): generateRustPlayerStates(player),
 	}
@@ -99,8 +108,8 @@ func readPlayer(path string) (playerSchema, error) {
 		return playerSchema{}, fmt.Errorf("decode %s: %w", path, err)
 	}
 	ids, names := map[uint32]bool{}, map[string]bool{}
-	validTypes := map[string]bool{"f64": true, "i32": true, "game_mode": true}
-	validAdapters := map[string]bool{"": true, "game_mode": true, "healing_source": true, "damage_source": true}
+	validTypes := map[string]bool{"f64": true, "i32": true, "bool": true, "game_mode": true}
+	validAdapters := map[string]bool{"": true, "game_mode": true, "healing_source": true, "damage_source": true, "toggle": true}
 	validValidation := map[string]bool{"": true, "non_negative": true, "positive": true, "unit_interval": true}
 	for _, state := range schema.States {
 		if state.Name == "" || names[state.Name] || ids[state.ID] || !validTypes[state.Type] || !validAdapters[state.Adapter] || !validValidation[state.Validate] {
@@ -108,6 +117,9 @@ func readPlayer(path string) (playerSchema, error) {
 		}
 		if state.Set == "" && state.Get == "" || state.Set != "" && state.RustSet == "" || state.Get != "" && state.RustGet == "" {
 			return playerSchema{}, fmt.Errorf("incomplete player state %+v", state)
+		}
+		if state.Adapter == "toggle" && (state.Type != "bool" || state.Unset == "") || state.Unset != "" && state.Adapter != "toggle" {
+			return playerSchema{}, fmt.Errorf("invalid toggle player state %+v", state)
 		}
 		ids[state.ID], names[state.Name] = true, true
 	}
@@ -120,6 +132,14 @@ func readPlayer(path string) (playerSchema, error) {
 		effectIDs[effect.ID], effectNames[effect.Name] = true, true
 	}
 	sort.Slice(schema.Effects, func(i, j int) bool { return schema.Effects[i].ID < schema.Effects[j].ID })
+	textIDs, textNames := map[uint32]bool{}, map[string]bool{}
+	for _, text := range schema.Texts {
+		if text.Name == "" || text.Set == "" || text.Rust == "" || textIDs[text.ID] || textNames[text.Name] {
+			return playerSchema{}, fmt.Errorf("invalid or duplicate player text %+v", text)
+		}
+		textIDs[text.ID], textNames[text.Name] = true, true
+	}
+	sort.Slice(schema.Texts, func(i, j int) bool { return schema.Texts[i].ID < schema.Texts[j].ID })
 	return schema, nil
 }
 
@@ -208,14 +228,13 @@ typedef struct { int32_t x; int32_t y; int32_t z; } DfBlockPos;
 typedef struct { const uint8_t *data; uint64_t len; } DfStringView;
 typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffer;
 typedef struct { DfStringView identifier; int32_t metadata; int32_t count; int32_t damage; } DfItemStackView;
-#define DF_PLAYER_TEXT_MESSAGE 0u
-#define DF_PLAYER_TEXT_TIP 1u
-#define DF_PLAYER_TEXT_POPUP 2u
-#define DF_PLAYER_TEXT_JUKEBOX_POPUP 3u
 #define DF_PLAYER_TRANSFORM_TELEPORT 0u
 #define DF_PLAYER_TRANSFORM_MOVE 1u
 #define DF_PLAYER_TRANSFORM_VELOCITY 2u
 `)
+	for _, text := range player.Texts {
+		fmt.Fprintf(&b, "#define DF_PLAYER_TEXT_%s %du\n", strings.ToUpper(text.Name), text.ID)
+	}
 	for _, state := range player.States {
 		fmt.Fprintf(&b, "#define DF_PLAYER_STATE_%s %du\n", strings.ToUpper(state.Name), state.ID)
 	}
@@ -383,14 +402,13 @@ impl Default for DfStringBuffer {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfItemStackView { pub identifier: DfStringView, pub metadata: i32, pub count: i32, pub damage: i32 }
-pub const DF_PLAYER_TEXT_MESSAGE: u32 = 0;
-pub const DF_PLAYER_TEXT_TIP: u32 = 1;
-pub const DF_PLAYER_TEXT_POPUP: u32 = 2;
-pub const DF_PLAYER_TEXT_JUKEBOX_POPUP: u32 = 3;
 pub const DF_PLAYER_TRANSFORM_TELEPORT: u32 = 0;
 pub const DF_PLAYER_TRANSFORM_MOVE: u32 = 1;
 pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
 `)
+	for _, text := range player.Texts {
+		fmt.Fprintf(&b, "pub const DF_PLAYER_TEXT_%s: u32 = %d;\n", strings.ToUpper(text.Name), text.ID)
+	}
 	for _, state := range player.States {
 		fmt.Fprintf(&b, "pub const DF_PLAYER_STATE_%s: u32 = %d;\n", strings.ToUpper(state.Name), state.ID)
 	}
@@ -512,12 +530,17 @@ unsafe impl Sync for DfPluginApiV1 {}
 	return b.Bytes()
 }
 
-func generateGoPlayerStates(states []playerState) []byte {
+func generateGoPlayerStates(playerSchema playerSchema) []byte {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "// Code generated by abi-gen v%s. DO NOT EDIT.\n\n", generatorVersion)
 	b.WriteString("package host\n\nimport (\n\t\"math\"\n\n\t\"github.com/bedrock-gophers/plugins/internal/native\"\n\t\"github.com/df-mc/dragonfly/server/player\"\n\t\"github.com/df-mc/dragonfly/server/world\"\n)\n\n")
+	b.WriteString("func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, message string) bool {\n\tswitch kind {\n")
+	for _, text := range playerSchema.Texts {
+		fmt.Fprintf(&b, "\tcase native.PlayerText%s:\n\t\tconnected.%s(message)\n", title(text.Name), text.Set)
+	}
+	b.WriteString("\tdefault:\n\t\treturn false\n\t}\n\treturn true\n}\n\n")
 	b.WriteString("func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value native.PlayerStateValue) bool {\n\tswitch kind {\n")
-	for _, state := range states {
+	for _, state := range playerSchema.States {
 		if state.Set == "" {
 			continue
 		}
@@ -531,6 +554,8 @@ func generateGoPlayerStates(states []playerState) []byte {
 			fmt.Fprintf(&b, "\t\tconnected.%s(value.Number, pluginHealingSource{})\n", state.Set)
 		case "damage_source":
 			fmt.Fprintf(&b, "\t\tconnected.%s(value.Number, pluginDamageSource{})\n", state.Set)
+		case "toggle":
+			fmt.Fprintf(&b, "\t\tif value.Integer != 0 { connected.%s() } else { connected.%s() }\n", state.Set, state.Unset)
 		default:
 			if state.Type == "f64" {
 				fmt.Fprintf(&b, "\t\tconnected.%s(value.Number)\n", state.Set)
@@ -541,13 +566,15 @@ func generateGoPlayerStates(states []playerState) []byte {
 	}
 	b.WriteString("\tdefault:\n\t\treturn false\n\t}\n\treturn true\n}\n\n")
 	b.WriteString("func readPlayerState(connected *player.Player, kind native.PlayerStateKind) (native.PlayerStateValue, bool) {\n\tswitch kind {\n")
-	for _, state := range states {
+	for _, state := range playerSchema.States {
 		if state.Get == "" {
 			continue
 		}
 		fmt.Fprintf(&b, "\tcase native.PlayerState%s:\n", title(state.Name))
 		if state.Adapter == "game_mode" {
 			fmt.Fprintf(&b, "\t\tvalue, ok := world.GameModeID(connected.%s())\n\t\treturn native.PlayerStateValue{Integer: int64(value)}, ok\n", state.Get)
+		} else if state.Type == "bool" {
+			fmt.Fprintf(&b, "\t\tif connected.%s() { return native.PlayerStateValue{Integer: 1}, true }\n\t\treturn native.PlayerStateValue{}, true\n", state.Get)
 		} else if state.Type == "f64" {
 			fmt.Fprintf(&b, "\t\treturn native.PlayerStateValue{Number: connected.%s()}, true\n", state.Get)
 		} else {
@@ -570,6 +597,11 @@ func generateGoNativePlayerStates(player playerSchema) []byte {
 		fmt.Fprintf(&b, "\tEffect%s EffectType = %d\n", title(effect.Name), effect.ID)
 	}
 	b.WriteString(")\n\ntype PlayerEffectOperation uint32\n\nconst (\n\tPlayerEffectAdd PlayerEffectOperation = iota\n\tPlayerEffectRemove\n)\n\ntype PlayerEffect struct {\n\tType EffectType\n\tLevel int32\n\tDuration time.Duration\n\tAmbient bool\n\tInfinite bool\n\tParticlesHidden bool\n}\n")
+	b.WriteString("\ntype PlayerTextKind uint32\n\nconst (\n")
+	for _, text := range player.Texts {
+		fmt.Fprintf(&b, "\tPlayerText%s PlayerTextKind = %d\n", title(text.Name), text.ID)
+	}
+	b.WriteString(")\n")
 	return b.Bytes()
 }
 
@@ -594,6 +626,9 @@ func generateGoValidation(b *bytes.Buffer, state playerState) {
 		}
 		b.WriteString(" { return false }\n")
 	}
+	if state.Type == "bool" {
+		b.WriteString("\t\tif value.Integer != 0 && value.Integer != 1 { return false }\n")
+	}
 }
 
 func generateRustPlayerStates(player playerSchema) []byte {
@@ -605,6 +640,9 @@ func generateRustPlayerStates(player playerSchema) []byte {
 	}
 	b.WriteString("}\n\n")
 	b.WriteString("impl Player {\n")
+	for _, text := range player.Texts {
+		fmt.Fprintf(&b, "    pub fn %s(&self, value: &str) { self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_%s, value); }\n", text.Rust, strings.ToUpper(text.Name))
+	}
 	for _, state := range player.States {
 		constant := "dragonfly_plugin_sys::DF_PLAYER_STATE_" + strings.ToUpper(state.Name)
 		if state.Set != "" {
@@ -615,6 +653,8 @@ func generateRustPlayerStates(player playerSchema) []byte {
 				fmt.Fprintf(&b, "    pub fn %s(&self, value: f64) { self.set_state(%s, value, 0); }\n", state.RustSet, constant)
 			case "i32":
 				fmt.Fprintf(&b, "    pub fn %s(&self, value: i32) { self.set_state(%s, 0.0, i64::from(value)); }\n", state.RustSet, constant)
+			case "bool":
+				fmt.Fprintf(&b, "    pub fn %s(&self, value: bool) { self.set_state(%s, 0.0, value as i64); }\n", state.RustSet, constant)
 			}
 		}
 		if state.Get != "" {
@@ -625,6 +665,8 @@ func generateRustPlayerStates(player playerSchema) []byte {
 				fmt.Fprintf(&b, "    pub fn %s(&self) -> f64 { self.state(%s).number }\n", state.RustGet, constant)
 			case "i32":
 				fmt.Fprintf(&b, "    pub fn %s(&self) -> i32 { self.state(%s).integer as i32 }\n", state.RustGet, constant)
+			case "bool":
+				fmt.Fprintf(&b, "    pub fn %s(&self) -> bool { self.state(%s).integer != 0 }\n", state.RustGet, constant)
 			}
 		}
 	}

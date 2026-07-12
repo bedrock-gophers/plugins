@@ -267,6 +267,43 @@ func TestPlayerEffectHostCalls(t *testing.T) {
 	}
 }
 
+func TestPlayerIdentityHostCalls(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{state: PlayerStateValue{Number: 1.5, Integer: 1}}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := PlayerID{Generation: 10}
+	for _, arguments := range []string{"name-tag Rust Player", "scale 1.5", "invisible true", "immobile true"} {
+		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
+		})
+		if err != nil || output.Failed {
+			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
+		}
+	}
+	if !slices.Equal(host.kinds, []PlayerTextKind{PlayerTextNameTag}) || !slices.Equal(host.texts, []string{"Rust Player"}) {
+		t.Fatalf("text kinds=%v values=%v", host.kinds, host.texts)
+	}
+	want := []PlayerStateKind{PlayerStateScale, PlayerStateInvisible, PlayerStateImmobile}
+	if !slices.Equal(host.states, want) || host.values[0].Number != 1.5 || host.values[1].Integer != 1 || host.values[2].Integer != 1 {
+		t.Fatalf("states=%v values=%+v", host.states, host.values)
+	}
+	if !slices.Equal(host.reads, want) {
+		t.Fatalf("reads=%v", host.reads)
+	}
+}
+
 func TestCommand(t *testing.T) {
 	runtime := openTestRuntime(t)
 	commands, err := runtime.Commands()

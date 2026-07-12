@@ -69,6 +69,9 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 			{native.PlayerStateHeal, native.PlayerStateValue{Number: 3}},
 			{native.PlayerStateExperienceLevel, native.PlayerStateValue{Integer: 12}},
 			{native.PlayerStateExperienceProgress, native.PlayerStateValue{Number: 0.5}},
+			{native.PlayerStateScale, native.PlayerStateValue{Number: 1.5}},
+			{native.PlayerStateInvisible, native.PlayerStateValue{Integer: 1}},
+			{native.PlayerStateImmobile, native.PlayerStateValue{Integer: 1}},
 			{native.PlayerStateGameMode, native.PlayerStateValue{Integer: 1}},
 		}
 		for _, change := range changes {
@@ -82,8 +85,14 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		health, _ := players.PlayerState(id, native.PlayerStateHealth)
 		level, _ := players.PlayerState(id, native.PlayerStateExperienceLevel)
 		progress, _ := players.PlayerState(id, native.PlayerStateExperienceProgress)
-		if gameMode.Integer != 1 || food.Integer != 12 || maxHealth.Number != 40 || health.Number != 19 || level.Integer != 12 || math.Abs(progress.Number-0.5) > 0.02 {
-			t.Fatalf("game mode=%+v food=%+v max=%+v health=%+v level=%+v progress=%+v", gameMode, food, maxHealth, health, level, progress)
+		scale, _ := players.PlayerState(id, native.PlayerStateScale)
+		invisible, _ := players.PlayerState(id, native.PlayerStateInvisible)
+		immobile, _ := players.PlayerState(id, native.PlayerStateImmobile)
+		if gameMode.Integer != 1 || food.Integer != 12 || maxHealth.Number != 40 || health.Number != 19 || level.Integer != 12 || math.Abs(progress.Number-0.5) > 0.02 || scale.Number != 1.5 || invisible.Integer != 1 || immobile.Integer != 1 {
+			t.Fatalf("game mode=%+v food=%+v max=%+v health=%+v level=%+v progress=%+v scale=%+v invisible=%+v immobile=%+v", gameMode, food, maxHealth, health, level, progress, scale, invisible, immobile)
+		}
+		if !players.SendPlayerText(id, native.PlayerTextNameTag, "Rust Player") || player.NameTag() != "Rust Player" {
+			t.Fatalf("name tag = %q", player.NameTag())
 		}
 		if !players.ChangePlayerEffect(id, native.PlayerEffectAdd, native.PlayerEffect{
 			Type: native.EffectSpeed, Level: 2, Duration: 30 * time.Second,

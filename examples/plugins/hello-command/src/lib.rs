@@ -186,4 +186,28 @@ impl Plugin for HelloCommand {
         context.source().remove_effect(EffectType::Speed);
         context.reply("Speed effect removed.");
     }
+
+    #[subcommand("name-tag")]
+    fn name_tag(&self, context: &mut Context<'_, Player>, name: Varargs) {
+        context.source().set_name_tag(name.value());
+        context.reply("Name tag set.");
+    }
+
+    #[subcommand("scale")]
+    fn scale(&self, context: &mut Context<'_, Player>, scale: f64) {
+        context.source().set_scale(scale);
+        context.reply(&format!("Scale: {}", context.source().scale()));
+    }
+
+    #[subcommand("invisible")]
+    fn invisible(&self, context: &mut Context<'_, Player>, invisible: bool) {
+        context.source().set_invisible(invisible);
+        context.reply(&format!("Invisible: {}", context.source().invisible()));
+    }
+
+    #[subcommand("immobile")]
+    fn immobile(&self, context: &mut Context<'_, Player>, immobile: bool) {
+        context.source().set_immobile(immobile);
+        context.reply(&format!("Immobile: {}", context.source().immobile()));
+    }
 }

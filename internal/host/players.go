@@ -112,19 +112,7 @@ func (p *Players) SendPlayerText(id native.PlayerID, kind native.PlayerTextKind,
 	if !ok {
 		return false
 	}
-	switch kind {
-	case native.PlayerTextMessage:
-		connected.Message(message)
-	case native.PlayerTextTip:
-		connected.SendTip(message)
-	case native.PlayerTextPopup:
-		connected.SendPopup(message)
-	case native.PlayerTextJukeboxPopup:
-		connected.SendJukeboxPopup(message)
-	default:
-		return false
-	}
-	return true
+	return sendPlayerText(connected, kind, message)
 }
 
 func (p *Players) SendPlayerTitle(id native.PlayerID, value native.PlayerTitle) bool {
