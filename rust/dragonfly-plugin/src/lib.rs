@@ -1645,6 +1645,14 @@ impl<'a> PlayerMoveEventData<'a> {
         Self { input, state }
     }
 
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+
+    pub fn rotation(&self) -> Rotation {
+        self.input.rotation.into()
+    }
+
     pub fn old_position(&self) -> Vec3 {
         self.input.old_position.into()
     }
@@ -2406,6 +2414,10 @@ impl<'a> PlayerChatEventData<'a> {
         state: &'a mut dragonfly_plugin_sys::DfPlayerChatState,
     ) -> Self {
         Self { input, state }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
     }
 
     pub fn message(&self) -> &str {
@@ -3618,6 +3630,49 @@ mod tests {
         let mut event = unsafe { PlayerMoveEventData::from_raw(&input, &mut state) };
         Guard.on_move(&mut event);
         assert!(event.cancelled());
+    }
+
+    #[test]
+    fn movement_exposes_player_and_rotation() {
+        let input = dragonfly_plugin_sys::DfPlayerMoveInput {
+            player: dragonfly_plugin_sys::DfPlayerId {
+                bytes: [3; 16],
+                generation: 11,
+            },
+            rotation: dragonfly_plugin_sys::DfRotation {
+                yaw: 92.5,
+                pitch: -14.25,
+            },
+            ..Default::default()
+        };
+        let mut state = dragonfly_plugin_sys::DfPlayerMoveState::default();
+        let event = unsafe { PlayerMoveEventData::from_raw(&input, &mut state) };
+
+        assert_eq!(event.player().id().uuid_bytes(), [3; 16]);
+        assert_eq!(event.player().id().generation(), 11);
+        assert_eq!(
+            event.rotation(),
+            Rotation {
+                yaw: 92.5,
+                pitch: -14.25
+            }
+        );
+    }
+
+    #[test]
+    fn chat_exposes_player() {
+        let input = dragonfly_plugin_sys::DfPlayerChatInput {
+            player: dragonfly_plugin_sys::DfPlayerId {
+                bytes: [5; 16],
+                generation: 13,
+            },
+            ..Default::default()
+        };
+        let mut state = dragonfly_plugin_sys::DfPlayerChatState::default();
+        let event = unsafe { PlayerChatEventData::from_raw(&input, &mut state) };
+
+        assert_eq!(event.player().id().uuid_bytes(), [5; 16]);
+        assert_eq!(event.player().id().generation(), 13);
     }
 
     #[test]
