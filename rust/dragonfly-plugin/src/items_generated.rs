@@ -197,6 +197,23 @@ pub mod item {
         fn identifier(&self) -> &str { "minecraft:totem_of_undying" }
     }
 
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct Beef { cooked: bool }
+
+    impl Beef {
+        pub const fn raw() -> Self { Self { cooked: false } }
+
+        pub const fn cooked() -> Self { Self { cooked: true } }
+
+        pub const fn is_cooked(self) -> bool { self.cooked }
+    }
+
+    impl Item for Beef {
+        fn identifier(&self) -> &str {
+            if self.cooked { "minecraft:cooked_beef" } else { "minecraft:beef" }
+        }
+    }
+
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub enum ToolTier {
         Wood,
@@ -319,6 +336,109 @@ pub mod item {
                 ToolTier::Iron => "minecraft:iron_hoe",
                 ToolTier::Diamond => "minecraft:diamond_hoe",
                 ToolTier::Netherite => "minecraft:netherite_hoe",
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub enum ArmourTier {
+        Leather,
+        Copper,
+        Gold,
+        Chain,
+        Iron,
+        Diamond,
+        Netherite,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct Helmet { tier: ArmourTier }
+
+    impl Helmet {
+        pub const fn new(tier: ArmourTier) -> Self { Self { tier } }
+
+        pub const fn tier(self) -> ArmourTier { self.tier }
+    }
+
+    impl Item for Helmet {
+        fn identifier(&self) -> &str {
+            match self.tier {
+                ArmourTier::Leather => "minecraft:leather_helmet",
+                ArmourTier::Copper => "minecraft:copper_helmet",
+                ArmourTier::Gold => "minecraft:golden_helmet",
+                ArmourTier::Chain => "minecraft:chainmail_helmet",
+                ArmourTier::Iron => "minecraft:iron_helmet",
+                ArmourTier::Diamond => "minecraft:diamond_helmet",
+                ArmourTier::Netherite => "minecraft:netherite_helmet",
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct Chestplate { tier: ArmourTier }
+
+    impl Chestplate {
+        pub const fn new(tier: ArmourTier) -> Self { Self { tier } }
+
+        pub const fn tier(self) -> ArmourTier { self.tier }
+    }
+
+    impl Item for Chestplate {
+        fn identifier(&self) -> &str {
+            match self.tier {
+                ArmourTier::Leather => "minecraft:leather_chestplate",
+                ArmourTier::Copper => "minecraft:copper_chestplate",
+                ArmourTier::Gold => "minecraft:golden_chestplate",
+                ArmourTier::Chain => "minecraft:chainmail_chestplate",
+                ArmourTier::Iron => "minecraft:iron_chestplate",
+                ArmourTier::Diamond => "minecraft:diamond_chestplate",
+                ArmourTier::Netherite => "minecraft:netherite_chestplate",
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct Leggings { tier: ArmourTier }
+
+    impl Leggings {
+        pub const fn new(tier: ArmourTier) -> Self { Self { tier } }
+
+        pub const fn tier(self) -> ArmourTier { self.tier }
+    }
+
+    impl Item for Leggings {
+        fn identifier(&self) -> &str {
+            match self.tier {
+                ArmourTier::Leather => "minecraft:leather_leggings",
+                ArmourTier::Copper => "minecraft:copper_leggings",
+                ArmourTier::Gold => "minecraft:golden_leggings",
+                ArmourTier::Chain => "minecraft:chainmail_leggings",
+                ArmourTier::Iron => "minecraft:iron_leggings",
+                ArmourTier::Diamond => "minecraft:diamond_leggings",
+                ArmourTier::Netherite => "minecraft:netherite_leggings",
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct Boots { tier: ArmourTier }
+
+    impl Boots {
+        pub const fn new(tier: ArmourTier) -> Self { Self { tier } }
+
+        pub const fn tier(self) -> ArmourTier { self.tier }
+    }
+
+    impl Item for Boots {
+        fn identifier(&self) -> &str {
+            match self.tier {
+                ArmourTier::Leather => "minecraft:leather_boots",
+                ArmourTier::Copper => "minecraft:copper_boots",
+                ArmourTier::Gold => "minecraft:golden_boots",
+                ArmourTier::Chain => "minecraft:chainmail_boots",
+                ArmourTier::Iron => "minecraft:iron_boots",
+                ArmourTier::Diamond => "minecraft:diamond_boots",
+                ArmourTier::Netherite => "minecraft:netherite_boots",
             }
         }
     }

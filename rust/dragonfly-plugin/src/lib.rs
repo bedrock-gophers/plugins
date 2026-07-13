@@ -2,6 +2,8 @@
 
 #[cfg(test)]
 mod command_descriptor_test;
+#[cfg(test)]
+mod items_generated_test;
 
 extern crate self as dragonfly_plugin;
 

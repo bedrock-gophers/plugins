@@ -26,6 +26,9 @@ simple_items:
   - { name: totem, identifier: "minecraft:totem_of_undying" }
   - { name: book_and_quill, identifier: "minecraft:writable_book" }
 
+boolean_items:
+  - { name: beef, property: cooked, false_name: raw, false_identifier: "minecraft:beef", true_name: cooked, true_identifier: "minecraft:cooked_beef" }
+
 tool_tiers:
   - { name: wood, identifier: wooden }
   - { name: gold, identifier: golden }
@@ -41,6 +44,21 @@ tool_families:
   - { name: axe, identifier: axe }
   - { name: shovel, identifier: shovel }
   - { name: hoe, identifier: hoe }
+
+armour_tiers:
+  - { name: leather, identifier: leather }
+  - { name: copper, identifier: copper }
+  - { name: gold, identifier: golden }
+  - { name: chain, identifier: chainmail }
+  - { name: iron, identifier: iron }
+  - { name: diamond, identifier: diamond }
+  - { name: netherite, identifier: netherite }
+
+armour_pieces:
+  - { name: helmet, identifier: helmet }
+  - { name: chestplate, identifier: chestplate }
+  - { name: leggings, identifier: leggings }
+  - { name: boots, identifier: boots }
 
 enchantments:
   - { name: protection, id: 0, max_level: 4 }

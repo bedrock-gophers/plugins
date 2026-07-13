@@ -53,8 +53,11 @@ type playerOperation struct {
 
 type itemSchema struct {
 	SimpleItems  []simpleItemType  `yaml:"simple_items"`
+	BooleanItems []booleanItemType `yaml:"boolean_items"`
 	ToolTiers    []toolTierType    `yaml:"tool_tiers"`
 	ToolFamilies []toolFamilyType  `yaml:"tool_families"`
+	ArmourTiers  []toolTierType    `yaml:"armour_tiers"`
+	ArmourPieces []toolFamilyType  `yaml:"armour_pieces"`
 	Enchantments []enchantmentType `yaml:"enchantments"`
 	Potions      []potionType      `yaml:"potions"`
 }
@@ -62,6 +65,15 @@ type itemSchema struct {
 type simpleItemType struct {
 	Name       string `yaml:"name"`
 	Identifier string `yaml:"identifier"`
+}
+
+type booleanItemType struct {
+	Name            string `yaml:"name"`
+	Property        string `yaml:"property"`
+	FalseName       string `yaml:"false_name"`
+	FalseIdentifier string `yaml:"false_identifier"`
+	TrueName        string `yaml:"true_name"`
+	TrueIdentifier  string `yaml:"true_identifier"`
 }
 
 type toolTierType struct {
@@ -164,29 +176,54 @@ func readItems(path string) (itemSchema, error) {
 	if err := yaml.Unmarshal(data, &schema); err != nil {
 		return itemSchema{}, fmt.Errorf("decode %s: %w", path, err)
 	}
-	if len(schema.SimpleItems) == 0 || len(schema.ToolTiers) == 0 || len(schema.ToolFamilies) == 0 || len(schema.Enchantments) == 0 || len(schema.Potions) == 0 {
-		return itemSchema{}, fmt.Errorf("%s: item, tool, enchantment, and potion lists must not be empty", path)
+	if len(schema.SimpleItems) == 0 || len(schema.BooleanItems) == 0 || len(schema.ToolTiers) == 0 || len(schema.ToolFamilies) == 0 || len(schema.ArmourTiers) == 0 || len(schema.ArmourPieces) == 0 || len(schema.Enchantments) == 0 || len(schema.Potions) == 0 {
+		return itemSchema{}, fmt.Errorf("%s: item, tool, armour, enchantment, and potion lists must not be empty", path)
 	}
 	itemNames, itemIdentifiers := map[string]bool{}, map[string]bool{}
+	typeNames := map[string]bool{"ArmourTier": true, "Custom": true, "ToolTier": true}
 	for _, item := range schema.SimpleItems {
-		if item.Name == "" || item.Identifier == "" || itemNames[item.Name] || itemIdentifiers[item.Identifier] {
+		if !validSchemaName(item.Name) || item.Identifier == "" || itemNames[item.Name] || itemIdentifiers[item.Identifier] || typeNames[title(item.Name)] {
 			return itemSchema{}, fmt.Errorf("invalid or duplicate simple item %+v", item)
 		}
 		itemNames[item.Name], itemIdentifiers[item.Identifier] = true, true
+		typeNames[title(item.Name)] = true
+	}
+	for _, item := range schema.BooleanItems {
+		if !validSchemaName(item.Name) || !validRustValueName(item.Property) || !validRustValueName(item.FalseName) || !validRustValueName(item.TrueName) || item.FalseIdentifier == "" || item.TrueIdentifier == "" || item.FalseName == item.TrueName || item.FalseName == "is_"+item.Property || item.TrueName == "is_"+item.Property || item.FalseIdentifier == item.TrueIdentifier || itemNames[item.Name] || itemIdentifiers[item.FalseIdentifier] || itemIdentifiers[item.TrueIdentifier] || typeNames[title(item.Name)] {
+			return itemSchema{}, fmt.Errorf("invalid or duplicate boolean item %+v", item)
+		}
+		itemNames[item.Name], itemIdentifiers[item.FalseIdentifier], itemIdentifiers[item.TrueIdentifier] = true, true, true
+		typeNames[title(item.Name)] = true
 	}
 	tierNames, tierIdentifiers := map[string]bool{}, map[string]bool{}
 	for _, tier := range schema.ToolTiers {
-		if tier.Name == "" || tier.Identifier == "" || tierNames[tier.Name] || tierIdentifiers[tier.Identifier] {
+		if !validSchemaName(tier.Name) || tier.Identifier == "" || tierNames[tier.Name] || tierIdentifiers[tier.Identifier] {
 			return itemSchema{}, fmt.Errorf("invalid or duplicate tool tier %+v", tier)
 		}
 		tierNames[tier.Name], tierIdentifiers[tier.Identifier] = true, true
 	}
 	familyNames, familyIdentifiers := map[string]bool{}, map[string]bool{}
 	for _, family := range schema.ToolFamilies {
-		if family.Name == "" || family.Identifier == "" || familyNames[family.Name] || familyIdentifiers[family.Identifier] {
+		if !validSchemaName(family.Name) || family.Identifier == "" || familyNames[family.Name] || familyIdentifiers[family.Identifier] || typeNames[title(family.Name)] {
 			return itemSchema{}, fmt.Errorf("invalid or duplicate tool family %+v", family)
 		}
 		familyNames[family.Name], familyIdentifiers[family.Identifier] = true, true
+		typeNames[title(family.Name)] = true
+	}
+	armourTierNames, armourTierIdentifiers := map[string]bool{}, map[string]bool{}
+	for _, tier := range schema.ArmourTiers {
+		if !validSchemaName(tier.Name) || tier.Identifier == "" || armourTierNames[tier.Name] || armourTierIdentifiers[tier.Identifier] {
+			return itemSchema{}, fmt.Errorf("invalid or duplicate armour tier %+v", tier)
+		}
+		armourTierNames[tier.Name], armourTierIdentifiers[tier.Identifier] = true, true
+	}
+	armourPieceNames, armourPieceIdentifiers := map[string]bool{}, map[string]bool{}
+	for _, piece := range schema.ArmourPieces {
+		if !validSchemaName(piece.Name) || piece.Identifier == "" || armourPieceNames[piece.Name] || armourPieceIdentifiers[piece.Identifier] || typeNames[title(piece.Name)] {
+			return itemSchema{}, fmt.Errorf("invalid or duplicate armour piece %+v", piece)
+		}
+		armourPieceNames[piece.Name], armourPieceIdentifiers[piece.Identifier] = true, true
+		typeNames[title(piece.Name)] = true
 	}
 	enchantmentIDs, enchantmentNames := map[uint32]bool{}, map[string]bool{}
 	for _, enchantment := range schema.Enchantments {
@@ -205,7 +242,33 @@ func readItems(path string) (itemSchema, error) {
 	sort.Slice(schema.Enchantments, func(i, j int) bool { return schema.Enchantments[i].ID < schema.Enchantments[j].ID })
 	sort.Slice(schema.Potions, func(i, j int) bool { return schema.Potions[i].ID < schema.Potions[j].ID })
 	sort.Slice(schema.SimpleItems, func(i, j int) bool { return schema.SimpleItems[i].Name < schema.SimpleItems[j].Name })
+	sort.Slice(schema.BooleanItems, func(i, j int) bool { return schema.BooleanItems[i].Name < schema.BooleanItems[j].Name })
 	return schema, nil
+}
+
+func validSchemaName(value string) bool {
+	if value == "" || value[0] < 'a' || value[0] > 'z' || value[len(value)-1] == '_' {
+		return false
+	}
+	previousUnderscore := false
+	for _, character := range value {
+		underscore := character == '_'
+		if !(character >= 'a' && character <= 'z') && !(character >= '0' && character <= '9') && !underscore || underscore && previousUnderscore {
+			return false
+		}
+		previousUnderscore = underscore
+	}
+	return true
+}
+
+func validRustValueName(value string) bool {
+	if !validSchemaName(value) {
+		return false
+	}
+	_, keyword := map[string]struct{}{
+		"as": {}, "break": {}, "const": {}, "continue": {}, "crate": {}, "else": {}, "enum": {}, "extern": {}, "false": {}, "fn": {}, "for": {}, "if": {}, "impl": {}, "in": {}, "let": {}, "loop": {}, "match": {}, "mod": {}, "move": {}, "mut": {}, "pub": {}, "ref": {}, "return": {}, "self": {}, "Self": {}, "static": {}, "struct": {}, "super": {}, "trait": {}, "true": {}, "type": {}, "unsafe": {}, "use": {}, "where": {}, "while": {}, "async": {}, "await": {}, "dyn": {},
+	}[value]
+	return !keyword
 }
 
 func readPlayer(path string) (playerSchema, error) {
@@ -1383,6 +1446,10 @@ func generateRustItems(items itemSchema) []byte {
 		name := title(item.Name)
 		fmt.Fprintf(&b, "    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]\n    pub struct %s;\n\n    impl Item for %s {\n        fn identifier(&self) -> &str { %q }\n    }\n\n", name, name, item.Identifier)
 	}
+	for _, item := range items.BooleanItems {
+		name := title(item.Name)
+		fmt.Fprintf(&b, "    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]\n    pub struct %s { %s: bool }\n\n    impl %s {\n        pub const fn %s() -> Self { Self { %s: false } }\n\n        pub const fn %s() -> Self { Self { %s: true } }\n\n        pub const fn is_%s(self) -> bool { self.%s }\n    }\n\n    impl Item for %s {\n        fn identifier(&self) -> &str {\n            if self.%s { %q } else { %q }\n        }\n    }\n\n", name, item.Property, name, item.FalseName, item.Property, item.TrueName, item.Property, item.Property, item.Property, name, item.Property, item.TrueIdentifier, item.FalseIdentifier)
+	}
 	b.WriteString("    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n    pub enum ToolTier {\n")
 	for _, tier := range items.ToolTiers {
 		fmt.Fprintf(&b, "        %s,\n", title(tier.Name))
@@ -1394,6 +1461,20 @@ func generateRustItems(items itemSchema) []byte {
 		for _, tier := range items.ToolTiers {
 			identifier := "minecraft:" + tier.Identifier + "_" + family.Identifier
 			fmt.Fprintf(&b, "                ToolTier::%s => %q,\n", title(tier.Name), identifier)
+		}
+		b.WriteString("            }\n        }\n    }\n\n")
+	}
+	b.WriteString("    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n    pub enum ArmourTier {\n")
+	for _, tier := range items.ArmourTiers {
+		fmt.Fprintf(&b, "        %s,\n", title(tier.Name))
+	}
+	b.WriteString("    }\n\n")
+	for _, piece := range items.ArmourPieces {
+		name := title(piece.Name)
+		fmt.Fprintf(&b, "    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n    pub struct %s { tier: ArmourTier }\n\n    impl %s {\n        pub const fn new(tier: ArmourTier) -> Self { Self { tier } }\n\n        pub const fn tier(self) -> ArmourTier { self.tier }\n    }\n\n    impl Item for %s {\n        fn identifier(&self) -> &str {\n            match self.tier {\n", name, name, name)
+		for _, tier := range items.ArmourTiers {
+			identifier := "minecraft:" + tier.Identifier + "_" + piece.Identifier
+			fmt.Fprintf(&b, "                ArmourTier::%s => %q,\n", title(tier.Name), identifier)
 		}
 		b.WriteString("            }\n        }\n    }\n\n")
 	}
