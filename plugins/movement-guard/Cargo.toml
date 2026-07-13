@@ -11,4 +11,4 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-dragonfly-plugin = { git = "https://github.com/bedrock-gophers/plugins", rev = "17be9955dedf342d158287b210c377a7a0a96f24" }
+dragonfly-plugin = { git = "https://github.com/bedrock-gophers/plugins", rev = "b516eaa98031bb95043195d92987efa55af524ba" }
