@@ -16,7 +16,7 @@ impl Plugin for LifecycleLogger {
     fn on_join(&self, event: &mut Event::PlayerJoin<'_>) {
         eprintln!("{} joined", event.name());
         let player = event.player();
-        player.message("Welcome from a Rust plugin.");
+        player.messagef(format_args!("Welcome from a {} plugin.", "Rust"));
         player.send_tip("Rust tip");
         player.send_popup("Rust popup");
         player.send_jukebox_popup("Rust jukebox popup");
