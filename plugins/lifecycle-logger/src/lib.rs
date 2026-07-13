@@ -203,4 +203,16 @@ impl Plugin for LifecycleLogger {
             }
         }
     }
+
+    fn on_skin_change(&self, event: &mut Event::PlayerSkinChange<'_>) {
+        let skin = event.skin();
+        eprintln!(
+            "player {:?} proposed a {}x{} skin with {} animation(s)",
+            event.player().id(),
+            skin.width,
+            skin.height,
+            skin.animations.len()
+        );
+        event.set_skin(&skin);
+    }
 }
