@@ -157,6 +157,15 @@ type EntityPhysics struct {
 // It is opaque outside the native runtime and is never reused by that runtime.
 type EntityInstanceID uint64
 
+type DetachedEntityID struct {
+	Value      uint64
+	Generation uint64
+}
+
+func (id DetachedEntityID) Valid() bool {
+	return id.Value != 0 && id.Generation != 0
+}
+
 type EntityLoadInput struct {
 	Data    []byte
 	Version uint32

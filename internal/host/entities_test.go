@@ -77,3 +77,23 @@ func TestPlayersShareIdentityWithEntityRegistry(t *testing.T) {
 		}
 	})
 }
+
+func TestEntitiesReserveFreshGeneration(t *testing.T) {
+	withPlayerTx(t, func(_ *world.Tx, connected *player.Player) {
+		entities := NewEntities()
+		handle := connected.H()
+		first := entities.registerHandle(handle, 0)
+		entities.expire(first)
+		reserved := entities.reserve(handle)
+		if first == reserved || reserved.Generation == 0 {
+			t.Fatalf("reserved ID = %#v after %#v", reserved, first)
+		}
+		if _, ok := entities.Handle(reserved); ok {
+			t.Fatal("reserved ID resolved before activation")
+		}
+		entities.activate(handle)
+		if _, ok := entities.Handle(reserved); !ok {
+			t.Fatal("activated ID did not resolve")
+		}
+	})
+}

@@ -17,9 +17,16 @@ type Entities struct {
 	nextGeneration uint64
 }
 
+type entityEntryState uint8
+
+const (
+	entityInactive entityEntryState = iota
+	entityActive
+)
+
 type entityEntry struct {
-	id     native.EntityID
-	active bool
+	id    native.EntityID
+	state entityEntryState
 }
 
 func NewEntities() *Entities {
@@ -53,7 +60,7 @@ func (e *Entities) ID(entity world.Entity) (native.EntityID, bool) {
 	e.mu.RLock()
 	entry, ok := e.byHandle[entity.H()]
 	e.mu.RUnlock()
-	return entry.id, ok && entry.active
+	return entry.id, ok && entry.state == entityActive
 }
 
 // Handle returns the live Dragonfly handle associated with id.
@@ -65,7 +72,7 @@ func (e *Entities) Handle(id native.EntityID) (*world.EntityHandle, bool) {
 	handle, ok := e.byID[id]
 	entry := e.byHandle[handle]
 	e.mu.RUnlock()
-	return handle, ok && entry.active && handle != nil && !handle.Closed()
+	return handle, ok && entry.state == entityActive && handle != nil && !handle.Closed()
 }
 
 // Resolve opens id in the exact transaction passed. It never scans worlds or
@@ -90,10 +97,14 @@ func (e *Entities) registerHandle(handle *world.EntityHandle, generation uint64)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if entry, ok := e.byHandle[handle]; ok {
-		entry.active = true
+		entry.state = entityActive
 		e.byHandle[handle] = entry
 		return entry.id
 	}
+	return e.registerNewHandleLocked(handle, generation, entityActive)
+}
+
+func (e *Entities) registerNewHandleLocked(handle *world.EntityHandle, generation uint64, state entityEntryState) native.EntityID {
 	if generation == 0 {
 		var ok bool
 		generation, ok = e.nextAvailableGenerationLocked()
@@ -116,9 +127,51 @@ func (e *Entities) registerHandle(handle *world.EntityHandle, generation uint64)
 		}
 		id.Generation = generation
 	}
-	e.byHandle[handle] = entityEntry{id: id, active: true}
+	e.byHandle[handle] = entityEntry{id: id, state: state}
 	e.byID[id] = handle
 	return id
+}
+
+// expire permanently removes id. Activating or registering the same handle
+// afterwards cannot make id live again.
+func (e *Entities) expire(id native.EntityID) {
+	if id.Generation == 0 {
+		return
+	}
+	e.mu.Lock()
+	if handle, ok := e.byID[id]; ok {
+		if entry, current := e.byHandle[handle]; current && entry.id == id {
+			delete(e.byHandle, handle)
+		}
+		delete(e.byID, id)
+	}
+	e.mu.Unlock()
+}
+
+// reserve allocates a fresh inactive ID for handle. The ID starts resolving
+// only after the handle is activated.
+func (e *Entities) reserve(handle *world.EntityHandle) native.EntityID {
+	if handle == nil || handle.Closed() {
+		return native.EntityID{}
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if entry, ok := e.byHandle[handle]; ok {
+		return entry.id
+	}
+	return e.registerNewHandleLocked(handle, 0, entityInactive)
+}
+
+func (e *Entities) activate(handle *world.EntityHandle) {
+	if handle == nil {
+		return
+	}
+	e.mu.Lock()
+	if entry, ok := e.byHandle[handle]; ok {
+		entry.state = entityActive
+		e.byHandle[handle] = entry
+	}
+	e.mu.Unlock()
 }
 
 // deactivateHandle keeps identity across a Dragonfly world transfer while
@@ -129,7 +182,7 @@ func (e *Entities) deactivateHandle(handle *world.EntityHandle) {
 	}
 	e.mu.Lock()
 	if entry, ok := e.byHandle[handle]; ok {
-		entry.active = false
+		entry.state = entityInactive
 		e.byHandle[handle] = entry
 	}
 	e.mu.Unlock()
