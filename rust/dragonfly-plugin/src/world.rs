@@ -1,4 +1,4 @@
-use crate::{BlockPos, Entity, Player, block, entity};
+use crate::{BlockPos, Entity, Player, Vec3, block, entity, particle};
 
 const MAX_WORLD_NAME_BYTES: usize = 256;
 const MAX_BLOCK_IDENTIFIER_BYTES: usize = 256;
@@ -19,6 +19,10 @@ pub struct World {
 }
 
 impl World {
+    pub(crate) const fn from_raw(raw: u64) -> Option<Self> {
+        if raw == 0 { None } else { Some(Self { raw }) }
+    }
+
     pub fn get(name: &str) -> Option<Self> {
         let host = crate::host_api()?;
         let lookup = host.world_lookup?;
@@ -275,6 +279,25 @@ impl World {
         })?;
         (status == dragonfly_plugin_sys::DF_STATUS_OK && output.generation != 0)
             .then(|| output.into())
+    }
+
+    pub fn add_particle(&self, position: Vec3, value: impl particle::Particle) {
+        let Some(host) = crate::host_api() else {
+            return;
+        };
+        let Some(add) = host.world_particle_add else {
+            return;
+        };
+        let encoded = value.encode();
+        let _ = encoded.with_raw(|view| unsafe {
+            add(
+                host.context,
+                crate::current_invocation(),
+                self.raw_id(),
+                position.into(),
+                view,
+            )
+        });
     }
 
     pub fn entities(&self) -> Option<Vec<Entity>> {

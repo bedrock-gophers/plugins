@@ -107,11 +107,12 @@ func (m *WorldManager) EntityState(invocation native.InvocationID, id native.Ent
 	if !ok {
 		return native.EntityState{}, false
 	}
-	read := func(current world.Entity) native.EntityState {
+	read := func(tx *world.Tx, current world.Entity) native.EntityState {
 		position, rotation := current.Position(), current.Rotation()
+		worldID, _ := m.handleByWorld(tx.World())
 		state := native.EntityState{
 			Position: nativeVec3(position), Rotation: native.Rotation{Yaw: rotation.Yaw(), Pitch: rotation.Pitch()},
-			Type: handle.Type().EncodeEntity(),
+			World: worldID, Type: handle.Type().EncodeEntity(),
 		}
 		if moving, ok := current.(velocityEntity); ok {
 			state.Velocity, state.HasVelocity = nativeVec3(moving.Velocity()), true
@@ -127,13 +128,13 @@ func (m *WorldManager) EntityState(invocation native.InvocationID, id native.Ent
 		if !ok {
 			return native.EntityState{}, false
 		}
-		return read(current), true
+		return read(tx, current), true
 	}
 	if invocation != 0 {
 		return native.EntityState{}, false
 	}
-	state, err := world.CallRef(context.Background(), world.NewEntityRef[world.Entity](handle), func(_ *world.Tx, current world.Entity) (native.EntityState, error) {
-		return read(current), nil
+	state, err := world.CallRef(context.Background(), world.NewEntityRef[world.Entity](handle), func(tx *world.Tx, current world.Entity) (native.EntityState, error) {
+		return read(tx, current), nil
 	})
 	return state, err == nil
 }

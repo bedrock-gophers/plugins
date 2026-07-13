@@ -3,7 +3,7 @@
 use core::ffi::c_void;
 
 pub const DF_ABI_VERSION: u32 = 1;
-pub const DF_HOST_ABI_VERSION: u32 = 8;
+pub const DF_HOST_ABI_VERSION: u32 = 9;
 pub const DF_STATUS_OK: DfStatus = 0;
 pub const DF_STATUS_ERROR: DfStatus = 1;
 pub type DfStatus = i32;
@@ -118,7 +118,33 @@ pub struct DfEntitySpawnOptions { pub position: DfVec3, pub rotation: DfRotation
 pub struct DfEntitySpawnViewV1 { pub kind: u32, pub flags: u32, pub options: DfEntitySpawnOptions, pub owner: DfEntityId, pub damage: f64, pub fuse_milliseconds: u64, pub experience: i32, pub potion: u32, pub punch_level: i32, pub piercing_level: i32, pub text: DfStringView, pub item: *const DfItemStackViewV3, pub block: *const DfBlockView }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfEntityState { pub position: DfVec3, pub rotation: DfRotation, pub velocity: DfVec3, pub capabilities: u32, pub entity_type: DfStringBuffer, pub name_tag: DfStringBuffer }
+pub struct DfEntityState { pub position: DfVec3, pub rotation: DfRotation, pub velocity: DfVec3, pub capabilities: u32, pub world: DfWorldId, pub entity_type: DfStringBuffer, pub name_tag: DfStringBuffer }
+pub const DF_PARTICLE_FLAME: u32 = 0;
+pub const DF_PARTICLE_DUST: u32 = 1;
+pub const DF_PARTICLE_BLOCK_BREAK: u32 = 2;
+pub const DF_PARTICLE_PUNCH_BLOCK: u32 = 3;
+pub const DF_PARTICLE_BLOCK_FORCE_FIELD: u32 = 4;
+pub const DF_PARTICLE_BONE_MEAL: u32 = 5;
+pub const DF_PARTICLE_NOTE: u32 = 6;
+pub const DF_PARTICLE_DRAGON_EGG_TELEPORT: u32 = 7;
+pub const DF_PARTICLE_EVAPORATE: u32 = 8;
+pub const DF_PARTICLE_WATER_DRIP: u32 = 9;
+pub const DF_PARTICLE_LAVA_DRIP: u32 = 10;
+pub const DF_PARTICLE_LAVA: u32 = 11;
+pub const DF_PARTICLE_DUST_PLUME: u32 = 12;
+pub const DF_PARTICLE_HUGE_EXPLOSION: u32 = 13;
+pub const DF_PARTICLE_ENDERMAN_TELEPORT: u32 = 14;
+pub const DF_PARTICLE_SNOWBALL_POOF: u32 = 15;
+pub const DF_PARTICLE_EGG_SMASH: u32 = 16;
+pub const DF_PARTICLE_SPLASH: u32 = 17;
+pub const DF_PARTICLE_EFFECT: u32 = 18;
+pub const DF_PARTICLE_ENTITY_FLAME: u32 = 19;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfRgba { pub r: u8, pub g: u8, pub b: u8, pub a: u8 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfParticleViewV1 { pub kind: u32, pub data: u32, pub pitch: i32, pub colour: DfRgba, pub diff: DfBlockPos, pub block: *const DfBlockView }
 pub const DF_PLAYER_TRANSFORM_TELEPORT: u32 = 0;
 pub const DF_PLAYER_TRANSFORM_MOVE: u32 = 1;
 pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
@@ -317,9 +343,10 @@ pub type DfHostEntityTeleportFn = unsafe extern "C" fn(context: u64, invocation:
 pub type DfHostEntityVelocitySetFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, entity: DfEntityId, velocity: DfVec3) -> DfStatus;
 pub type DfHostEntityNameTagSetFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, entity: DfEntityId, name_tag: DfStringView) -> DfStatus;
 pub type DfHostEntityDespawnFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, entity: DfEntityId) -> DfStatus;
+pub type DfHostWorldParticleAddFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, world: DfWorldId, position: DfVec3, particle: *const DfParticleViewV1) -> DfStatus;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfHostApiV8 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn>, pub inventory_size: Option<DfHostInventorySizeFn>, pub inventory_item_open: Option<DfHostInventoryItemOpenFn>, pub player_held_item_open: Option<DfHostPlayerHeldItemOpenFn>, pub item_stack_read: Option<DfHostItemStackReadFn>, pub item_stack_close: Option<DfHostItemStackCloseFn>, pub inventory_item_set: Option<DfHostInventoryItemSetFn>, pub inventory_item_add: Option<DfHostInventoryItemAddFn>, pub inventory_clear_slot: Option<DfHostInventoryClearSlotFn>, pub inventory_clear: Option<DfHostInventoryClearFn>, pub player_held_items_set: Option<DfHostPlayerHeldItemsSetFn>, pub player_held_slot_set: Option<DfHostPlayerHeldSlotSetFn>, pub player_scoreboard: Option<DfHostPlayerScoreboardFn>, pub player_scoreboard_remove: Option<DfHostPlayerScoreboardRemoveFn>, pub player_form_send: Option<DfHostPlayerFormSendFn>, pub player_form_close: Option<DfHostPlayerFormCloseFn>, pub world_lookup: Option<DfHostWorldLookupFn>, pub world_open: Option<DfHostWorldOpenFn>, pub world_name: Option<DfHostWorldNameFn>, pub world_unload: Option<DfHostWorldUnloadFn>, pub world_save: Option<DfHostWorldSaveFn>, pub world_block_get: Option<DfHostWorldBlockGetFn>, pub world_block_set: Option<DfHostWorldBlockSetFn>, pub world_time_get: Option<DfHostWorldTimeGetFn>, pub world_time_set: Option<DfHostWorldTimeSetFn>, pub world_spawn_get: Option<DfHostWorldSpawnGetFn>, pub world_spawn_set: Option<DfHostWorldSpawnSetFn>, pub world_entity_spawn: Option<DfHostWorldEntitySpawnFn>, pub world_entities: Option<DfHostWorldEntitiesFn>, pub world_players: Option<DfHostWorldPlayersFn>, pub entity_state: Option<DfHostEntityStateFn>, pub entity_teleport: Option<DfHostEntityTeleportFn>, pub entity_velocity_set: Option<DfHostEntityVelocitySetFn>, pub entity_name_tag_set: Option<DfHostEntityNameTagSetFn>, pub entity_despawn: Option<DfHostEntityDespawnFn> }
+pub struct DfHostApiV9 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn>, pub inventory_size: Option<DfHostInventorySizeFn>, pub inventory_item_open: Option<DfHostInventoryItemOpenFn>, pub player_held_item_open: Option<DfHostPlayerHeldItemOpenFn>, pub item_stack_read: Option<DfHostItemStackReadFn>, pub item_stack_close: Option<DfHostItemStackCloseFn>, pub inventory_item_set: Option<DfHostInventoryItemSetFn>, pub inventory_item_add: Option<DfHostInventoryItemAddFn>, pub inventory_clear_slot: Option<DfHostInventoryClearSlotFn>, pub inventory_clear: Option<DfHostInventoryClearFn>, pub player_held_items_set: Option<DfHostPlayerHeldItemsSetFn>, pub player_held_slot_set: Option<DfHostPlayerHeldSlotSetFn>, pub player_scoreboard: Option<DfHostPlayerScoreboardFn>, pub player_scoreboard_remove: Option<DfHostPlayerScoreboardRemoveFn>, pub player_form_send: Option<DfHostPlayerFormSendFn>, pub player_form_close: Option<DfHostPlayerFormCloseFn>, pub world_lookup: Option<DfHostWorldLookupFn>, pub world_open: Option<DfHostWorldOpenFn>, pub world_name: Option<DfHostWorldNameFn>, pub world_unload: Option<DfHostWorldUnloadFn>, pub world_save: Option<DfHostWorldSaveFn>, pub world_block_get: Option<DfHostWorldBlockGetFn>, pub world_block_set: Option<DfHostWorldBlockSetFn>, pub world_time_get: Option<DfHostWorldTimeGetFn>, pub world_time_set: Option<DfHostWorldTimeSetFn>, pub world_spawn_get: Option<DfHostWorldSpawnGetFn>, pub world_spawn_set: Option<DfHostWorldSpawnSetFn>, pub world_entity_spawn: Option<DfHostWorldEntitySpawnFn>, pub world_entities: Option<DfHostWorldEntitiesFn>, pub world_players: Option<DfHostWorldPlayersFn>, pub entity_state: Option<DfHostEntityStateFn>, pub entity_teleport: Option<DfHostEntityTeleportFn>, pub entity_velocity_set: Option<DfHostEntityVelocitySetFn>, pub entity_name_tag_set: Option<DfHostEntityNameTagSetFn>, pub entity_despawn: Option<DfHostEntityDespawnFn>, pub world_particle_add: Option<DfHostWorldParticleAddFn> }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandParameter { pub kind: u32, pub optional: u8, pub name: DfStringView, pub values: *const DfStringView, pub value_count: u64 }
@@ -835,7 +862,7 @@ pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> Df
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
 pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
 pub type DfCommandEnumOptionsFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, overload: u64, parameter: u64, context: *const DfCommandEnumContext, output: *mut DfStringBuffer) -> DfStatus;
-pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV8) -> DfStatus;
+pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV9) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 

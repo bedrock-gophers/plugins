@@ -9,6 +9,7 @@ pub mod block;
 pub mod entity;
 pub mod form;
 mod item_nbt;
+pub mod particle;
 pub mod world;
 
 pub use entity::{Entity, EntityId};
@@ -56,7 +57,7 @@ pub mod Event {
     pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV8> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV9> =
     AtomicPtr::new(core::ptr::null_mut());
 
 std::thread_local! {
@@ -105,7 +106,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV8) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV9) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -2132,13 +2133,13 @@ fn slice_pointer<T>(value: &[T]) -> *const T {
     }
 }
 
-fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV8> {
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV9> {
     unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
 }
 
 fn read_item_stack(
     open: impl FnOnce(
-        &dragonfly_plugin_sys::DfHostApiV8,
+        &dragonfly_plugin_sys::DfHostApiV9,
         *mut u64,
         *mut dragonfly_plugin_sys::DfItemStackInfo,
     ) -> Option<dragonfly_plugin_sys::DfStatus>,
@@ -2160,7 +2161,7 @@ fn read_item_stack(
 }
 
 fn read_item_stack_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV8,
+    host: &dragonfly_plugin_sys::DfHostApiV9,
     invocation: dragonfly_plugin_sys::DfInvocationId,
     snapshot_id: u64,
     info: dragonfly_plugin_sys::DfItemStackInfo,

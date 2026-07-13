@@ -38,7 +38,7 @@ func TestWorldManagerEntityLifecycleUsesExactTransaction(t *testing.T) {
 		}
 		spawned = id
 		state, ok := manager.EntityState(invocation, id)
-		if !ok || state.Type != "dragonfly:text" || state.Position != (native.Vec3{X: 1, Y: 64, Z: 2}) || !state.CanTeleport {
+		if !ok || state.World != worldID || state.Type != "dragonfly:text" || state.Position != (native.Vec3{X: 1, Y: 64, Z: 2}) || !state.CanTeleport {
 			t.Fatalf("state = %#v, %v", state, ok)
 		}
 		if !manager.TeleportEntity(invocation, id, native.Vec3{X: 4, Y: 70, Z: 5}) ||

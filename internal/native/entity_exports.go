@@ -118,6 +118,7 @@ func bg_go_entity_state(context C.uint64_t, invocation C.DfInvocationId, id C.Df
 	output.position = cEntityVec3(state.Position)
 	output.rotation = C.DfRotation{yaw: C.double(state.Rotation.Yaw), pitch: C.double(state.Rotation.Pitch)}
 	output.velocity = cEntityVec3(state.Velocity)
+	output.world = C.DfWorldId{value: C.uint64_t(state.World)}
 	output.capabilities = 0
 	if state.HasVelocity {
 		output.capabilities |= C.DF_ENTITY_HAS_VELOCITY

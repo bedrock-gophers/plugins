@@ -68,8 +68,9 @@ impl Plugin for EntityCommand {
 
     #[subcommand("list")]
     fn list(&self, context: &mut Context<'_, Player>) {
-        let Some(world) = World::overworld() else {
-            context.source().message("Overworld unavailable.");
+        let player = context.source();
+        let Some(world) = player.entity().world() else {
+            player.message("World unavailable.");
             return;
         };
         let Some(entities) = world.entities() else {
@@ -104,7 +105,8 @@ impl EntityCommand {
 }
 
 fn world_and_position(player: Player) -> Option<(World, Vec3)> {
-    Some((World::overworld()?, player.entity().position()?))
+    let entity = player.entity();
+    Some((entity.world()?, entity.position()?))
 }
 
 fn above(mut position: Vec3) -> Vec3 {

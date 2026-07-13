@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 1u
-#define DF_HOST_ABI_VERSION 8u
+#define DF_HOST_ABI_VERSION 9u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -71,7 +71,29 @@ typedef struct { DfEntityId *data; uint64_t len; uint64_t capacity; } DfEntityId
 typedef struct { DfPlayerId *data; uint64_t len; uint64_t capacity; } DfPlayerIdBuffer;
 typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; DfStringView name_tag; } DfEntitySpawnOptions;
 typedef struct { uint32_t kind; uint32_t flags; DfEntitySpawnOptions options; DfEntityId owner; double damage; uint64_t fuse_milliseconds; int32_t experience; uint32_t potion; int32_t punch_level; int32_t piercing_level; DfStringView text; const DfItemStackViewV3 *item; const DfBlockView *block; } DfEntitySpawnViewV1;
-typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; uint32_t capabilities; DfStringBuffer entity_type; DfStringBuffer name_tag; } DfEntityState;
+typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; uint32_t capabilities; DfWorldId world; DfStringBuffer entity_type; DfStringBuffer name_tag; } DfEntityState;
+#define DF_PARTICLE_FLAME 0u
+#define DF_PARTICLE_DUST 1u
+#define DF_PARTICLE_BLOCK_BREAK 2u
+#define DF_PARTICLE_PUNCH_BLOCK 3u
+#define DF_PARTICLE_BLOCK_FORCE_FIELD 4u
+#define DF_PARTICLE_BONE_MEAL 5u
+#define DF_PARTICLE_NOTE 6u
+#define DF_PARTICLE_DRAGON_EGG_TELEPORT 7u
+#define DF_PARTICLE_EVAPORATE 8u
+#define DF_PARTICLE_WATER_DRIP 9u
+#define DF_PARTICLE_LAVA_DRIP 10u
+#define DF_PARTICLE_LAVA 11u
+#define DF_PARTICLE_DUST_PLUME 12u
+#define DF_PARTICLE_HUGE_EXPLOSION 13u
+#define DF_PARTICLE_ENDERMAN_TELEPORT 14u
+#define DF_PARTICLE_SNOWBALL_POOF 15u
+#define DF_PARTICLE_EGG_SMASH 16u
+#define DF_PARTICLE_SPLASH 17u
+#define DF_PARTICLE_EFFECT 18u
+#define DF_PARTICLE_ENTITY_FLAME 19u
+typedef struct { uint8_t r; uint8_t g; uint8_t b; uint8_t a; } DfRgba;
+typedef struct { uint32_t kind; uint32_t data; int32_t pitch; DfRgba colour; DfBlockPos diff; const DfBlockView *block; } DfParticleViewV1;
 #define DF_PLAYER_TRANSFORM_TELEPORT 0u
 #define DF_PLAYER_TRANSFORM_MOVE 1u
 #define DF_PLAYER_TRANSFORM_VELOCITY 2u
@@ -252,6 +274,7 @@ typedef DfStatus (*DfHostEntityTeleportFn)(uint64_t context, DfInvocationId invo
 typedef DfStatus (*DfHostEntityVelocitySetFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 velocity);
 typedef DfStatus (*DfHostEntityNameTagSetFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag);
 typedef DfStatus (*DfHostEntityDespawnFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity);
+typedef DfStatus (*DfHostWorldParticleAddFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfParticleViewV1 *particle);
 typedef struct {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -303,7 +326,8 @@ typedef struct {
     DfHostEntityVelocitySetFn entity_velocity_set;
     DfHostEntityNameTagSetFn entity_name_tag_set;
     DfHostEntityDespawnFn entity_despawn;
-} DfHostApiV8;
+    DfHostWorldParticleAddFn world_particle_add;
+} DfHostApiV9;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -719,7 +743,7 @@ typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV8 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV9 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -739,7 +763,7 @@ typedef struct {
 typedef const DfPluginApiV1 *(*DfPluginEntryV1Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV8 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV9 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);

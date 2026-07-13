@@ -78,29 +78,32 @@ type recordingHost struct {
 		Slot      uint32
 		Item      ItemStack
 	}
-	inventoryAdds  []ItemStack
-	forms          []PlayerForm
-	formClosed     bool
-	worldOpened    string
-	worldDimension WorldDimension
-	worldID        WorldID
-	worldLookup    string
-	worldLookupOK  bool
-	worldName      string
-	worldBlock     WorldBlock
-	worldBlockOK   bool
-	worldBlockPos  BlockPos
-	worldBlockSet  WorldBlock
-	worldSaved     bool
-	worldUnloaded  bool
-	worldTime      int64
-	worldSpawn     BlockPos
-	entityStateID  EntityID
-	entityState    EntityState
-	entitySpawns   []EntitySpawn
-	spawnedEntity  EntityID
-	worldEntityIDs []EntityID
-	worldPlayerIDs []PlayerID
+	inventoryAdds     []ItemStack
+	forms             []PlayerForm
+	formClosed        bool
+	worldOpened       string
+	worldDimension    WorldDimension
+	worldID           WorldID
+	worldLookup       string
+	worldLookupOK     bool
+	worldName         string
+	worldBlock        WorldBlock
+	worldBlockOK      bool
+	worldBlockPos     BlockPos
+	worldBlockSet     WorldBlock
+	worldSaved        bool
+	worldUnloaded     bool
+	worldTime         int64
+	worldSpawn        BlockPos
+	entityStateID     EntityID
+	entityState       EntityState
+	entitySpawns      []EntitySpawn
+	spawnedEntity     EntityID
+	worldEntityIDs    []EntityID
+	worldPlayerIDs    []PlayerID
+	particleWorldID   WorldID
+	particlePositions []Vec3
+	particles         []WorldParticle
 }
 
 func (h *recordingHost) SendPlayerText(_ InvocationID, player PlayerID, kind PlayerTextKind, message string) bool {
@@ -249,6 +252,12 @@ func (h *recordingHost) WorldEntities(_ InvocationID, id WorldID) ([]EntityID, b
 }
 func (h *recordingHost) WorldPlayers(_ InvocationID, id WorldID) ([]PlayerID, bool) {
 	return append([]PlayerID(nil), h.worldPlayerIDs...), id == h.worldID
+}
+func (h *recordingHost) AddWorldParticle(_ InvocationID, id WorldID, position Vec3, value WorldParticle) bool {
+	h.particleWorldID = id
+	h.particlePositions = append(h.particlePositions, position)
+	h.particles = append(h.particles, value)
+	return id == h.worldID
 }
 
 func TestPluginCanMessagePlayer(t *testing.T) {
@@ -413,8 +422,8 @@ func TestFormRejectsWrongPlayerAndOversizedResponse(t *testing.T) {
 
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 10 {
-		t.Fatalf("plugin count = %d, want 10", runtime.PluginCount())
+	if runtime.PluginCount() != 11 {
+		t.Fatalf("plugin count = %d, want 11", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")
@@ -752,14 +761,15 @@ func TestCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 5 {
-		t.Fatalf("commands = %#v, want entity, hello, items, ping, and world", commands)
+	if len(commands) != 6 {
+		t.Fatalf("commands = %#v, want entity, hello, items, particle, ping, and world", commands)
 	}
 	hello := commandNamed(t, commands, "hello")
 	_ = commandNamed(t, commands, "items")
 	_ = commandNamed(t, commands, "ping")
 	_ = commandNamed(t, commands, "world")
 	_ = commandNamed(t, commands, "entity")
+	_ = commandNamed(t, commands, "particle")
 	optionalFound := false
 	for _, overload := range hello.Overloads {
 		for _, parameter := range overload.Parameters {
@@ -853,7 +863,7 @@ func TestEntityCommandHostCalls(t *testing.T) {
 	library, plugins := nativeArtifacts(t)
 	host := &recordingHost{
 		worldID: 42, worldLookupOK: true,
-		entityState:    EntityState{Type: "minecraft:player", Position: Vec3{X: 2, Y: 64, Z: 3}, CanTeleport: true},
+		entityState:    EntityState{World: 42, Type: "minecraft:player", Position: Vec3{X: 2, Y: 64, Z: 3}, CanTeleport: true},
 		spawnedEntity:  EntityID{UUID: [16]byte{7}, Generation: 88},
 		worldEntityIDs: []EntityID{{UUID: [16]byte{7}, Generation: 88}},
 	}
@@ -893,6 +903,54 @@ func TestEntityCommandHostCalls(t *testing.T) {
 	}
 	if len(host.texts) == 0 || host.texts[len(host.texts)-1] != "1 entities, 1 players." {
 		t.Fatalf("list message = %q", host.texts)
+	}
+}
+
+func TestParticleCommandHostCalls(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{
+		worldID: 42, worldLookupOK: true,
+		entityState: EntityState{World: 42, Type: "minecraft:player", Position: Vec3{X: 2, Y: 64, Z: 3}, CanTeleport: true},
+	}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := commandNamed(t, commands, "particle")
+	player := PlayerID{UUID: [16]byte{1, 2}, Generation: 17}
+	for _, arguments := range []string{"coloured-flame", "block-break", "note"} {
+		output, err := runtime.HandleCommand(command.Index, CommandInput{
+			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: player, Name: "Spawner"}},
+		})
+		if err != nil || output.Failed {
+			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
+		}
+	}
+	if host.particleWorldID != 42 || len(host.particles) != 3 {
+		t.Fatalf("particle calls = world %d, values %#v", host.particleWorldID, host.particles)
+	}
+	if flame := host.particles[0]; flame.Kind != ParticleFlame || flame.Colour != (RGBA{R: 80, G: 180, B: 255, A: 255}) {
+		t.Fatalf("flame = %#v", flame)
+	}
+	if block := host.particles[1].Block; block == nil || block.Identifier != "minecraft:diamond_block" || len(block.PropertiesNBT) == 0 {
+		t.Fatalf("block particle = %#v", host.particles[1])
+	}
+	if note := host.particles[2]; note.Kind != ParticleNote || note.Data != 6 || note.Pitch != 12 {
+		t.Fatalf("note = %#v", note)
+	}
+	for _, position := range host.particlePositions {
+		if position != (Vec3{X: 2, Y: 65.5, Z: 3}) {
+			t.Fatalf("particle position = %#v", position)
+		}
 	}
 }
 

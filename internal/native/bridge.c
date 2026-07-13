@@ -33,13 +33,16 @@ _Static_assert(sizeof(DfBlockData) == 48, "DfBlockData ABI layout changed");
 _Static_assert(sizeof(DfBlockView) == 32, "DfBlockView ABI layout changed");
 _Static_assert(sizeof(DfEntitySpawnOptions) == 80, "DfEntitySpawnOptions ABI layout changed");
 _Static_assert(sizeof(DfEntitySpawnViewV1) == 176, "DfEntitySpawnViewV1 ABI layout changed");
-_Static_assert(sizeof(DfEntityState) == 120, "DfEntityState ABI layout changed");
-_Static_assert(sizeof(DfHostApiV8) == 392, "DfHostApiV8 ABI layout changed");
-_Static_assert(offsetof(DfHostApiV8, player_skin_open) == 80, "DfHostApiV8.player_skin_open ABI offset changed");
-_Static_assert(offsetof(DfHostApiV8, player_skin_set) == 112, "DfHostApiV8.player_skin_set ABI offset changed");
-_Static_assert(offsetof(DfHostApiV8, inventory_size) == 120, "DfHostApiV8.inventory_size ABI offset changed");
-_Static_assert(offsetof(DfHostApiV8, player_held_slot_set) == 200, "DfHostApiV8.player_held_slot_set ABI offset changed");
-_Static_assert(offsetof(DfHostApiV8, player_scoreboard) == 208, "DfHostApiV8.player_scoreboard ABI offset changed");
+_Static_assert(sizeof(DfEntityState) == 128, "DfEntityState ABI layout changed");
+_Static_assert(offsetof(DfEntityState, world) == 72, "DfEntityState.world ABI offset changed");
+_Static_assert(sizeof(DfParticleViewV1) == 40, "DfParticleViewV1 ABI layout changed");
+_Static_assert(offsetof(DfParticleViewV1, block) == 32, "DfParticleViewV1.block ABI offset changed");
+_Static_assert(sizeof(DfHostApiV9) == 400, "DfHostApiV9 ABI layout changed");
+_Static_assert(offsetof(DfHostApiV9, player_skin_open) == 80, "DfHostApiV9.player_skin_open ABI offset changed");
+_Static_assert(offsetof(DfHostApiV9, player_skin_set) == 112, "DfHostApiV9.player_skin_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV9, inventory_size) == 120, "DfHostApiV9.inventory_size ABI offset changed");
+_Static_assert(offsetof(DfHostApiV9, player_held_slot_set) == 200, "DfHostApiV9.player_held_slot_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV9, player_scoreboard) == 208, "DfHostApiV9.player_scoreboard ABI offset changed");
 #endif
 
 extern DfStatus bg_go_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message);
@@ -92,6 +95,7 @@ extern DfStatus bg_go_entity_teleport(uint64_t context, DfInvocationId invocatio
 extern DfStatus bg_go_entity_velocity_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 velocity);
 extern DfStatus bg_go_entity_name_tag_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag);
 extern DfStatus bg_go_entity_despawn(uint64_t context, DfInvocationId invocation, DfEntityId entity);
+extern DfStatus bg_go_world_particle_add(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfParticleViewV1 *particle);
 
 static DfStatus host_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message) {
     return bg_go_player_text(context, invocation, player, kind, message);
@@ -185,6 +189,7 @@ static DfStatus host_entity_teleport(uint64_t context, DfInvocationId invocation
 static DfStatus host_entity_velocity_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 velocity) { return bg_go_entity_velocity_set(context, invocation, entity, velocity); }
 static DfStatus host_entity_name_tag_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag) { return bg_go_entity_name_tag_set(context, invocation, entity, name_tag); }
 static DfStatus host_entity_despawn(uint64_t context, DfInvocationId invocation, DfEntityId entity) { return bg_go_entity_despawn(context, invocation, entity); }
+static DfStatus host_world_particle_add(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfParticleViewV1 *particle) { return bg_go_world_particle_add(context, invocation, world, position, particle); }
 
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
 typedef void (*RuntimeDestroyFn)(DfRuntime *);
@@ -199,7 +204,7 @@ typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *)
 struct BgRuntimeLibrary {
     void *handle;
     DfRuntime *runtime;
-    DfHostApiV8 host_api;
+    DfHostApiV9 host_api;
     RuntimeDestroyFn destroy;
     RuntimeEnableFn enable;
     RuntimeDisableFn disable;
@@ -272,9 +277,9 @@ DfStatus bg_runtime_open(
         return DF_STATUS_ERROR;
     }
 
-    library->host_api = (DfHostApiV8) {
+    library->host_api = (DfHostApiV9) {
         .abi_version = DF_HOST_ABI_VERSION,
-        .struct_size = sizeof(DfHostApiV8),
+        .struct_size = sizeof(DfHostApiV9),
         .context = host_context,
         .player_text = host_player_text,
         .player_title = host_player_title,
@@ -323,6 +328,7 @@ DfStatus bg_runtime_open(
         .entity_velocity_set = host_entity_velocity_set,
         .entity_name_tag_set = host_entity_name_tag_set,
         .entity_despawn = host_entity_despawn,
+        .world_particle_add = host_world_particle_add,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

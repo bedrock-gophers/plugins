@@ -147,10 +147,47 @@ type EntitySpawn struct {
 type EntityState struct {
 	Position, Velocity Vec3
 	Rotation           Rotation
+	World              WorldID
 	Type, NameTag      string
 	HasVelocity        bool
 	HasNameTag         bool
 	CanTeleport        bool
+}
+
+type ParticleKind uint32
+
+const (
+	ParticleFlame ParticleKind = iota
+	ParticleDust
+	ParticleBlockBreak
+	ParticlePunchBlock
+	ParticleBlockForceField
+	ParticleBoneMeal
+	ParticleNote
+	ParticleDragonEggTeleport
+	ParticleEvaporate
+	ParticleWaterDrip
+	ParticleLavaDrip
+	ParticleLava
+	ParticleDustPlume
+	ParticleHugeExplosion
+	ParticleEndermanTeleport
+	ParticleSnowballPoof
+	ParticleEggSmash
+	ParticleSplash
+	ParticleEffect
+	ParticleEntityFlame
+)
+
+type RGBA struct{ R, G, B, A uint8 }
+
+type WorldParticle struct {
+	Kind   ParticleKind
+	Data   uint32
+	Pitch  int32
+	Colour RGBA
+	Diff   BlockPos
+	Block  *WorldBlock
 }
 
 // Host executes synchronous actions requested by native plugins.
@@ -196,6 +233,7 @@ type Host interface {
 	SetEntityVelocity(InvocationID, EntityID, Vec3) bool
 	SetEntityNameTag(InvocationID, EntityID, string) bool
 	DespawnEntity(InvocationID, EntityID) bool
+	AddWorldParticle(InvocationID, WorldID, Vec3, WorldParticle) bool
 }
 
 type noopHost struct{}
@@ -259,6 +297,9 @@ func (noopHost) TeleportEntity(InvocationID, EntityID, Vec3) bool     { return f
 func (noopHost) SetEntityVelocity(InvocationID, EntityID, Vec3) bool  { return false }
 func (noopHost) SetEntityNameTag(InvocationID, EntityID, string) bool { return false }
 func (noopHost) DespawnEntity(InvocationID, EntityID) bool            { return false }
+func (noopHost) AddWorldParticle(InvocationID, WorldID, Vec3, WorldParticle) bool {
+	return false
+}
 
 var (
 	hostSequence         atomic.Uint64

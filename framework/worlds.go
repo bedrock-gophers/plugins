@@ -45,6 +45,7 @@ type WorldManager struct {
 	mu              sync.RWMutex
 	worlds          map[WorldID]*managedWorld
 	handles         map[native.WorldID]*managedWorld
+	byWorld         map[*world.World]*managedWorld
 	next            native.WorldID
 	root            string
 	log             *slog.Logger
@@ -84,7 +85,7 @@ func newWorldManager(root string, log *slog.Logger, players *host.Players) *Worl
 		entityHandles = players.EntityRegistry()
 	}
 	return &WorldManager{
-		worlds: make(map[WorldID]*managedWorld), handles: make(map[native.WorldID]*managedWorld),
+		worlds: make(map[WorldID]*managedWorld), handles: make(map[native.WorldID]*managedWorld), byWorld: make(map[*world.World]*managedWorld),
 		root: root, log: log, players: players, entityHandles: entityHandles,
 	}
 }
@@ -176,7 +177,7 @@ func (m *WorldManager) register(name WorldID, w *world.World, core bool) (native
 	}
 	w.Handle(host.NewWorldHandler(m.entityHandles))
 	entry := &managedWorld{id: m.next, name: name, world: w, core: core}
-	m.worlds[name], m.handles[entry.id] = entry, entry
+	m.worlds[name], m.handles[entry.id], m.byWorld[w] = entry, entry, entry
 	return entry.id, nil
 }
 
@@ -206,6 +207,16 @@ func (m *WorldManager) entryByHandle(id native.WorldID) (*managedWorld, bool) {
 	defer m.mu.RUnlock()
 	entry, ok := m.handles[id]
 	return liveWorld(entry, ok)
+}
+
+func (m *WorldManager) handleByWorld(w *world.World) (native.WorldID, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	entry, ok := liveWorld(m.byWorld[w], m.byWorld[w] != nil)
+	if !ok {
+		return 0, false
+	}
+	return entry.id, true
 }
 
 func liveWorld(entry *managedWorld, ok bool) (*managedWorld, bool) {
@@ -309,6 +320,7 @@ func (m *WorldManager) unload(invocation native.InvocationID, entry *managedWorl
 	m.mu.Lock()
 	delete(m.worlds, entry.name)
 	delete(m.handles, entry.id)
+	delete(m.byWorld, entry.world)
 	entry.closed = true
 	m.mu.Unlock()
 	return entry.world.Close()
@@ -324,6 +336,7 @@ func (m *WorldManager) CloseCustom() error {
 			custom = append(custom, entry)
 			delete(m.worlds, name)
 			delete(m.handles, entry.id)
+			delete(m.byWorld, entry.world)
 		}
 	}
 	m.mu.Unlock()
@@ -407,8 +420,7 @@ func (m *WorldManager) SetWorldBlock(invocation native.InvocationID, id native.W
 	if !ok {
 		return false
 	}
-	m.writeTx(invocation, entry, func(tx *world.Tx) { tx.SetBlock(blockPosition(position), block, nil) })
-	return true
+	return m.writeTx(invocation, entry, func(tx *world.Tx) { tx.SetBlock(blockPosition(position), block, nil) })
 }
 
 func (m *WorldManager) WorldTime(_ native.InvocationID, id native.WorldID) (int64, bool) {
@@ -490,12 +502,18 @@ func (m *WorldManager) readTx(invocation native.InvocationID, entry *managedWorl
 	return value, err == nil
 }
 
-func (m *WorldManager) writeTx(invocation native.InvocationID, entry *managedWorld, function func(*world.Tx)) {
+func (m *WorldManager) writeTx(invocation native.InvocationID, entry *managedWorld, function func(*world.Tx)) bool {
 	if tx := m.currentTx(invocation, entry.world); tx != nil {
 		function(tx)
-		return
+		return true
+	}
+	if invocation != 0 {
+		if _, ok := m.invocationTx(invocation); !ok {
+			return false
+		}
 	}
 	entry.world.Do(function)
+	return true
 }
 
 func (m *WorldManager) currentTx(invocation native.InvocationID, w *world.World) *world.Tx {

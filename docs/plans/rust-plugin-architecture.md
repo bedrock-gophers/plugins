@@ -471,7 +471,7 @@ Current host actions include:
 
 Every synchronous player callback registers one invocation ID for its exact transaction. Same-world block operations use that `world.Tx` directly. Calls with no invocation are off-owner: writes enqueue through `World.Do` and reads use `world.Call`. Cross-world writes from callbacks enqueue, while cross-world synchronous block reads are rejected because reciprocal owner calls can deadlock. Save/unload are rejected from callbacks and run only off-owner. Transaction values never cross or survive the ABI; the asynchronous task API will provide callback-safe cross-world reads and lifecycle operations.
 
-The host ABI is currently v8. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+The host ABI is currently v9. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
 
 ## Entities
 
@@ -479,7 +479,7 @@ Go stores `*world.EntityHandle`, never transaction-scoped `world.Entity` values.
 
 Rust spawn descriptors are sealed and typed: `Text`, `Lightning`, `TNT`, `ExperienceOrb`, `DroppedItem`, `FallingBlock`, `Arrow`, `Egg`, `Snowball`, `EnderPearl`, `BottleOfEnchanting`, `SplashPotion`, and `LingeringPotion`. One flat ABI descriptor feeds Dragonfly constructors and registry factories, so adding language SDKs does not require one adapter per concrete type.
 
-Common entity state is capability-based. Position and rotation exist on every `world.Entity`; velocity, teleport, and name tag are optional capabilities. Rust getters return `Option`, while unsupported/stale setters silently no-op and never expose host transport errors. Dragonfly v0.11 has no exported generic rotation setter, so only spawn-time rotation and rotation reads are supported. Reflection or unsafe access to private `entity.Ent` state is forbidden.
+Common entity state is capability-based. Every managed entity exposes its `World`; position and rotation exist on every `world.Entity`, while velocity, teleport, and name tag are optional capabilities. Rust getters return `Option`, while unsupported/stale setters silently no-op and never expose host transport errors. Dragonfly v0.11 has no exported generic rotation setter, so only spawn-time rotation and rotation reads are supported. Reflection or unsafe access to private `entity.Ent` state is forbidden.
 
 Entity spawn returns a handle synchronously, so it currently requires the target world to own the active callback transaction. Unlike fire-and-forget block writes, a cross-world spawn cannot be queued without changing its return type to an asynchronous task. The planned task API will carry the resulting handle; current callbacks must spawn in their own world, while off-callback code may spawn in any managed world.
 
@@ -488,6 +488,14 @@ Entity spawn returns a handle synchronously, so it currently requires the target
 Projectile factories preserve Dragonfly owner resolution and built-in behavior. Current Dragonfly has no global projectile-impact callback: its per-config `Hit` callback is post-effect, non-cancellable, and misses surviving arrow/block collisions. A global cancellable projectile-hit event requires an upstream pre-impact hook. Reimplementing private potion, pearl, bottle, and arrow behavior in this project is rejected because it would drift from raw Dragonfly.
 
 `Event::PlayerAttackEntity` is bridged at Dragonfly's native pre-damage handler. It exposes attacker, stable target entity, cancellable default-allowed state, knockback force/height, and critical flag. Cancellation remains monotonic across plugins.
+
+## Particles and sounds
+
+`particle::Particle` is sealed and implemented by typed descriptors for all Dragonfly v0.11 built-ins. The flat `DfParticleViewV1` carries only the union of concrete fields: colour, block, face/area/instrument data, note pitch, and dragon-egg offset. Go reconstructs the exact `world/particle` type and calls `Tx.AddParticle`; same-world callbacks reuse their transaction and cross-world calls enqueue through `World.Do`. Dragonfly has no particle registry or identifier strings, so the SDK does not invent a second naming system.
+
+Sounds require the same typed descriptor pattern because Dragonfly serialises concrete `world/sound` types through a type switch. Parameterised sounds also carry blocks, items, instruments, discs, horns, liquids, or scalar state. The existing player-only zero-field enum remains temporary until the complete shared `sound::Sound` descriptor replaces it for both `Player::play_sound` and `World::play_sound`.
+
+Dragonfly v0.11 does not expose `Player.StopSound`: the packet writer and player session are private. Exact stop-one/stop-all support needs an upstream public API and will not use reflection, `linkname`, or a fake `MusicDiscEnd` substitution.
 
 ## Items and inventories
 
@@ -556,6 +564,7 @@ Initial ABI foundation includes:
 - Main, armour, and offhand inventory handles with item snapshots and mutation.
 - Stable entity handles, typed built-in/projectile spawning, state capabilities, and despawn.
 - Cancellable attack-entity event with stable target attribution.
+- Typed built-in world particles with block, colour, face, note, and offset parameters.
 
 Temporarily deferred from the first implementation milestone:
 

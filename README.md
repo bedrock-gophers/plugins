@@ -2,7 +2,7 @@
 
 Native multi-language plugin runtime for [df-mc/dragonfly](https://github.com/df-mc/dragonfly). Rust is the first supported plugin language.
 
-Current status: native runtime foundation plus player actions, typed items, inventories, scoreboards, asynchronous forms, managed worlds, stable entity handles, built-in entity/projectile spawning, and attack-entity events. Generated events, lifecycle hooks, Dragonfly commands, bounded snapshots, and host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
+Current status: native runtime foundation plus player actions, typed items, inventories, scoreboards, asynchronous forms, managed worlds, stable entity handles, built-in entity/projectile spawning, typed world particles, and attack-entity events. Generated events, lifecycle hooks, Dragonfly commands, bounded snapshots, and host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
 
 ## Build and test
 
@@ -60,9 +60,23 @@ if let Some(world) = World::overworld() {
 }
 ```
 
-`World::entities()` and `World::players()` resolve within the current transaction. `Entity` exposes type, position, rotation, optional velocity/name tag, teleport, velocity/name-tag mutation, and despawn. Dragonfly v0.11 has no exported generic rotation setter, so rotation mutation is deliberately absent rather than implemented with reflection. Projectiles use typed owner handles (`Arrow`, `Snowball`, `Egg`, `EnderPearl`, bottles, and potions). Dragonfly has no global pre-impact projectile hook; a correct cancellable projectile-hit event needs an upstream hook and is not faked by rebuilding private projectile behaviour.
+`World::entities()` and `World::players()` resolve within the current transaction. `Entity` exposes its managed world, type, position, rotation, optional velocity/name tag, teleport, velocity/name-tag mutation, and despawn. Dragonfly v0.11 has no exported generic rotation setter, so rotation mutation is deliberately absent rather than implemented with reflection. Projectiles use typed owner handles (`Arrow`, `Snowball`, `Egg`, `EnderPearl`, bottles, and potions). Dragonfly has no global pre-impact projectile hook; a correct cancellable projectile-hit event needs an upstream hook and is not faked by rebuilding private projectile behaviour.
 
 Synchronous entity spawning inside a callback must target that callback's current world. Cross-world spawning will return an asynchronous handle task when the task API lands; off-callback code may already spawn in any managed world.
+
+Particles mirror Dragonfly's concrete types rather than inventing string identifiers:
+
+```rust
+use dragonfly::{Vec3, World, block, particle};
+
+if let Some(world) = World::overworld() {
+    world.add_particle(Vec3 { x: 0.0, y: 65.0, z: 0.0 }, particle::HugeExplosion);
+    world.add_particle(
+        Vec3 { x: 0.0, y: 65.0, z: 0.0 },
+        particle::BlockBreak::new(block::new("minecraft:diamond_block")),
+    );
+}
+```
 
 Regenerate ABI files after changing `schema/`:
 
@@ -160,5 +174,6 @@ See [native plugin architecture](docs/plans/rust-plugin-architecture.md).
 - [Forms](examples/plugins/forms): demonstrates menu, modal, and typed custom-form responses.
 - [World command](examples/plugins/world-command): demonstrates world lookup/open, blocks, time, and spawn.
 - [Entity command](examples/plugins/entity-command): demonstrates typed entity/projectile spawning, handles, and world lists.
+- [Particle command](examples/plugins/particle-command): demonstrates every typed built-in particle family.
 
 The examples compile as native plugin libraries through `make stage-examples`. Precompiled `.so`, `.dylib`, or `.dll` plugins may also be placed directly in `examples/plugins`.

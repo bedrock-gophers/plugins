@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{ItemStack, Potion, Rotation, Vec3, block};
+use crate::{ItemStack, Potion, Rotation, Vec3, World, block};
 
 const MAX_ENTITY_TYPE_BYTES: usize = 256;
 const MAX_ENTITY_TAG_BYTES: usize = 4 << 10;
@@ -72,6 +72,7 @@ impl Entity {
             rotation: dragonfly_plugin_sys::DfRotation::default(),
             velocity: dragonfly_plugin_sys::DfVec3::default(),
             capabilities: 0,
+            world: dragonfly_plugin_sys::DfWorldId::default(),
             entity_type: crate::bytes_buffer(&mut entity_type),
             name_tag: crate::bytes_buffer(&mut name_tag),
         };
@@ -92,6 +93,7 @@ impl Entity {
             entity_type: String::from_utf8(entity_type.get(..type_length)?.to_vec()).ok()?,
             position: raw.position.into(),
             rotation: raw.rotation.into(),
+            world: World::from_raw(raw.world.value),
             velocity: (raw.capabilities & dragonfly_plugin_sys::DF_ENTITY_HAS_VELOCITY != 0)
                 .then(|| raw.velocity.into()),
             name_tag: if raw.capabilities & dragonfly_plugin_sys::DF_ENTITY_HAS_NAME_TAG != 0 {
@@ -111,6 +113,9 @@ impl Entity {
     }
     pub fn rotation(&self) -> Option<Rotation> {
         self.state().map(|state| state.rotation)
+    }
+    pub fn world(&self) -> Option<World> {
+        self.state()?.world
     }
     pub fn velocity(&self) -> Option<Vec3> {
         self.state()?.velocity
@@ -193,6 +198,7 @@ pub struct EntityState {
     pub entity_type: String,
     pub position: Vec3,
     pub rotation: Rotation,
+    pub world: Option<World>,
     pub velocity: Option<Vec3>,
     pub name_tag: Option<String>,
     pub can_teleport: bool,
@@ -895,6 +901,7 @@ mod tests {
                 yaw: 20.0,
                 pitch: -5.0,
             },
+            world: None,
             velocity: None,
             name_tag: Some("Label".to_owned()),
             can_teleport: false,
