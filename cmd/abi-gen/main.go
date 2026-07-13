@@ -42,8 +42,26 @@ type playerSchema struct {
 }
 
 type itemSchema struct {
+	SimpleItems  []simpleItemType  `yaml:"simple_items"`
+	ToolTiers    []toolTierType    `yaml:"tool_tiers"`
+	ToolFamilies []toolFamilyType  `yaml:"tool_families"`
 	Enchantments []enchantmentType `yaml:"enchantments"`
 	Potions      []potionType      `yaml:"potions"`
+}
+
+type simpleItemType struct {
+	Name       string `yaml:"name"`
+	Identifier string `yaml:"identifier"`
+}
+
+type toolTierType struct {
+	Name       string `yaml:"name"`
+	Identifier string `yaml:"identifier"`
+}
+
+type toolFamilyType struct {
+	Name       string `yaml:"name"`
+	Identifier string `yaml:"identifier"`
 }
 
 type enchantmentType struct {
@@ -135,8 +153,29 @@ func readItems(path string) (itemSchema, error) {
 	if err := yaml.Unmarshal(data, &schema); err != nil {
 		return itemSchema{}, fmt.Errorf("decode %s: %w", path, err)
 	}
-	if len(schema.Enchantments) == 0 || len(schema.Potions) == 0 {
-		return itemSchema{}, fmt.Errorf("%s: enchantments and potions must not be empty", path)
+	if len(schema.SimpleItems) == 0 || len(schema.ToolTiers) == 0 || len(schema.ToolFamilies) == 0 || len(schema.Enchantments) == 0 || len(schema.Potions) == 0 {
+		return itemSchema{}, fmt.Errorf("%s: item, tool, enchantment, and potion lists must not be empty", path)
+	}
+	itemNames, itemIdentifiers := map[string]bool{}, map[string]bool{}
+	for _, item := range schema.SimpleItems {
+		if item.Name == "" || item.Identifier == "" || itemNames[item.Name] || itemIdentifiers[item.Identifier] {
+			return itemSchema{}, fmt.Errorf("invalid or duplicate simple item %+v", item)
+		}
+		itemNames[item.Name], itemIdentifiers[item.Identifier] = true, true
+	}
+	tierNames, tierIdentifiers := map[string]bool{}, map[string]bool{}
+	for _, tier := range schema.ToolTiers {
+		if tier.Name == "" || tier.Identifier == "" || tierNames[tier.Name] || tierIdentifiers[tier.Identifier] {
+			return itemSchema{}, fmt.Errorf("invalid or duplicate tool tier %+v", tier)
+		}
+		tierNames[tier.Name], tierIdentifiers[tier.Identifier] = true, true
+	}
+	familyNames, familyIdentifiers := map[string]bool{}, map[string]bool{}
+	for _, family := range schema.ToolFamilies {
+		if family.Name == "" || family.Identifier == "" || familyNames[family.Name] || familyIdentifiers[family.Identifier] {
+			return itemSchema{}, fmt.Errorf("invalid or duplicate tool family %+v", family)
+		}
+		familyNames[family.Name], familyIdentifiers[family.Identifier] = true, true
 	}
 	enchantmentIDs, enchantmentNames := map[uint32]bool{}, map[string]bool{}
 	for _, enchantment := range schema.Enchantments {
@@ -154,6 +193,7 @@ func readItems(path string) (itemSchema, error) {
 	}
 	sort.Slice(schema.Enchantments, func(i, j int) bool { return schema.Enchantments[i].ID < schema.Enchantments[j].ID })
 	sort.Slice(schema.Potions, func(i, j int) bool { return schema.Potions[i].ID < schema.Potions[j].ID })
+	sort.Slice(schema.SimpleItems, func(i, j int) bool { return schema.SimpleItems[i].Name < schema.SimpleItems[j].Name })
 	return schema, nil
 }
 
@@ -254,7 +294,7 @@ func validateFields(eventName string, fields []field) error {
 	valid := map[string]bool{
 		"bool": true, "player_id": true, "rotation": true, "string_buffer": true,
 		"string_view": true, "vec3": true, "f64": true, "u64": true, "i32": true,
-		"block_pos": true, "item_stack": true,
+		"block_pos": true, "item_stack": true, "damage_source": true, "healing_source": true,
 	}
 	seen := map[string]bool{}
 	for _, f := range fields {
@@ -282,7 +322,7 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 1u
-#define DF_HOST_ABI_VERSION 2u
+#define DF_HOST_ABI_VERSION 3u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -296,7 +336,22 @@ typedef struct { double yaw; double pitch; } DfRotation;
 typedef struct { int32_t x; int32_t y; int32_t z; } DfBlockPos;
 typedef struct { const uint8_t *data; uint64_t len; } DfStringView;
 typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffer;
+typedef struct { DfStringView name; uint32_t flags; } DfDamageSourceView;
+typedef struct { DfStringView name; } DfHealingSourceView;
+#define DF_DAMAGE_SOURCE_REDUCED_BY_ARMOUR 1u
+#define DF_DAMAGE_SOURCE_REDUCED_BY_RESISTANCE 2u
+#define DF_DAMAGE_SOURCE_FIRE 4u
+#define DF_DAMAGE_SOURCE_IGNORES_TOTEM 8u
 typedef struct { DfStringView identifier; int32_t metadata; int32_t count; int32_t damage; } DfItemStackView;
+#define DF_INVENTORY_MAIN 0u
+#define DF_INVENTORY_ARMOUR 1u
+#define DF_INVENTORY_OFFHAND 2u
+typedef struct { DfPlayerId player; uint32_t kind; uint32_t reserved; } DfInventoryId;
+typedef struct { uint64_t offset; uint64_t len; } DfByteSpan;
+typedef struct { uint32_t id; uint32_t level; } DfItemEnchantment;
+typedef struct { int32_t metadata; uint32_t count; uint32_t damage; uint8_t unbreakable; int32_t anvil_cost; uint64_t identifier_len; uint64_t custom_name_len; uint64_t lore_bytes_len; uint64_t lore_count; uint64_t nbt_len; uint64_t values_nbt_len; uint64_t enchantment_count; } DfItemStackInfo;
+typedef struct { DfStringBuffer identifier; DfStringBuffer custom_name; DfStringBuffer lore_bytes; DfStringBuffer nbt; DfStringBuffer values_nbt; DfByteSpan *lore; uint64_t lore_capacity; DfItemEnchantment *enchantments; uint64_t enchantment_capacity; } DfItemStackData;
+typedef struct { DfStringView identifier; int32_t metadata; uint32_t count; uint32_t damage; uint8_t unbreakable; int32_t anvil_cost; DfStringView custom_name; const DfStringView *lore; uint64_t lore_count; DfStringView nbt; DfStringView values_nbt; const DfItemEnchantment *enchantments; uint64_t enchantment_count; } DfItemStackViewV3;
 #define DF_PLAYER_TRANSFORM_TELEPORT 0u
 #define DF_PLAYER_TRANSFORM_MOVE 1u
 #define DF_PLAYER_TRANSFORM_VELOCITY 2u
@@ -339,6 +394,17 @@ typedef DfStatus (*DfHostPlayerSkinAnimationInfoFn)(uint64_t context, uint64_t s
 typedef DfStatus (*DfHostPlayerSkinReadFn)(uint64_t context, uint64_t snapshot, DfSkinData *data);
 typedef void (*DfHostPlayerSkinCloseFn)(uint64_t context, uint64_t snapshot);
 typedef DfStatus (*DfHostPlayerSkinSetFn)(uint64_t context, DfPlayerId player, const DfSkinView *skin);
+typedef DfStatus (*DfHostInventorySizeFn)(uint64_t context, DfInventoryId inventory, uint32_t *size);
+typedef DfStatus (*DfHostInventoryItemOpenFn)(uint64_t context, DfInventoryId inventory, uint32_t slot, uint64_t *snapshot, DfItemStackInfo *info);
+typedef DfStatus (*DfHostPlayerHeldItemOpenFn)(uint64_t context, DfPlayerId player, uint32_t hand, uint64_t *snapshot, DfItemStackInfo *info);
+typedef DfStatus (*DfHostItemStackReadFn)(uint64_t context, uint64_t snapshot, DfItemStackData *data);
+typedef void (*DfHostItemStackCloseFn)(uint64_t context, uint64_t snapshot);
+typedef DfStatus (*DfHostInventoryItemSetFn)(uint64_t context, DfInventoryId inventory, uint32_t slot, const DfItemStackViewV3 *item);
+typedef DfStatus (*DfHostInventoryItemAddFn)(uint64_t context, DfInventoryId inventory, const DfItemStackViewV3 *item, uint32_t *added);
+typedef DfStatus (*DfHostInventoryClearSlotFn)(uint64_t context, DfInventoryId inventory, uint32_t slot);
+typedef DfStatus (*DfHostInventoryClearFn)(uint64_t context, DfInventoryId inventory);
+typedef DfStatus (*DfHostPlayerHeldItemsSetFn)(uint64_t context, DfPlayerId player, const DfItemStackViewV3 *main_hand, const DfItemStackViewV3 *off_hand);
+typedef DfStatus (*DfHostPlayerHeldSlotSetFn)(uint64_t context, DfPlayerId player, uint32_t slot);
 typedef struct {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -356,7 +422,18 @@ typedef struct {
     DfHostPlayerSkinReadFn player_skin_read;
     DfHostPlayerSkinCloseFn player_skin_close;
     DfHostPlayerSkinSetFn player_skin_set;
-} DfHostApiV2;
+    DfHostInventorySizeFn inventory_size;
+    DfHostInventoryItemOpenFn inventory_item_open;
+    DfHostPlayerHeldItemOpenFn player_held_item_open;
+    DfHostItemStackReadFn item_stack_read;
+    DfHostItemStackCloseFn item_stack_close;
+    DfHostInventoryItemSetFn inventory_item_set;
+    DfHostInventoryItemAddFn inventory_item_add;
+    DfHostInventoryClearSlotFn inventory_clear_slot;
+    DfHostInventoryClearFn inventory_clear;
+    DfHostPlayerHeldItemsSetFn player_held_items_set;
+    DfHostPlayerHeldSlotSetFn player_held_slot_set;
+} DfHostApiV3;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -411,7 +488,7 @@ typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV2 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV3 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -431,7 +508,7 @@ typedef struct {
 typedef const DfPluginApiV1 *(*DfPluginEntryV1Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV2 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV3 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);
@@ -461,7 +538,7 @@ func generateRust(events []event, player playerSchema) []byte {
 	b.WriteString(`use core::ffi::c_void;
 
 pub const DF_ABI_VERSION: u32 = 1;
-pub const DF_HOST_ABI_VERSION: u32 = 2;
+pub const DF_HOST_ABI_VERSION: u32 = 3;
 pub const DF_STATUS_OK: DfStatus = 0;
 pub const DF_STATUS_ERROR: DfStatus = 1;
 pub type DfStatus = i32;
@@ -496,7 +573,38 @@ impl Default for DfStringBuffer {
 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
+pub struct DfDamageSourceView { pub name: DfStringView, pub flags: u32 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfHealingSourceView { pub name: DfStringView }
+pub const DF_DAMAGE_SOURCE_REDUCED_BY_ARMOUR: u32 = 1;
+pub const DF_DAMAGE_SOURCE_REDUCED_BY_RESISTANCE: u32 = 2;
+pub const DF_DAMAGE_SOURCE_FIRE: u32 = 4;
+pub const DF_DAMAGE_SOURCE_IGNORES_TOTEM: u32 = 8;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct DfItemStackView { pub identifier: DfStringView, pub metadata: i32, pub count: i32, pub damage: i32 }
+pub const DF_INVENTORY_MAIN: u32 = 0;
+pub const DF_INVENTORY_ARMOUR: u32 = 1;
+pub const DF_INVENTORY_OFFHAND: u32 = 2;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfInventoryId { pub player: DfPlayerId, pub kind: u32, pub reserved: u32 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfByteSpan { pub offset: u64, pub len: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfItemEnchantment { pub id: u32, pub level: u32 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfItemStackInfo { pub metadata: i32, pub count: u32, pub damage: u32, pub unbreakable: u8, pub anvil_cost: i32, pub identifier_len: u64, pub custom_name_len: u64, pub lore_bytes_len: u64, pub lore_count: u64, pub nbt_len: u64, pub values_nbt_len: u64, pub enchantment_count: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfItemStackData { pub identifier: DfStringBuffer, pub custom_name: DfStringBuffer, pub lore_bytes: DfStringBuffer, pub nbt: DfStringBuffer, pub values_nbt: DfStringBuffer, pub lore: *mut DfByteSpan, pub lore_capacity: u64, pub enchantments: *mut DfItemEnchantment, pub enchantment_capacity: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfItemStackViewV3 { pub identifier: DfStringView, pub metadata: i32, pub count: u32, pub damage: u32, pub unbreakable: u8, pub anvil_cost: i32, pub custom_name: DfStringView, pub lore: *const DfStringView, pub lore_count: u64, pub nbt: DfStringView, pub values_nbt: DfStringView, pub enchantments: *const DfItemEnchantment, pub enchantment_count: u64 }
 pub const DF_PLAYER_TRANSFORM_TELEPORT: u32 = 0;
 pub const DF_PLAYER_TRANSFORM_MOVE: u32 = 1;
 pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
@@ -553,9 +661,20 @@ pub type DfHostPlayerSkinAnimationInfoFn = unsafe extern "C" fn(context: u64, sn
 pub type DfHostPlayerSkinReadFn = unsafe extern "C" fn(context: u64, snapshot: u64, data: *mut DfSkinData) -> DfStatus;
 pub type DfHostPlayerSkinCloseFn = unsafe extern "C" fn(context: u64, snapshot: u64);
 pub type DfHostPlayerSkinSetFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, skin: *const DfSkinView) -> DfStatus;
+pub type DfHostInventorySizeFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, size: *mut u32) -> DfStatus;
+pub type DfHostInventoryItemOpenFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, slot: u32, snapshot: *mut u64, info: *mut DfItemStackInfo) -> DfStatus;
+pub type DfHostPlayerHeldItemOpenFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, hand: u32, snapshot: *mut u64, info: *mut DfItemStackInfo) -> DfStatus;
+pub type DfHostItemStackReadFn = unsafe extern "C" fn(context: u64, snapshot: u64, data: *mut DfItemStackData) -> DfStatus;
+pub type DfHostItemStackCloseFn = unsafe extern "C" fn(context: u64, snapshot: u64);
+pub type DfHostInventoryItemSetFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, slot: u32, item: *const DfItemStackViewV3) -> DfStatus;
+pub type DfHostInventoryItemAddFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, item: *const DfItemStackViewV3, added: *mut u32) -> DfStatus;
+pub type DfHostInventoryClearSlotFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, slot: u32) -> DfStatus;
+pub type DfHostInventoryClearFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId) -> DfStatus;
+pub type DfHostPlayerHeldItemsSetFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, main_hand: *const DfItemStackViewV3, off_hand: *const DfItemStackViewV3) -> DfStatus;
+pub type DfHostPlayerHeldSlotSetFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, slot: u32) -> DfStatus;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfHostApiV2 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn> }
+pub struct DfHostApiV3 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn>, pub inventory_size: Option<DfHostInventorySizeFn>, pub inventory_item_open: Option<DfHostInventoryItemOpenFn>, pub player_held_item_open: Option<DfHostPlayerHeldItemOpenFn>, pub item_stack_read: Option<DfHostItemStackReadFn>, pub item_stack_close: Option<DfHostItemStackCloseFn>, pub inventory_item_set: Option<DfHostInventoryItemSetFn>, pub inventory_item_add: Option<DfHostInventoryItemAddFn>, pub inventory_clear_slot: Option<DfHostInventoryClearSlotFn>, pub inventory_clear: Option<DfHostInventoryClearFn>, pub player_held_items_set: Option<DfHostPlayerHeldItemsSetFn>, pub player_held_slot_set: Option<DfHostPlayerHeldSlotSetFn> }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandParameter { pub kind: u32, pub optional: u8, pub name: DfStringView, pub values: *const DfStringView, pub value_count: u64 }
@@ -623,7 +742,7 @@ pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> Df
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
 pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
 pub type DfCommandEnumOptionsFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, overload: u64, parameter: u64, context: *const DfCommandEnumContext, output: *mut DfStringBuffer) -> DfStatus;
-pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV2) -> DfStatus;
+pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV3) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 
@@ -814,6 +933,27 @@ func generateRustPlayerStates(player playerSchema) []byte {
 func generateRustItems(items itemSchema) []byte {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "// Code generated by abi-gen v%s. DO NOT EDIT.\n\n", generatorVersion)
+	b.WriteString("pub trait Item {\n    fn identifier(&self) -> &str;\n\n    fn metadata(&self) -> i32 { 0 }\n}\n\nimpl<T: Item + ?Sized> Item for &T {\n    fn identifier(&self) -> &str { (*self).identifier() }\n\n    fn metadata(&self) -> i32 { (*self).metadata() }\n}\n\n")
+	b.WriteString("pub mod item {\n    use super::Item;\n\n")
+	for _, item := range items.SimpleItems {
+		name := title(item.Name)
+		fmt.Fprintf(&b, "    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]\n    pub struct %s;\n\n    impl Item for %s {\n        fn identifier(&self) -> &str { %q }\n    }\n\n", name, name, item.Identifier)
+	}
+	b.WriteString("    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n    pub enum ToolTier {\n")
+	for _, tier := range items.ToolTiers {
+		fmt.Fprintf(&b, "        %s,\n", title(tier.Name))
+	}
+	b.WriteString("    }\n\n")
+	for _, family := range items.ToolFamilies {
+		name := title(family.Name)
+		fmt.Fprintf(&b, "    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n    pub struct %s { tier: ToolTier }\n\n    impl %s {\n        pub const fn new(tier: ToolTier) -> Self { Self { tier } }\n\n        pub const fn tier(self) -> ToolTier { self.tier }\n    }\n\n    impl Item for %s {\n        fn identifier(&self) -> &str {\n            match self.tier {\n", name, name, name)
+		for _, tier := range items.ToolTiers {
+			identifier := "minecraft:" + tier.Identifier + "_" + family.Identifier
+			fmt.Fprintf(&b, "                ToolTier::%s => %q,\n", title(tier.Name), identifier)
+		}
+		b.WriteString("            }\n        }\n    }\n\n")
+	}
+	b.WriteString("    #[derive(Clone, Debug, Eq, Hash, PartialEq)]\n    pub struct Custom { identifier: std::string::String, metadata: i32 }\n\n    impl Custom {\n        pub fn new(identifier: impl Into<std::string::String>) -> Self {\n            Self { identifier: identifier.into(), metadata: 0 }\n        }\n\n        pub fn with_metadata(mut self, metadata: i32) -> Self {\n            self.metadata = metadata;\n            self\n        }\n    }\n\n    impl Item for Custom {\n        fn identifier(&self) -> &str { &self.identifier }\n\n        fn metadata(&self) -> i32 { self.metadata }\n    }\n\n    pub fn new(item: impl Item, count: u32) -> super::ItemStack {\n        super::ItemStack::new(item, count)\n    }\n}\n\n")
 	b.WriteString("#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\npub enum Enchantment {\n")
 	for _, enchantment := range items.Enchantments {
 		fmt.Fprintf(&b, "    %s,\n", title(enchantment.Name))
@@ -853,6 +993,7 @@ func cType(t string) string {
 		"string_buffer": "DfStringBuffer", "string_view": "DfStringView", "vec3": "DfVec3",
 		"f64": "double", "u64": "uint64_t",
 		"i32": "int32_t", "block_pos": "DfBlockPos", "item_stack": "DfItemStackView",
+		"damage_source": "DfDamageSourceView", "healing_source": "DfHealingSourceView",
 	}[t]
 }
 
@@ -862,6 +1003,7 @@ func rustType(t string) string {
 		"string_buffer": "DfStringBuffer", "string_view": "DfStringView", "vec3": "DfVec3",
 		"f64": "f64", "u64": "u64",
 		"i32": "i32", "block_pos": "DfBlockPos", "item_stack": "DfItemStackView",
+		"damage_source": "DfDamageSourceView", "healing_source": "DfHealingSourceView",
 	}[t]
 }
 

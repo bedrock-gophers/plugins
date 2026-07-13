@@ -102,12 +102,22 @@ type PlayerQuitInput struct {
 	Name   string
 }
 
+type DamageSource struct {
+	Name                                       string
+	ReducedByArmour, ReducedByResistance, Fire bool
+	IgnoresTotem                               bool
+}
+
+type HealingSource struct {
+	Name string
+}
+
 type PlayerHurtInput struct {
 	Player         PlayerID
 	Damage         float64
 	Immune         bool
 	AttackImmunity time.Duration
-	Source         string
+	Source         DamageSource
 }
 
 type PlayerHurtOutput struct {
@@ -119,7 +129,7 @@ type PlayerHurtOutput struct {
 type PlayerHealInput struct {
 	Player PlayerID
 	Health float64
-	Source string
+	Source HealingSource
 }
 
 type PlayerHealOutput struct {
@@ -158,7 +168,7 @@ type PlayerFoodLossOutput struct {
 
 type PlayerDeathInput struct {
 	Player PlayerID
-	Source string
+	Source DamageSource
 }
 
 type PlayerPositionInput struct {
@@ -632,12 +642,12 @@ func (r *Runtime) HandlePlayerHurt(input PlayerHurtInput, cancelled bool) (Playe
 	if r == nil || r.ptr == nil {
 		return output, errors.New("native runtime is closed")
 	}
-	source := C.CBytes([]byte(input.Source))
+	source := C.CBytes([]byte(input.Source.Name))
 	defer C.free(source)
 	var nativeInput C.DfPlayerHurtInput
 	fillPlayerID(&nativeInput.player, input.Player)
 	nativeInput.immune = C.uint8_t(boolByte(input.Immune))
-	nativeInput.source = C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))}
+	nativeInput.source = nativeDamageSource(input.Source, source)
 	state := C.DfPlayerHurtState{
 		damage:                       C.double(input.Damage),
 		attack_immunity_milliseconds: C.uint64_t(max(input.AttackImmunity.Milliseconds(), 0)),
@@ -659,11 +669,11 @@ func (r *Runtime) HandlePlayerHeal(input PlayerHealInput, cancelled bool) (Playe
 	if r == nil || r.ptr == nil {
 		return output, errors.New("native runtime is closed")
 	}
-	source := C.CBytes([]byte(input.Source))
+	source := C.CBytes([]byte(input.Source.Name))
 	defer C.free(source)
 	var nativeInput C.DfPlayerHealInput
 	fillPlayerID(&nativeInput.player, input.Player)
-	nativeInput.source = C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))}
+	nativeInput.source = C.DfHealingSourceView{name: C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source.Name))}}
 	state := C.DfPlayerHealState{health: C.double(input.Health)}
 	if cancelled {
 		state.cancelled = 1
@@ -743,11 +753,11 @@ func (r *Runtime) HandlePlayerDeath(input PlayerDeathInput, keepInventory bool) 
 	if r == nil || r.ptr == nil {
 		return keepInventory, errors.New("native runtime is closed")
 	}
-	source := C.CBytes([]byte(input.Source))
+	source := C.CBytes([]byte(input.Source.Name))
 	defer C.free(source)
 	var nativeInput C.DfPlayerDeathInput
 	fillPlayerID(&nativeInput.player, input.Player)
-	nativeInput.source = C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))}
+	nativeInput.source = nativeDamageSource(input.Source, source)
 	var state C.DfPlayerDeathState
 	if keepInventory {
 		state.keep_inventory = 1
@@ -1105,6 +1115,26 @@ func boolByte(value bool) uint8 {
 		return 1
 	}
 	return 0
+}
+
+func nativeDamageSource(source DamageSource, name unsafe.Pointer) C.DfDamageSourceView {
+	var flags uint32
+	if source.ReducedByArmour {
+		flags |= C.DF_DAMAGE_SOURCE_REDUCED_BY_ARMOUR
+	}
+	if source.ReducedByResistance {
+		flags |= C.DF_DAMAGE_SOURCE_REDUCED_BY_RESISTANCE
+	}
+	if source.Fire {
+		flags |= C.DF_DAMAGE_SOURCE_FIRE
+	}
+	if source.IgnoresTotem {
+		flags |= C.DF_DAMAGE_SOURCE_IGNORES_TOTEM
+	}
+	return C.DfDamageSourceView{
+		name:  C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(source.Name))},
+		flags: C.uint32_t(flags),
+	}
 }
 
 func fillPlayerID(destination *C.DfPlayerId, source PlayerID) {

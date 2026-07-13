@@ -203,7 +203,7 @@ func (h *PlayerHandler) HandleHurt(ctx *player.Context, damage *float64, immune 
 		Damage:         *damage,
 		Immune:         immune,
 		AttackImmunity: *attackImmunity,
-		Source:         fmt.Sprintf("%T", source),
+		Source:         nativeDamageSource(source),
 	}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin hurt handler failed", "player", p.Name(), "error", err)
@@ -224,7 +224,7 @@ func (h *PlayerHandler) HandleHeal(ctx *player.Context, health *float64, source 
 	output, err := h.runtime.HandlePlayerHeal(native.PlayerHealInput{
 		Player: h.playerID(p),
 		Health: *health,
-		Source: fmt.Sprintf("%T", source),
+		Source: native.HealingSource{Name: fmt.Sprintf("%T", source)},
 	}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin heal handler failed", "player", p.Name(), "error", err)
@@ -442,7 +442,7 @@ func (h *PlayerHandler) HandleDeath(p *player.Player, source world.DamageSource,
 	}
 	keep, err := h.runtime.HandlePlayerDeath(native.PlayerDeathInput{
 		Player: h.playerID(p),
-		Source: fmt.Sprintf("%T", source),
+		Source: nativeDamageSource(source),
 	}, *keepInventory)
 	if err != nil {
 		h.log.Error("native plugin death handler failed", "player", p.Name(), "error", err)
@@ -508,12 +508,26 @@ func blockName(block world.Block) string {
 }
 
 func nativeItemStack(stack item.Stack) native.ItemStackView {
+	if stack.Empty() {
+		return native.ItemStackView{}
+	}
 	name, metadata := stack.Item().EncodeItem()
 	damage := 0
 	if maximum := stack.MaxDurability(); maximum >= 0 {
 		damage = maximum - stack.Durability()
 	}
 	return native.ItemStackView{Identifier: name, Metadata: int(metadata), Count: stack.Count(), Damage: damage}
+}
+
+func nativeDamageSource(source world.DamageSource) native.DamageSource {
+	if source == nil {
+		return native.DamageSource{Name: "<nil>"}
+	}
+	return native.DamageSource{
+		Name: fmt.Sprintf("%T", source), ReducedByArmour: source.ReducedByArmour(),
+		ReducedByResistance: source.ReducedByResistance(), Fire: source.Fire(),
+		IgnoresTotem: source.IgnoreTotem(),
+	}
 }
 
 func (h *PlayerHandler) playerID(p *player.Player) native.PlayerID {

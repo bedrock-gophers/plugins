@@ -95,7 +95,11 @@ type pluginCommandBase struct {
 	index   uint64
 }
 
-func (c pluginCommandBase) dispatch(source cmd.Source, output *cmd.Output, arguments string) {
+func (c pluginCommandBase) dispatch(source cmd.Source, output *cmd.Output, arguments string, tx *world.Tx) {
+	c.players.WithTx(tx, func() { c.dispatchActive(source, output, arguments) })
+}
+
+func (c pluginCommandBase) dispatchActive(source cmd.Source, output *cmd.Output, arguments string) {
 	sourceName := fmt.Sprintf("%T", source)
 	if named, ok := source.(cmd.NamedTarget); ok {
 		sourceName = named.Name()
@@ -139,8 +143,8 @@ type pluginCommand struct {
 	Arguments         cmd.Varargs `cmd:"arguments"`
 }
 
-func (c pluginCommand) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, string(c.Arguments))
+func (c pluginCommand) Run(source cmd.Source, output *cmd.Output, tx *world.Tx) {
+	c.dispatch(source, output, string(c.Arguments), tx)
 }
 
 type pluginParameter struct {
@@ -282,8 +286,10 @@ type pluginCommand1 struct {
 	Arguments         cmd.Varargs `cmd:"arguments"`
 }
 
-func (c pluginCommand1) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, joinedArguments([]string{c.P1.transport()}, c.Arguments))
+func (c pluginCommand1) Run(source cmd.Source, output *cmd.Output, tx *world.Tx) {
+	c.players.WithTx(tx, func() {
+		c.dispatchActive(source, output, joinedArguments([]string{c.P1.transport()}, c.Arguments))
+	})
 }
 func (c pluginCommand1) DescribeParams(cmd.Source) []cmd.ParamInfo { return describe(c.P1) }
 
@@ -293,8 +299,10 @@ type pluginCommand2 struct {
 	Arguments         cmd.Varargs `cmd:"arguments"`
 }
 
-func (c pluginCommand2) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport()}, c.Arguments))
+func (c pluginCommand2) Run(source cmd.Source, output *cmd.Output, tx *world.Tx) {
+	c.players.WithTx(tx, func() {
+		c.dispatchActive(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport()}, c.Arguments))
+	})
 }
 func (c pluginCommand2) DescribeParams(cmd.Source) []cmd.ParamInfo { return describe(c.P1, c.P2) }
 
@@ -304,8 +312,10 @@ type pluginCommand3 struct {
 	Arguments         cmd.Varargs `cmd:"arguments"`
 }
 
-func (c pluginCommand3) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport(), c.P3.transport()}, c.Arguments))
+func (c pluginCommand3) Run(source cmd.Source, output *cmd.Output, tx *world.Tx) {
+	c.players.WithTx(tx, func() {
+		c.dispatchActive(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport(), c.P3.transport()}, c.Arguments))
+	})
 }
 func (c pluginCommand3) DescribeParams(cmd.Source) []cmd.ParamInfo {
 	return describe(c.P1, c.P2, c.P3)
@@ -317,8 +327,10 @@ type pluginCommand4 struct {
 	Arguments         cmd.Varargs `cmd:"arguments"`
 }
 
-func (c pluginCommand4) Run(source cmd.Source, output *cmd.Output, _ *world.Tx) {
-	c.dispatch(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport(), c.P3.transport(), c.P4.transport()}, c.Arguments))
+func (c pluginCommand4) Run(source cmd.Source, output *cmd.Output, tx *world.Tx) {
+	c.players.WithTx(tx, func() {
+		c.dispatchActive(source, output, joinedArguments([]string{c.P1.transport(), c.P2.transport(), c.P3.transport(), c.P4.transport()}, c.Arguments))
+	})
 }
 func (c pluginCommand4) DescribeParams(cmd.Source) []cmd.ParamInfo {
 	return describe(c.P1, c.P2, c.P3, c.P4)

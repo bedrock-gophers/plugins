@@ -43,6 +43,35 @@ type PlayerSkin struct {
 	Animations                      []SkinAnimation
 }
 
+type InventoryKind uint32
+
+const (
+	InventoryMain InventoryKind = iota
+	InventoryArmour
+	InventoryOffhand
+)
+
+type InventoryID struct {
+	Player PlayerID
+	Kind   InventoryKind
+}
+
+type ItemEnchantment struct {
+	ID, Level uint32
+}
+
+type ItemStack struct {
+	Identifier     string
+	Metadata       int32
+	Count, Damage  uint32
+	Unbreakable    bool
+	AnvilCost      int32
+	CustomName     string
+	Lore           []string
+	NBT, ValuesNBT []byte
+	Enchantments   []ItemEnchantment
+}
+
 // Host executes synchronous actions requested by native plugins.
 type Host interface {
 	SendPlayerText(PlayerID, PlayerTextKind, string) bool
@@ -55,6 +84,14 @@ type Host interface {
 	SetPlayerEntityVisible(PlayerID, EntityID, bool) bool
 	PlayerSkin(PlayerID) (PlayerSkin, bool)
 	SetPlayerSkin(PlayerID, PlayerSkin) bool
+	InventorySize(InventoryID) (uint32, bool)
+	InventoryItem(InventoryID, uint32) (ItemStack, bool)
+	SetInventoryItem(InventoryID, uint32, ItemStack) bool
+	AddInventoryItem(InventoryID, ItemStack) (uint32, bool)
+	ClearInventory(InventoryID) bool
+	HeldItem(PlayerID, uint32) (ItemStack, bool)
+	SetHeldItems(PlayerID, ItemStack, ItemStack) bool
+	SetHeldSlot(PlayerID, uint32) bool
 }
 
 type noopHost struct{}
@@ -73,6 +110,14 @@ func (noopHost) ChangePlayerEffect(PlayerID, PlayerEffectOperation, PlayerEffect
 func (noopHost) SetPlayerEntityVisible(PlayerID, EntityID, bool) bool                  { return false }
 func (noopHost) PlayerSkin(PlayerID) (PlayerSkin, bool)                                { return PlayerSkin{}, false }
 func (noopHost) SetPlayerSkin(PlayerID, PlayerSkin) bool                               { return false }
+func (noopHost) InventorySize(InventoryID) (uint32, bool)                              { return 0, false }
+func (noopHost) InventoryItem(InventoryID, uint32) (ItemStack, bool)                   { return ItemStack{}, false }
+func (noopHost) SetInventoryItem(InventoryID, uint32, ItemStack) bool                  { return false }
+func (noopHost) AddInventoryItem(InventoryID, ItemStack) (uint32, bool)                { return 0, false }
+func (noopHost) ClearInventory(InventoryID) bool                                       { return false }
+func (noopHost) HeldItem(PlayerID, uint32) (ItemStack, bool)                           { return ItemStack{}, false }
+func (noopHost) SetHeldItems(PlayerID, ItemStack, ItemStack) bool                      { return false }
+func (noopHost) SetHeldSlot(PlayerID, uint32) bool                                     { return false }
 
 var (
 	hostSequence         atomic.Uint64
@@ -81,13 +126,23 @@ var (
 	skinSnapshotMu       sync.Mutex
 	skinSnapshots        = map[uint64]skinSnapshot{}
 	skinSnapshotCounts   = map[uint64]int{}
+	itemSnapshotSequence atomic.Uint64
+	itemSnapshotMu       sync.Mutex
+	itemSnapshots        = map[uint64]itemSnapshot{}
+	itemSnapshotCounts   = map[uint64]int{}
 )
 
 const maxSkinSnapshotsPerHost = 32
+const maxItemSnapshotsPerHost = 64
 
 type skinSnapshot struct {
 	host uint64
 	skin PlayerSkin
+}
+
+type itemSnapshot struct {
+	host uint64
+	item ItemStack
 }
 
 func registerHost(host Host) uint64 {
@@ -110,6 +165,14 @@ func unregisterHost(id uint64) {
 		}
 		delete(skinSnapshotCounts, id)
 		skinSnapshotMu.Unlock()
+		itemSnapshotMu.Lock()
+		for snapshotID, snapshot := range itemSnapshots {
+			if snapshot.host == id {
+				delete(itemSnapshots, snapshotID)
+			}
+		}
+		delete(itemSnapshotCounts, id)
+		itemSnapshotMu.Unlock()
 	}
 }
 
@@ -164,5 +227,48 @@ func clonePlayerSkin(value PlayerSkin) PlayerSkin {
 	for index := range value.Animations {
 		value.Animations[index].Pixels = append([]byte(nil), value.Animations[index].Pixels...)
 	}
+	return value
+}
+
+func registerItemSnapshot(host uint64, item ItemStack) (uint64, bool) {
+	itemSnapshotMu.Lock()
+	defer itemSnapshotMu.Unlock()
+	if itemSnapshotCounts[host] >= maxItemSnapshotsPerHost {
+		return 0, false
+	}
+	id := itemSnapshotSequence.Add(1)
+	itemSnapshots[id] = itemSnapshot{host: host, item: cloneItemStack(item)}
+	itemSnapshotCounts[host]++
+	return id, true
+}
+
+func resolveItemSnapshot(host, id uint64) (ItemStack, bool) {
+	itemSnapshotMu.Lock()
+	defer itemSnapshotMu.Unlock()
+	value, ok := itemSnapshots[id]
+	if !ok || value.host != host {
+		return ItemStack{}, false
+	}
+	return value.item, true
+}
+
+func unregisterItemSnapshot(host, id uint64) {
+	itemSnapshotMu.Lock()
+	defer itemSnapshotMu.Unlock()
+	value, ok := itemSnapshots[id]
+	if ok && value.host == host {
+		delete(itemSnapshots, id)
+		itemSnapshotCounts[host]--
+		if itemSnapshotCounts[host] == 0 {
+			delete(itemSnapshotCounts, host)
+		}
+	}
+}
+
+func cloneItemStack(value ItemStack) ItemStack {
+	value.Lore = append([]string(nil), value.Lore...)
+	value.NBT = append([]byte(nil), value.NBT...)
+	value.ValuesNBT = append([]byte(nil), value.ValuesNBT...)
+	value.Enchantments = append([]ItemEnchantment(nil), value.Enchantments...)
 	return value
 }

@@ -27,7 +27,7 @@ use dragonfly_plugin_sys::{
     DF_SUBSCRIPTION_PLAYER_SIGN_EDIT, DF_SUBSCRIPTION_PLAYER_SLEEP,
     DF_SUBSCRIPTION_PLAYER_START_BREAK, DF_SUBSCRIPTION_PLAYER_TELEPORT,
     DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK, DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT, DfCommandDescriptor,
-    DfCommandInput, DfCommandState, DfHostApiV2, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
+    DfCommandInput, DfCommandState, DfHostApiV3, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
     DfPlayerBlockPickInput, DfPlayerBlockPickState, DfPlayerBlockPlaceInput,
     DfPlayerBlockPlaceState, DfPlayerChatInput, DfPlayerChatState, DfPlayerDeathInput,
     DfPlayerDeathState, DfPlayerExperienceGainInput, DfPlayerExperienceGainState,
@@ -57,7 +57,7 @@ use std::slice;
 #[repr(C)]
 pub struct DfRuntimeConfig {
     pub plugin_directory: DfStringView,
-    pub host: *const DfHostApiV2,
+    pub host: *const DfHostApiV3,
 }
 
 pub struct DfRuntime {
@@ -94,7 +94,7 @@ impl Drop for LoadedPlugin {
 }
 
 impl DfRuntime {
-    fn load(plugin_directory: &Path, host: *const DfHostApiV2) -> Result<Self, String> {
+    fn load(plugin_directory: &Path, host: *const DfHostApiV3) -> Result<Self, String> {
         let mut paths = native_libraries(plugin_directory)?;
         paths.sort();
 
@@ -1229,7 +1229,7 @@ impl LoadedPlugin {
         self.enabled = false;
     }
 
-    unsafe fn open(path: &Path, host: *const DfHostApiV2) -> Result<Self, String> {
+    unsafe fn open(path: &Path, host: *const DfHostApiV3) -> Result<Self, String> {
         // SAFETY: loading native plugins is the purpose of this trusted plugin runtime.
         let library = unsafe { Library::new(path) }
             .map_err(|err| format!("load {}: {err}", path.display()))?;
@@ -1419,7 +1419,7 @@ pub unsafe extern "C" fn df_runtime_create(
             return Err("null host API".to_owned());
         };
         if host_api.abi_version != DF_HOST_ABI_VERSION
-            || host_api.struct_size < size_of::<DfHostApiV2>() as u32
+            || host_api.struct_size < size_of::<DfHostApiV3>() as u32
         {
             return Err("incompatible host API".to_owned());
         }
@@ -1990,7 +1990,7 @@ pub unsafe extern "C" fn df_runtime_handle_player_hurt(
     ) else {
         return DF_STATUS_ERROR;
     };
-    if unsafe { string_view(input.source) }.is_err() || !state.damage.is_finite() {
+    if unsafe { string_view(input.source.name) }.is_err() || !state.damage.is_finite() {
         return DF_STATUS_ERROR;
     }
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -2016,7 +2016,7 @@ pub unsafe extern "C" fn df_runtime_handle_player_heal(
     ) else {
         return DF_STATUS_ERROR;
     };
-    if unsafe { string_view(input.source) }.is_err() || !state.health.is_finite() {
+    if unsafe { string_view(input.source.name) }.is_err() || !state.health.is_finite() {
         return DF_STATUS_ERROR;
     }
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -2117,7 +2117,7 @@ pub unsafe extern "C" fn df_runtime_handle_player_death(
     ) else {
         return DF_STATUS_ERROR;
     };
-    if unsafe { string_view(input.source) }.is_err() {
+    if unsafe { string_view(input.source.name) }.is_err() {
         return DF_STATUS_ERROR;
     }
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -2320,9 +2320,9 @@ mod tests {
             std::env::temp_dir().join(format!("dragonfly-runtime-{}", std::process::id()));
         let _ = fs::remove_dir_all(&directory);
         fs::create_dir_all(&directory).unwrap();
-        let host = DfHostApiV2 {
+        let host = DfHostApiV3 {
             abi_version: DF_HOST_ABI_VERSION,
-            struct_size: size_of::<DfHostApiV2>() as u32,
+            struct_size: size_of::<DfHostApiV3>() as u32,
             context: 0,
             player_text: None,
             player_title: None,
@@ -2337,6 +2337,17 @@ mod tests {
             player_skin_read: None,
             player_skin_close: None,
             player_skin_set: None,
+            inventory_size: None,
+            inventory_item_open: None,
+            player_held_item_open: None,
+            item_stack_read: None,
+            item_stack_close: None,
+            inventory_item_set: None,
+            inventory_item_add: None,
+            inventory_clear_slot: None,
+            inventory_clear: None,
+            player_held_items_set: None,
+            player_held_slot_set: None,
         };
         let runtime = DfRuntime::load(&directory, ptr::from_ref(&host)).unwrap();
         assert!(runtime.plugins.is_empty());

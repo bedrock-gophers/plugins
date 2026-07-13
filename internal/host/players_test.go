@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"math"
 	"reflect"
 	"testing"
@@ -9,7 +10,38 @@ import (
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/entity/effect"
 	"github.com/df-mc/dragonfly/server/player"
+	"github.com/df-mc/dragonfly/server/world"
+	"github.com/go-gl/mathgl/mgl64"
+	"github.com/google/uuid"
 )
+
+func TestPlayersResolveFreshTransaction(t *testing.T) {
+	w := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	playerUUID := uuid.New()
+	handle := world.EntitySpawnOpts{ID: playerUUID}.New(
+		player.Type,
+		player.Config{UUID: playerUUID, Name: "Transactional", Position: mgl64.Vec3{}},
+	)
+	players := NewPlayers()
+	var id native.PlayerID
+	if err := w.Do(func(tx *world.Tx) {
+		id = players.Register(tx.AddEntity(handle).(*player.Player), 2)
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	changed := false
+	if err := w.Do(func(tx *world.Tx) {
+		players.WithTx(tx, func() {
+			changed = players.SetPlayerState(id, native.PlayerStateGameMode, native.PlayerStateValue{Integer: 1})
+		})
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("player action did not resolve through fresh transaction")
+	}
+}
 
 func TestPlayersTransformsPlayer(t *testing.T) {
 	withPlayer(t, func(player *player.Player) {
@@ -46,7 +78,7 @@ func TestPlayersTracksStableGenerationAndNames(t *testing.T) {
 			t.Fatalf("resolved=%+v ok=%v", resolved, ok)
 		}
 		connected, ok := players.ResolveID(id)
-		if !ok || connected != player {
+		if !ok || connected.UUID() != player.UUID() {
 			t.Fatalf("connected=%p ok=%v", connected, ok)
 		}
 		players.Unregister(player)

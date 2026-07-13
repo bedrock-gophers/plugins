@@ -99,7 +99,7 @@ func TestPlayerSourceIsResolvedByUUID(t *testing.T) {
 		players := NewPlayers()
 		players.Register(player, 3)
 		runtime := &commandRuntimeStub{}
-		(pluginCommandBase{runtime: runtime, players: players}).dispatch(player, &cmd.Output{}, "")
+		(pluginCommandBase{runtime: runtime, players: players}).dispatch(player, &cmd.Output{}, "", player.Tx())
 		if runtime.input.SourcePlayer == nil || runtime.input.SourcePlayer.Generation != 3 {
 			t.Fatalf("source player = %#v", runtime.input.SourcePlayer)
 		}

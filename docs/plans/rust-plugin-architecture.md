@@ -169,7 +169,7 @@ Every ABI structure must:
 - Avoid platform-sized `long`, `size_t` in persisted layouts, and C bitfields.
 - Have generated size, alignment, and offset tests.
 
-ABI v1 evolves append-only where `struct_size` permits it. Breaking changes get a new entry symbol such as `df_plugin_entry_v2`.
+The ABI is intentionally strict while the project is WIP. A breaking layout or callback change increments the host ABI version, and mismatched runtimes/plugins fail to load. Compatibility shims are deferred until the API is stable enough to justify them.
 
 ## Runtime
 
@@ -384,23 +384,26 @@ Parity does not mean importing arbitrary Go packages, using unexported Dragonfly
 Plugin code should contain only requested handlers. Events continue by default; handlers only cancel or mutate them:
 
 ```rust
-use dragonfly_plugin::{ChatEvent, MoveEvent, Plugin};
+use dragonfly::{Event, Plugin};
 
 struct Example;
 
-#[dragonfly_plugin::plugin]
+#[plugin]
 impl Plugin for Example {
-    fn on_move(&self, event: &mut MoveEvent) {
-        if event.new_position.y < 0.0 {
+    fn on_move(&self, event: &mut Event::PlayerMove<'_>) {
+        if event.new_position().y < 0.0 {
             event.cancel();
         }
     }
 
-    fn on_chat(&self, event: &mut ChatEvent) {
-        event.replace_message(event.message().replace("foo", "bar"));
+    fn on_chat(&self, event: &mut Event::PlayerChat<'_>) {
+        let replacement = event.message().replace("foo", "bar");
+        let _ = event.replace_message(&replacement);
     }
 }
 ```
+
+Event structs are namespaced as `Event::PlayerMove`, `Event::PlayerHurt`, and so on; the old root `PlayerMoveEvent` naming is intentionally unsupported during WIP. Hurt/death expose `damage_source()` with Dragonfly's armour, resistance, fire, and totem flags. Heal exposes `healing_source()`. Both preserve the concrete Go source type name for custom implementations.
 
 All trait handlers have default no-op implementations. The `plugin` attribute sees which methods are implemented and generates the subscription bitmap and entry point, so Go skips unused events.
 
@@ -444,9 +447,13 @@ Go zero-initialises state before dispatch. `cancel == 0` means continue; `cancel
 
 Variable output, such as chat replacement or block drops, uses an output arena owned by the Rust runtime and valid until the FFI call completes. The C bridge copies or applies it before returning to ordinary Go code.
 
-For each event, mirror Dragonfly capability exactly. Example: `HandleMove` permits cancellation but does not expose a mutable target position, so Rust `MoveEvent` must not claim position replacement support.
+For each event, mirror Dragonfly capability exactly. Example: `HandleMove` permits cancellation but does not expose a mutable target position, so Rust `Event::PlayerMove` must not claim position replacement support.
 
 ## Transaction-safe host actions
+
+Dragonfly v0.11 entity values are transaction-scoped. The host registry stores stable `EntityHandle` references and cached identity, never reusable `*player.Player` pointers. Command runnables register their live `*world.Tx` for the synchronous native call; event handlers refresh the current transaction-scoped player before dispatch. A target player is resolved from its handle inside that live transaction.
+
+Host callbacks execute synchronously while the plugin callback is active. Large values such as skins and item stacks use bounded Go-owned snapshots with RAII close on the Rust side. No Go pointer crosses or survives the ABI.
 
 Separate event mutations from host actions.
 
@@ -456,7 +463,7 @@ Event mutations return directly:
 - Replace chat text.
 - Change damage, XP, drops, knockback, or other mutable arguments.
 
-Host actions are recorded into an event-scoped action list:
+Current synchronous host actions include:
 
 - Send message.
 - Teleport player.
@@ -464,9 +471,17 @@ Host actions are recorded into an event-scoped action list:
 - Play sound.
 - Add particle.
 
-Go applies these actions after Rust returns while the current Dragonfly transaction remains valid. This avoids repeated Rust-to-Go callbacks and nested `World.Exec` deadlocks.
+Calls resolve through the already-active transaction; they must never call `world.CallRef` back into the same owner. Persistent background operations are not supported yet. Later support must enqueue operations into Go and resolve `EntityHandle` inside a new transaction. Transaction values must never escape a callback.
 
-Persistent background operations are not part of v1. Later support must enqueue operations into Go and resolve `EntityHandle` inside a new transaction. Event transaction handles must never escape a callback.
+The host ABI is currently v3. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+
+## Items and inventories
+
+`ItemStack` is an owned Rust value. It carries identifier, metadata, count, damage, custom name, lore, item NBT, Dragonfly `WithValue` data, and registered enchantments. Item identity follows Dragonfly: typed values such as `item::Sword::new(item::ToolTier::Diamond)` encode identifier and metadata, while `item::new(item, count)` creates the stack. Generated simple items are zero-sized values such as `item::Diamond`. `item::Custom` is the explicit identifier/metadata escape hatch for plugin-registered items. Registered custom enchantment and potion IDs remain representable across the ABI.
+
+NBT uses standard fixed little-endian named-root compounds. The SDK hides encoding and validates size, depth, element count, UTF-8, and homogeneous list types. Go `gob` payloads are never exposed as a language ABI.
+
+`Player::inventory()`, `armour()`, and `offhand()` return small value handles containing player identity and inventory kind. Item reads open immutable Go-owned snapshots; writes borrow Rust buffers for one synchronous call. Snapshot reads preflight every capacity and perform no partial writes. Host status codes remain private to the SDK; setters do not expose transport failures as public booleans or errors. `add_item()` returns the domain-level count added. `held_items()`, `set_held_items()`, and `set_held_slot()` use the same conversion path.
 
 ## Object identity
 
@@ -524,14 +539,16 @@ Initial ABI foundation includes:
 - Basic event-scoped messaging and cancellation.
 - Raw and structured commands, including enums and subcommands.
 - Player/world opaque IDs.
+- Owned item stacks with names, lore, typed NBT values, enchantments, and potions.
+- Main, armour, and offhand inventory handles with item snapshots and mutation.
 
 Temporarily deferred from the first implementation milestone:
 
 - Background plugin threads calling Dragonfly directly.
 - Hot unload.
 - Untrusted plugin sandboxing.
-- Full inventory mutation.
-- Direct NBT exposure.
+- Background-thread inventory mutation outside a Dragonfly transaction.
+- Arbitrary Go-only `WithValue` types that cannot be represented by NBT.
 
 Before product 1.0, parity work includes custom blocks, items, entities, generators, providers, registries, recipes, effects, enchantments, typed commands, persistence, and remaining public Dragonfly operations. Bootstrap is deliberately placed before `Config.New` because Dragonfly registers and finalizes many of these types during server construction.
 
@@ -686,8 +703,8 @@ Exact equality with raw Go is impossible because FFI has a boundary. Acceptance 
 - Add raw-argument commands.
 - Add structured enum/subcommand descriptors and Dragonfly metadata adapters.
 - Add Rust derives that generate descriptors and argument parsing at compile time.
-- Add generated action list representation.
-- Add transaction-safe teleport, block, sound, and particle actions.
+- Add synchronous transaction-aware player actions.
+- Add transaction-safe teleport, block, sound, and particle operations without retaining Dragonfly transaction values.
 
 ### Phase 7: Dragonfly capability parity
 

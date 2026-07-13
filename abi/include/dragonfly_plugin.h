@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 1u
-#define DF_HOST_ABI_VERSION 2u
+#define DF_HOST_ABI_VERSION 3u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -23,7 +23,22 @@ typedef struct { double yaw; double pitch; } DfRotation;
 typedef struct { int32_t x; int32_t y; int32_t z; } DfBlockPos;
 typedef struct { const uint8_t *data; uint64_t len; } DfStringView;
 typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffer;
+typedef struct { DfStringView name; uint32_t flags; } DfDamageSourceView;
+typedef struct { DfStringView name; } DfHealingSourceView;
+#define DF_DAMAGE_SOURCE_REDUCED_BY_ARMOUR 1u
+#define DF_DAMAGE_SOURCE_REDUCED_BY_RESISTANCE 2u
+#define DF_DAMAGE_SOURCE_FIRE 4u
+#define DF_DAMAGE_SOURCE_IGNORES_TOTEM 8u
 typedef struct { DfStringView identifier; int32_t metadata; int32_t count; int32_t damage; } DfItemStackView;
+#define DF_INVENTORY_MAIN 0u
+#define DF_INVENTORY_ARMOUR 1u
+#define DF_INVENTORY_OFFHAND 2u
+typedef struct { DfPlayerId player; uint32_t kind; uint32_t reserved; } DfInventoryId;
+typedef struct { uint64_t offset; uint64_t len; } DfByteSpan;
+typedef struct { uint32_t id; uint32_t level; } DfItemEnchantment;
+typedef struct { int32_t metadata; uint32_t count; uint32_t damage; uint8_t unbreakable; int32_t anvil_cost; uint64_t identifier_len; uint64_t custom_name_len; uint64_t lore_bytes_len; uint64_t lore_count; uint64_t nbt_len; uint64_t values_nbt_len; uint64_t enchantment_count; } DfItemStackInfo;
+typedef struct { DfStringBuffer identifier; DfStringBuffer custom_name; DfStringBuffer lore_bytes; DfStringBuffer nbt; DfStringBuffer values_nbt; DfByteSpan *lore; uint64_t lore_capacity; DfItemEnchantment *enchantments; uint64_t enchantment_capacity; } DfItemStackData;
+typedef struct { DfStringView identifier; int32_t metadata; uint32_t count; uint32_t damage; uint8_t unbreakable; int32_t anvil_cost; DfStringView custom_name; const DfStringView *lore; uint64_t lore_count; DfStringView nbt; DfStringView values_nbt; const DfItemEnchantment *enchantments; uint64_t enchantment_count; } DfItemStackViewV3;
 #define DF_PLAYER_TRANSFORM_TELEPORT 0u
 #define DF_PLAYER_TRANSFORM_MOVE 1u
 #define DF_PLAYER_TRANSFORM_VELOCITY 2u
@@ -164,6 +179,17 @@ typedef DfStatus (*DfHostPlayerSkinAnimationInfoFn)(uint64_t context, uint64_t s
 typedef DfStatus (*DfHostPlayerSkinReadFn)(uint64_t context, uint64_t snapshot, DfSkinData *data);
 typedef void (*DfHostPlayerSkinCloseFn)(uint64_t context, uint64_t snapshot);
 typedef DfStatus (*DfHostPlayerSkinSetFn)(uint64_t context, DfPlayerId player, const DfSkinView *skin);
+typedef DfStatus (*DfHostInventorySizeFn)(uint64_t context, DfInventoryId inventory, uint32_t *size);
+typedef DfStatus (*DfHostInventoryItemOpenFn)(uint64_t context, DfInventoryId inventory, uint32_t slot, uint64_t *snapshot, DfItemStackInfo *info);
+typedef DfStatus (*DfHostPlayerHeldItemOpenFn)(uint64_t context, DfPlayerId player, uint32_t hand, uint64_t *snapshot, DfItemStackInfo *info);
+typedef DfStatus (*DfHostItemStackReadFn)(uint64_t context, uint64_t snapshot, DfItemStackData *data);
+typedef void (*DfHostItemStackCloseFn)(uint64_t context, uint64_t snapshot);
+typedef DfStatus (*DfHostInventoryItemSetFn)(uint64_t context, DfInventoryId inventory, uint32_t slot, const DfItemStackViewV3 *item);
+typedef DfStatus (*DfHostInventoryItemAddFn)(uint64_t context, DfInventoryId inventory, const DfItemStackViewV3 *item, uint32_t *added);
+typedef DfStatus (*DfHostInventoryClearSlotFn)(uint64_t context, DfInventoryId inventory, uint32_t slot);
+typedef DfStatus (*DfHostInventoryClearFn)(uint64_t context, DfInventoryId inventory);
+typedef DfStatus (*DfHostPlayerHeldItemsSetFn)(uint64_t context, DfPlayerId player, const DfItemStackViewV3 *main_hand, const DfItemStackViewV3 *off_hand);
+typedef DfStatus (*DfHostPlayerHeldSlotSetFn)(uint64_t context, DfPlayerId player, uint32_t slot);
 typedef struct {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -181,7 +207,18 @@ typedef struct {
     DfHostPlayerSkinReadFn player_skin_read;
     DfHostPlayerSkinCloseFn player_skin_close;
     DfHostPlayerSkinSetFn player_skin_set;
-} DfHostApiV2;
+    DfHostInventorySizeFn inventory_size;
+    DfHostInventoryItemOpenFn inventory_item_open;
+    DfHostPlayerHeldItemOpenFn player_held_item_open;
+    DfHostItemStackReadFn item_stack_read;
+    DfHostItemStackCloseFn item_stack_close;
+    DfHostInventoryItemSetFn inventory_item_set;
+    DfHostInventoryItemAddFn inventory_item_add;
+    DfHostInventoryClearSlotFn inventory_clear_slot;
+    DfHostInventoryClearFn inventory_clear;
+    DfHostPlayerHeldItemsSetFn player_held_items_set;
+    DfHostPlayerHeldSlotSetFn player_held_slot_set;
+} DfHostApiV3;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -261,7 +298,7 @@ typedef struct {
 typedef struct {
     DfPlayerId player;
     uint8_t immune;
-    DfStringView source;
+    DfDamageSourceView source;
 } DfPlayerHurtInput;
 
 typedef struct {
@@ -274,7 +311,7 @@ typedef struct {
 
 typedef struct {
     DfPlayerId player;
-    DfStringView source;
+    DfHealingSourceView source;
 } DfPlayerHealInput;
 
 typedef struct {
@@ -323,7 +360,7 @@ typedef struct {
 
 typedef struct {
     DfPlayerId player;
-    DfStringView source;
+    DfDamageSourceView source;
 } DfPlayerDeathInput;
 
 typedef struct {
@@ -553,7 +590,7 @@ typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV2 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV3 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -573,7 +610,7 @@ typedef struct {
 typedef const DfPluginApiV1 *(*DfPluginEntryV1Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV2 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV3 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);

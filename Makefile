@@ -5,6 +5,7 @@ MOVEMENT_MANIFEST := examples/plugins/movement-guard/Cargo.toml
 CHAT_MANIFEST := examples/plugins/chat-filter/Cargo.toml
 LIFECYCLE_MANIFEST := examples/plugins/lifecycle-logger/Cargo.toml
 COMMAND_MANIFEST := examples/plugins/hello-command/Cargo.toml
+ITEMS_MANIFEST := examples/plugins/items-command/Cargo.toml
 PING_MANIFEST := examples/plugins/ping-command/Cargo.toml
 ifeq ($(UNAME_S),Darwin)
 RUNTIME_LIBRARY := libdragonfly_plugin_runtime.dylib
@@ -12,6 +13,7 @@ PLUGIN_LIBRARY := libmovement_guard_plugin.dylib
 CHAT_PLUGIN_LIBRARY := libchat_filter_plugin.dylib
 LIFECYCLE_PLUGIN_LIBRARY := liblifecycle_logger_plugin.dylib
 COMMAND_PLUGIN_LIBRARY := libhello_command_plugin.dylib
+ITEMS_PLUGIN_LIBRARY := libitems_command_plugin.dylib
 PING_PLUGIN_LIBRARY := libping_command_plugin.dylib
 else
 RUNTIME_LIBRARY := libdragonfly_plugin_runtime.so
@@ -19,6 +21,7 @@ PLUGIN_LIBRARY := libmovement_guard_plugin.so
 CHAT_PLUGIN_LIBRARY := libchat_filter_plugin.so
 LIFECYCLE_PLUGIN_LIBRARY := liblifecycle_logger_plugin.so
 COMMAND_PLUGIN_LIBRARY := libhello_command_plugin.so
+ITEMS_PLUGIN_LIBRARY := libitems_command_plugin.so
 PING_PLUGIN_LIBRARY := libping_command_plugin.so
 endif
 
@@ -29,6 +32,7 @@ generate:
 	cargo fmt --manifest-path $(CHAT_MANIFEST)
 	cargo fmt --manifest-path $(LIFECYCLE_MANIFEST)
 	cargo fmt --manifest-path $(COMMAND_MANIFEST)
+	cargo fmt --manifest-path $(ITEMS_MANIFEST)
 	cargo fmt --manifest-path $(PING_MANIFEST)
 
 check-generated:
@@ -38,6 +42,7 @@ check-generated:
 	cargo fmt --manifest-path $(CHAT_MANIFEST) -- --check
 	cargo fmt --manifest-path $(LIFECYCLE_MANIFEST) -- --check
 	cargo fmt --manifest-path $(COMMAND_MANIFEST) -- --check
+	cargo fmt --manifest-path $(ITEMS_MANIFEST) -- --check
 	cargo fmt --manifest-path $(PING_MANIFEST) -- --check
 
 build-native: generate
@@ -46,6 +51,7 @@ build-native: generate
 	cargo build --release --manifest-path $(CHAT_MANIFEST)
 	cargo build --release --manifest-path $(LIFECYCLE_MANIFEST)
 	cargo build --release --manifest-path $(COMMAND_MANIFEST)
+	cargo build --release --manifest-path $(ITEMS_MANIFEST)
 	cargo build --release --manifest-path $(PING_MANIFEST)
 	mkdir -p build/lib build/plugins
 	cp target/release/$(RUNTIME_LIBRARY) build/lib/
@@ -53,6 +59,7 @@ build-native: generate
 	cp examples/plugins/chat-filter/target/release/$(CHAT_PLUGIN_LIBRARY) build/plugins/
 	cp examples/plugins/lifecycle-logger/target/release/$(LIFECYCLE_PLUGIN_LIBRARY) build/plugins/
 	cp examples/plugins/hello-command/target/release/$(COMMAND_PLUGIN_LIBRARY) build/plugins/
+	cp examples/plugins/items-command/target/release/$(ITEMS_PLUGIN_LIBRARY) build/plugins/
 	cp examples/plugins/ping-command/target/release/$(PING_PLUGIN_LIBRARY) build/plugins/
 
 build-server:
@@ -69,6 +76,7 @@ stage-examples: build-native
 	cp build/plugins/$(CHAT_PLUGIN_LIBRARY) examples/plugins/
 	cp build/plugins/$(LIFECYCLE_PLUGIN_LIBRARY) examples/plugins/
 	cp build/plugins/$(COMMAND_PLUGIN_LIBRARY) examples/plugins/
+	cp build/plugins/$(ITEMS_PLUGIN_LIBRARY) examples/plugins/
 	cp build/plugins/$(PING_PLUGIN_LIBRARY) examples/plugins/
 
 run: stage-examples
@@ -80,6 +88,7 @@ test: build-native check-generated
 	cargo test --manifest-path $(CHAT_MANIFEST)
 	cargo test --manifest-path $(LIFECYCLE_MANIFEST)
 	cargo test --manifest-path $(COMMAND_MANIFEST)
+	cargo test --manifest-path $(ITEMS_MANIFEST)
 	cargo test --manifest-path $(PING_MANIFEST)
 	go test ./...
 
@@ -92,7 +101,8 @@ clean:
 	cargo clean --manifest-path $(CHAT_MANIFEST)
 	cargo clean --manifest-path $(LIFECYCLE_MANIFEST)
 	cargo clean --manifest-path $(COMMAND_MANIFEST)
+	cargo clean --manifest-path $(ITEMS_MANIFEST)
 	cargo clean --manifest-path $(PING_MANIFEST)
 	rm -rf build
 	rm -rf examples/lib
-	rm -f examples/plugins/$(PLUGIN_LIBRARY) examples/plugins/$(CHAT_PLUGIN_LIBRARY) examples/plugins/$(LIFECYCLE_PLUGIN_LIBRARY) examples/plugins/$(COMMAND_PLUGIN_LIBRARY) examples/plugins/$(PING_PLUGIN_LIBRARY)
+	rm -f examples/plugins/$(PLUGIN_LIBRARY) examples/plugins/$(CHAT_PLUGIN_LIBRARY) examples/plugins/$(LIFECYCLE_PLUGIN_LIBRARY) examples/plugins/$(COMMAND_PLUGIN_LIBRARY) examples/plugins/$(ITEMS_PLUGIN_LIBRARY) examples/plugins/$(PING_PLUGIN_LIBRARY)

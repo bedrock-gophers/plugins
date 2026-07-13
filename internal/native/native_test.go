@@ -46,25 +46,32 @@ func openTestRuntime(t testing.TB) *Runtime {
 }
 
 type recordingHost struct {
-	player     PlayerID
-	texts      []string
-	kinds      []PlayerTextKind
-	title      PlayerTitle
-	rotation   Rotation
-	transforms []PlayerTransformKind
-	vectors    []Vec3
-	yaws       []float64
-	pitches    []float64
-	states     []PlayerStateKind
-	values     []PlayerStateValue
-	state      PlayerStateValue
-	reads      []PlayerStateKind
-	effectOps  []PlayerEffectOperation
-	effects    []PlayerEffect
-	entities   []EntityID
-	visible    []bool
-	skin       PlayerSkin
-	setSkins   []PlayerSkin
+	player        PlayerID
+	texts         []string
+	kinds         []PlayerTextKind
+	title         PlayerTitle
+	rotation      Rotation
+	transforms    []PlayerTransformKind
+	vectors       []Vec3
+	yaws          []float64
+	pitches       []float64
+	states        []PlayerStateKind
+	values        []PlayerStateValue
+	state         PlayerStateValue
+	reads         []PlayerStateKind
+	effectOps     []PlayerEffectOperation
+	effects       []PlayerEffect
+	entities      []EntityID
+	visible       []bool
+	skin          PlayerSkin
+	setSkins      []PlayerSkin
+	inventoryItem ItemStack
+	inventorySets []struct {
+		Inventory InventoryID
+		Slot      uint32
+		Item      ItemStack
+	}
+	inventoryAdds []ItemStack
 }
 
 func (h *recordingHost) SendPlayerText(player PlayerID, kind PlayerTextKind, message string) bool {
@@ -123,6 +130,27 @@ func (h *recordingHost) SetPlayerSkin(_ PlayerID, skin PlayerSkin) bool {
 	return true
 }
 
+func (h *recordingHost) InventorySize(InventoryID) (uint32, bool) { return 36, true }
+func (h *recordingHost) InventoryItem(InventoryID, uint32) (ItemStack, bool) {
+	return h.inventoryItem, true
+}
+func (h *recordingHost) SetInventoryItem(inventory InventoryID, slot uint32, item ItemStack) bool {
+	h.inventorySets = append(h.inventorySets, struct {
+		Inventory InventoryID
+		Slot      uint32
+		Item      ItemStack
+	}{inventory, slot, item})
+	return true
+}
+func (h *recordingHost) AddInventoryItem(_ InventoryID, item ItemStack) (uint32, bool) {
+	h.inventoryAdds = append(h.inventoryAdds, item)
+	return item.Count, true
+}
+func (h *recordingHost) ClearInventory(InventoryID) bool                  { return true }
+func (h *recordingHost) HeldItem(PlayerID, uint32) (ItemStack, bool)      { return h.inventoryItem, true }
+func (h *recordingHost) SetHeldItems(PlayerID, ItemStack, ItemStack) bool { return true }
+func (h *recordingHost) SetHeldSlot(PlayerID, uint32) bool                { return true }
+
 func TestPluginCanMessagePlayer(t *testing.T) {
 	library, plugins := nativeArtifacts(t)
 	host := &recordingHost{}
@@ -150,8 +178,8 @@ func TestPluginCanMessagePlayer(t *testing.T) {
 
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 5 {
-		t.Fatalf("plugin count = %d, want 5", runtime.PluginCount())
+	if runtime.PluginCount() != 6 {
+		t.Fatalf("plugin count = %d, want 6", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")
@@ -432,17 +460,71 @@ func TestPlayerSkinRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPlayerInventoryItemRoundTrip(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	valuesNBT := []byte{10, 0, 0, 8, 5, 0, 'o', 'w', 'n', 'e', 'r', 4, 0, 'r', 'u', 's', 't', 0}
+	want := ItemStack{
+		Identifier: "minecraft:diamond_sword", Count: 1, Damage: 7,
+		Unbreakable: true, AnvilCost: 4,
+		CustomName: "Bridge Sword", Lore: []string{"one", "two"}, ValuesNBT: valuesNBT,
+		Enchantments: []ItemEnchantment{{ID: 9, Level: 5}, {ID: 17, Level: 3}},
+	}
+	host := &recordingHost{inventoryItem: want}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := commandNamed(t, commands, "items")
+	id := PlayerID{Generation: 15}
+	input := CommandInput{
+		Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
+		OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: "copy 3 4",
+	}
+	output, err := runtime.HandleCommand(items.Index, input)
+	if err != nil || output.Failed {
+		t.Fatalf("output=%+v error=%v", output, err)
+	}
+	if len(host.inventorySets) != 1 || host.inventorySets[0].Slot != 4 || !reflect.DeepEqual(host.inventorySets[0].Item, want) {
+		t.Fatalf("set items=%#v want=%#v", host.inventorySets, want)
+	}
+	input.Arguments = "give-sword"
+	output, err = runtime.HandleCommand(items.Index, input)
+	if err != nil || output.Failed {
+		t.Fatalf("give output=%+v error=%v", output, err)
+	}
+	if len(host.inventoryAdds) != 1 {
+		t.Fatalf("inventory adds=%#v", host.inventoryAdds)
+	}
+	added := host.inventoryAdds[0]
+	if added.Identifier != "minecraft:diamond_sword" || added.CustomName != "Rust Sword" ||
+		len(added.Lore) != 2 || len(added.ValuesNBT) == 0 ||
+		!reflect.DeepEqual(added.Enchantments, []ItemEnchantment{{ID: 9, Level: 5}}) {
+		t.Fatalf("added item=%#v", added)
+	}
+}
+
 func TestCommand(t *testing.T) {
 	runtime := openTestRuntime(t)
 	commands, err := runtime.Commands()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 2 || commands[0].Name != "hello" || commands[1].Name != "ping" {
-		t.Fatalf("commands = %#v, want hello and ping", commands)
+	if len(commands) != 3 {
+		t.Fatalf("commands = %#v, want hello, items, and ping", commands)
 	}
+	hello := commandNamed(t, commands, "hello")
+	_ = commandNamed(t, commands, "items")
+	_ = commandNamed(t, commands, "ping")
 	optionalFound := false
-	for _, overload := range commands[0].Overloads {
+	for _, overload := range hello.Overloads {
 		for _, parameter := range overload.Parameters {
 			optionalFound = optionalFound || parameter.Optional
 		}
@@ -450,7 +532,7 @@ func TestCommand(t *testing.T) {
 	if !optionalFound {
 		t.Fatal("hello command lost its optional argument")
 	}
-	output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+	output, err := runtime.HandleCommand(hello.Index, CommandInput{
 		Source:    "Danick",
 		Arguments: "say excited dragonfly plugins rock",
 	})
@@ -462,13 +544,24 @@ func TestCommand(t *testing.T) {
 	}
 }
 
+func commandNamed(t *testing.T, commands []Command, name string) Command {
+	t.Helper()
+	for _, command := range commands {
+		if command.Name == name {
+			return command
+		}
+	}
+	t.Fatalf("command %q not found in %#v", name, commands)
+	return Command{}
+}
+
 func TestPingCommandUsesPlayerLatency(t *testing.T) {
 	runtime := openTestRuntime(t)
 	commands, err := runtime.Commands()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ping := commands[1]
+	ping := commandNamed(t, commands, "ping")
 	id := PlayerID{Generation: 9}
 	id.UUID[0] = 1
 	input := CommandInput{
@@ -552,7 +645,7 @@ func TestPlayerHurtAndHeal(t *testing.T) {
 	hurt, err := runtime.HandlePlayerHurt(PlayerHurtInput{
 		Damage:         4,
 		AttackImmunity: 500 * time.Millisecond,
-		Source:         "testDamageSource",
+		Source:         DamageSource{Name: "testDamageSource", ReducedByArmour: true},
 	}, false)
 	if err != nil {
 		t.Fatal(err)
@@ -560,7 +653,7 @@ func TestPlayerHurtAndHeal(t *testing.T) {
 	if hurt.Cancelled || hurt.Damage != 4 || hurt.AttackImmunity != 500*time.Millisecond {
 		t.Fatalf("hurt = %+v", hurt)
 	}
-	heal, err := runtime.HandlePlayerHeal(PlayerHealInput{Health: 2, Source: "testHealingSource"}, false)
+	heal, err := runtime.HandlePlayerHeal(PlayerHealInput{Health: 2, Source: HealingSource{Name: "testHealingSource"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -609,7 +702,7 @@ func TestPlayerFoodLossAndDeath(t *testing.T) {
 	if food.Cancelled || food.To != 9 {
 		t.Fatalf("food loss = %+v", food)
 	}
-	keep, err := runtime.HandlePlayerDeath(PlayerDeathInput{Source: "testDamageSource"}, false)
+	keep, err := runtime.HandlePlayerDeath(PlayerDeathInput{Source: DamageSource{Name: "testDamageSource"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

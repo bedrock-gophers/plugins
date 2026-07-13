@@ -36,7 +36,7 @@ events:
     input:
       - { name: player, type: player_id }
       - { name: immune, type: bool }
-      - { name: source, type: string_view }
+      - { name: source, type: damage_source }
     state:
       - { name: cancelled, type: bool }
       - { name: damage, type: f64 }
@@ -45,7 +45,7 @@ events:
     id: 6
     input:
       - { name: player, type: player_id }
-      - { name: source, type: string_view }
+      - { name: source, type: healing_source }
     state:
       - { name: cancelled, type: bool }
       - { name: health, type: f64 }
@@ -78,7 +78,7 @@ events:
     id: 10
     input:
       - { name: player, type: player_id }
-      - { name: source, type: string_view }
+      - { name: source, type: damage_source }
     state:
       - { name: keep_inventory, type: bool }
   - name: start_break

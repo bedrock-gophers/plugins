@@ -28,11 +28,19 @@ impl Plugin for LifecycleLogger {
     }
 
     fn on_hurt(&self, event: &mut Event::PlayerHurt<'_>) {
-        eprintln!("player hurt for {} by {}", event.damage(), event.source());
+        eprintln!(
+            "player hurt for {} by {}",
+            event.damage(),
+            event.damage_source().name()
+        );
     }
 
     fn on_heal(&self, event: &mut Event::PlayerHeal<'_>) {
-        eprintln!("player healed for {} by {}", event.health(), event.source());
+        eprintln!(
+            "player healed for {} by {}",
+            event.health(),
+            event.healing_source().name()
+        );
     }
 
     fn on_block_break(&self, event: &mut Event::PlayerBlockBreak<'_>) {
@@ -48,7 +56,7 @@ impl Plugin for LifecycleLogger {
     }
 
     fn on_death(&self, event: &mut Event::PlayerDeath<'_>) {
-        eprintln!("player died from {}", event.source());
+        eprintln!("player died from {}", event.damage_source().name());
     }
 
     fn on_start_break(&self, event: &mut Event::PlayerStartBreak<'_>) {

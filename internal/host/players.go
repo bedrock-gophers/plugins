@@ -11,47 +11,75 @@ import (
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/player/skin"
 	"github.com/df-mc/dragonfly/server/player/title"
+	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
 )
 
 // Players owns stable native IDs for the lifetime of connected Dragonfly players.
 type Players struct {
-	mu      sync.RWMutex
-	entries map[*player.Player]native.PlayerID
+	mu       sync.RWMutex
+	entries  map[*world.EntityHandle]*playerEntry
+	byID     map[native.PlayerID]*playerEntry
+	activeTx map[*world.Tx]int
+}
+
+type playerEntry struct {
+	id      native.PlayerID
+	handle  *world.EntityHandle
+	name    string
+	latency uint64
+	last    *player.Player
 }
 
 func NewPlayers() *Players {
-	return &Players{entries: map[*player.Player]native.PlayerID{}}
+	return &Players{
+		entries: map[*world.EntityHandle]*playerEntry{},
+		byID:    map[native.PlayerID]*playerEntry{}, activeTx: map[*world.Tx]int{},
+	}
 }
 
 func (p *Players) Register(player *player.Player, generation uint64) native.PlayerID {
 	id := native.PlayerID{Generation: generation}
 	uuid := player.UUID()
 	copy(id.UUID[:], uuid[:])
+	entry := &playerEntry{
+		id: id, handle: player.H(), name: player.Name(),
+		latency: uint64(max(player.Latency().Milliseconds(), 0)), last: player,
+	}
 	p.mu.Lock()
-	p.entries[player] = id
+	p.entries[player.H()] = entry
+	p.byID[id] = entry
 	p.mu.Unlock()
 	return id
 }
 
 func (p *Players) Unregister(player *player.Player) {
 	p.mu.Lock()
-	delete(p.entries, player)
+	if entry, ok := p.entries[player.H()]; ok {
+		delete(p.byID, entry.id)
+		delete(p.entries, player.H())
+	}
 	p.mu.Unlock()
 }
 
 func (p *Players) ID(player *player.Player) (native.PlayerID, bool) {
 	p.mu.RLock()
-	id, ok := p.entries[player]
+	entry, ok := p.entries[player.H()]
 	p.mu.RUnlock()
-	return id, ok
+	if !ok {
+		return native.PlayerID{}, false
+	}
+	p.mu.Lock()
+	entry.name, entry.latency, entry.last = player.Name(), uint64(max(player.Latency().Milliseconds(), 0)), player
+	p.mu.Unlock()
+	return entry.id, true
 }
 
 func (p *Players) Names() []string {
 	p.mu.RLock()
 	names := make([]string, 0, len(p.entries))
-	for connected := range p.entries {
-		names = append(names, connected.Name())
+	for _, entry := range p.entries {
+		names = append(names, entry.name)
 	}
 	p.mu.RUnlock()
 	slices.Sort(names)
@@ -59,16 +87,27 @@ func (p *Players) Names() []string {
 }
 
 func (p *Players) CommandSnapshots() []native.CommandPlayer {
+	type cachedPlayer struct {
+		id      native.PlayerID
+		name    string
+		latency uint64
+	}
 	p.mu.RLock()
-	snapshots := make([]native.CommandPlayer, 0, len(p.entries))
-	for connected, id := range p.entries {
-		snapshots = append(snapshots, native.CommandPlayer{
-			Player:              id,
-			Name:                connected.Name(),
-			LatencyMilliseconds: uint64(connected.Latency().Milliseconds()),
-		})
+	entries := make([]cachedPlayer, 0, len(p.entries))
+	for _, entry := range p.entries {
+		entries = append(entries, cachedPlayer{id: entry.id, name: entry.name, latency: entry.latency})
 	}
 	p.mu.RUnlock()
+	snapshots := make([]native.CommandPlayer, 0, len(entries))
+	for _, entry := range entries {
+		name, latency := entry.name, entry.latency
+		if connected, ok := p.ResolveID(entry.id); ok {
+			name, latency = connected.Name(), uint64(max(connected.Latency().Milliseconds(), 0))
+		}
+		snapshots = append(snapshots, native.CommandPlayer{
+			Player: entry.id, Name: name, LatencyMilliseconds: latency,
+		})
+	}
 	slices.SortFunc(snapshots, func(left, right native.CommandPlayer) int {
 		return strings.Compare(left.Name, right.Name)
 	})
@@ -78,9 +117,9 @@ func (p *Players) CommandSnapshots() []native.CommandPlayer {
 func (p *Players) ResolveName(name string) (native.PlayerID, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	for connected, id := range p.entries {
-		if strings.EqualFold(connected.Name(), name) {
-			return id, true
+	for _, entry := range p.entries {
+		if strings.EqualFold(entry.name, name) {
+			return entry.id, true
 		}
 	}
 	return native.PlayerID{}, false
@@ -89,9 +128,9 @@ func (p *Players) ResolveName(name string) (native.PlayerID, bool) {
 func (p *Players) ResolveUUID(uuid [16]byte) (native.PlayerID, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	for _, id := range p.entries {
-		if id.UUID == uuid {
-			return id, true
+	for _, entry := range p.entries {
+		if entry.id.UUID == uuid {
+			return entry.id, true
 		}
 	}
 	return native.PlayerID{}, false
@@ -99,9 +138,22 @@ func (p *Players) ResolveUUID(uuid [16]byte) (native.PlayerID, bool) {
 
 func (p *Players) ResolveID(id native.PlayerID) (*player.Player, bool) {
 	p.mu.RLock()
-	defer p.mu.RUnlock()
-	for connected, candidate := range p.entries {
-		if candidate == id {
+	entry, ok := p.byID[id]
+	transactions := make([]*world.Tx, 0, len(p.activeTx))
+	for tx := range p.activeTx {
+		transactions = append(transactions, tx)
+	}
+	for _, candidate := range p.entries {
+		if candidate.last != nil {
+			transactions = append(transactions, candidate.last.Tx())
+		}
+	}
+	p.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	for _, tx := range transactions {
+		if connected, ok := playerInTransaction(entry.handle, tx); ok {
 			return connected, true
 		}
 	}
@@ -109,14 +161,42 @@ func (p *Players) ResolveID(id native.PlayerID) (*player.Player, bool) {
 }
 
 func (p *Players) ResolveEntityID(id native.EntityID) (*player.Player, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	for connected, candidate := range p.entries {
-		if candidate.UUID == id.UUID && candidate.Generation == id.Generation {
-			return connected, true
-		}
+	return p.ResolveID(native.PlayerID{UUID: id.UUID, Generation: id.Generation})
+}
+
+func (p *Players) WithTx(tx *world.Tx, function func()) {
+	if tx == nil {
+		function()
+		return
 	}
-	return nil, false
+	p.mu.Lock()
+	p.activeTx[tx]++
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		if p.activeTx[tx]--; p.activeTx[tx] == 0 {
+			delete(p.activeTx, tx)
+		}
+		p.mu.Unlock()
+	}()
+	function()
+}
+
+func playerInTransaction(handle *world.EntityHandle, tx *world.Tx) (connected *player.Player, ok bool) {
+	if handle == nil || tx == nil {
+		return nil, false
+	}
+	defer func() {
+		if recover() != nil {
+			connected, ok = nil, false
+		}
+	}()
+	entity, ok := handle.Entity(tx)
+	if !ok {
+		return nil, false
+	}
+	connected, ok = entity.(*player.Player)
+	return connected, ok
 }
 
 func (p *Players) SendPlayerText(id native.PlayerID, kind native.PlayerTextKind, message string) bool {

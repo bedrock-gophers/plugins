@@ -4,6 +4,8 @@ extern crate self as dragonfly_plugin;
 
 use core::sync::atomic::{AtomicPtr, Ordering};
 
+mod item_nbt;
+
 pub use dragonfly_plugin_macros::{Command, CommandEnum, plugin};
 
 #[doc(hidden)]
@@ -45,7 +47,7 @@ pub mod Event {
     pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV2> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV3> =
     AtomicPtr::new(core::ptr::null_mut());
 
 const MAX_SKIN_DATA_BYTES: u64 = 64 << 20;
@@ -66,7 +68,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV2) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV3) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -111,6 +113,44 @@ pub enum BlockFace {
     East = 5,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct DamageSource<'a> {
+    raw: &'a dragonfly_plugin_sys::DfDamageSourceView,
+}
+
+impl DamageSource<'_> {
+    pub fn name(&self) -> &str {
+        unsafe { string_view(self.raw.name) }
+    }
+
+    pub const fn reduced_by_armour(&self) -> bool {
+        self.raw.flags & dragonfly_plugin_sys::DF_DAMAGE_SOURCE_REDUCED_BY_ARMOUR != 0
+    }
+
+    pub const fn reduced_by_resistance(&self) -> bool {
+        self.raw.flags & dragonfly_plugin_sys::DF_DAMAGE_SOURCE_REDUCED_BY_RESISTANCE != 0
+    }
+
+    pub const fn fire(&self) -> bool {
+        self.raw.flags & dragonfly_plugin_sys::DF_DAMAGE_SOURCE_FIRE != 0
+    }
+
+    pub const fn ignores_totem(&self) -> bool {
+        self.raw.flags & dragonfly_plugin_sys::DF_DAMAGE_SOURCE_IGNORES_TOTEM != 0
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct HealingSource<'a> {
+    raw: &'a dragonfly_plugin_sys::DfHealingSourceView,
+}
+
+impl HealingSource<'_> {
+    pub fn name(&self) -> &str {
+        unsafe { string_view(self.raw.name) }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Byte(i8),
@@ -119,7 +159,6 @@ pub enum Value {
     Long(i64),
     Float(f32),
     Double(f64),
-    Bool(bool),
     String(String),
     ByteArray(Vec<u8>),
     IntArray(Vec<i32>),
@@ -144,7 +183,6 @@ value_from!(i32, Int);
 value_from!(i64, Long);
 value_from!(f32, Float);
 value_from!(f64, Double);
-value_from!(bool, Bool);
 value_from!(String, String);
 value_from!(Vec<Value>, List);
 value_from!(std::collections::BTreeMap<String, Value>, Compound);
@@ -152,6 +190,12 @@ value_from!(std::collections::BTreeMap<String, Value>, Compound);
 impl From<&str> for Value {
     fn from(value: &str) -> Self {
         Self::String(value.to_owned())
+    }
+}
+
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Self::Byte(i8::from(value))
     }
 }
 
@@ -181,21 +225,31 @@ pub struct ItemStack {
     metadata: i32,
     count: u32,
     damage: u32,
+    unbreakable: bool,
+    anvil_cost: i32,
     custom_name: String,
     lore: Vec<String>,
+    nbt: std::collections::BTreeMap<String, Value>,
     values: std::collections::BTreeMap<String, Value>,
     enchantments: Vec<AppliedEnchantment>,
 }
 
 impl ItemStack {
-    pub fn new(identifier: impl Into<String>, count: u32, metadata: i32) -> Self {
+    pub fn empty() -> Self {
+        Self::new(item::Custom::new(""), 0)
+    }
+
+    pub(crate) fn new(item: impl Item, count: u32) -> Self {
         Self {
-            identifier: identifier.into(),
-            metadata,
+            identifier: item.identifier().to_owned(),
+            metadata: item.metadata(),
             count,
             damage: 0,
+            unbreakable: false,
+            anvil_cost: 0,
             custom_name: String::new(),
             lore: Vec::new(),
+            nbt: std::collections::BTreeMap::new(),
             values: std::collections::BTreeMap::new(),
             enchantments: Vec::new(),
         }
@@ -207,23 +261,35 @@ impl ItemStack {
             metadata: raw.metadata,
             count: u32::try_from(raw.count).unwrap_or_default(),
             damage: u32::try_from(raw.damage).unwrap_or_default(),
+            unbreakable: false,
+            anvil_cost: 0,
             custom_name: String::new(),
             lore: Vec::new(),
+            nbt: std::collections::BTreeMap::new(),
             values: std::collections::BTreeMap::new(),
             enchantments: Vec::new(),
         }
     }
 
     pub fn potion(potion: Potion, count: u32) -> Self {
-        Self::new("minecraft:potion", count, i32::from(potion.id()))
+        Self::new(
+            item::Custom::new("minecraft:potion").with_metadata(i32::from(potion.id())),
+            count,
+        )
     }
 
     pub fn splash_potion(potion: Potion, count: u32) -> Self {
-        Self::new("minecraft:splash_potion", count, i32::from(potion.id()))
+        Self::new(
+            item::Custom::new("minecraft:splash_potion").with_metadata(i32::from(potion.id())),
+            count,
+        )
     }
 
     pub fn lingering_potion(potion: Potion, count: u32) -> Self {
-        Self::new("minecraft:lingering_potion", count, i32::from(potion.id()))
+        Self::new(
+            item::Custom::new("minecraft:lingering_potion").with_metadata(i32::from(potion.id())),
+            count,
+        )
     }
 
     pub fn identifier(&self) -> &str {
@@ -242,12 +308,24 @@ impl ItemStack {
         self.damage
     }
 
+    pub fn unbreakable(&self) -> bool {
+        self.unbreakable
+    }
+
+    pub fn anvil_cost(&self) -> i32 {
+        self.anvil_cost
+    }
+
     pub fn custom_name(&self) -> &str {
         &self.custom_name
     }
 
     pub fn lore(&self) -> &[String] {
         &self.lore
+    }
+
+    pub fn nbt(&self) -> &std::collections::BTreeMap<String, Value> {
+        &self.nbt
     }
 
     pub fn value(&self, key: &str) -> Option<&Value> {
@@ -274,13 +352,23 @@ impl ItemStack {
         self
     }
 
-    pub fn with_metadata(mut self, metadata: i32) -> Self {
-        self.metadata = metadata;
+    pub fn with_damage(mut self, damage: u32) -> Self {
+        self.damage = damage;
         self
     }
 
-    pub fn with_damage(mut self, damage: u32) -> Self {
-        self.damage = damage;
+    pub fn as_unbreakable(mut self) -> Self {
+        self.unbreakable = true;
+        self
+    }
+
+    pub fn as_breakable(mut self) -> Self {
+        self.unbreakable = false;
+        self
+    }
+
+    pub fn with_anvil_cost(mut self, anvil_cost: i32) -> Self {
+        self.anvil_cost = anvil_cost;
         self
     }
 
@@ -308,6 +396,16 @@ impl ItemStack {
         self
     }
 
+    pub fn with_nbt(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
+        self.nbt.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn without_nbt(mut self, key: &str) -> Self {
+        self.nbt.remove(key);
+        self
+    }
+
     pub fn with_enchantment(mut self, enchantment: Enchantment, level: u32) -> Self {
         self.enchantments
             .retain(|applied| applied.enchantment != enchantment);
@@ -332,6 +430,215 @@ impl ItemStack {
         self.enchantments
             .retain(|applied| applied.enchantment != enchantment);
         self
+    }
+
+    fn with_raw<R>(
+        &self,
+        function: impl FnOnce(&dragonfly_plugin_sys::DfItemStackViewV3) -> R,
+    ) -> Option<R> {
+        let nbt = if self.nbt.is_empty() {
+            Vec::new()
+        } else {
+            item_nbt::encode_values(&self.nbt).ok()?
+        };
+        let values_nbt = if self.values.is_empty() {
+            Vec::new()
+        } else {
+            item_nbt::encode_values(&self.values).ok()?
+        };
+        let lore: Vec<_> = self
+            .lore
+            .iter()
+            .map(|line| string_view_from_str(line))
+            .collect();
+        let enchantments: Vec<_> = self
+            .enchantments
+            .iter()
+            .map(|enchantment| dragonfly_plugin_sys::DfItemEnchantment {
+                id: enchantment.enchantment.id(),
+                level: enchantment.level,
+            })
+            .collect();
+        let view = dragonfly_plugin_sys::DfItemStackViewV3 {
+            identifier: string_view_from_str(&self.identifier),
+            metadata: self.metadata,
+            count: self.count,
+            damage: self.damage,
+            unbreakable: u8::from(self.unbreakable),
+            anvil_cost: self.anvil_cost,
+            custom_name: string_view_from_str(&self.custom_name),
+            lore: slice_pointer(&lore),
+            lore_count: lore.len() as u64,
+            nbt: bytes_view(&nbt),
+            values_nbt: bytes_view(&values_nbt),
+            enchantments: slice_pointer(&enchantments),
+            enchantment_count: enchantments.len() as u64,
+        };
+        Some(function(&view))
+    }
+}
+
+impl Default for ItemStack {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Inventory {
+    player: Player,
+    kind: u32,
+}
+
+impl Inventory {
+    fn raw_id(self) -> dragonfly_plugin_sys::DfInventoryId {
+        dragonfly_plugin_sys::DfInventoryId {
+            player: self.player.raw_id(),
+            kind: self.kind,
+            reserved: 0,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        let Some(host) = host_api() else { return 0 };
+        let Some(size) = host.inventory_size else {
+            return 0;
+        };
+        let mut value = 0;
+        if unsafe { size(host.context, self.raw_id(), &mut value) }
+            != dragonfly_plugin_sys::DF_STATUS_OK
+        {
+            return 0;
+        }
+        value as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn item(&self, slot: usize) -> Option<ItemStack> {
+        let slot = u32::try_from(slot).ok()?;
+        read_item_stack(|host, snapshot, info| {
+            let open = host.inventory_item_open?;
+            Some(unsafe { open(host.context, self.raw_id(), slot, snapshot, info) })
+        })
+    }
+
+    pub fn set_item(&self, slot: usize, item: &ItemStack) {
+        let Ok(slot) = u32::try_from(slot) else {
+            return;
+        };
+        let Some(host) = host_api() else { return };
+        let Some(set) = host.inventory_item_set else {
+            return;
+        };
+        let _ = item.with_raw(|item| unsafe { set(host.context, self.raw_id(), slot, item) });
+    }
+
+    pub fn add_item(&self, item: &ItemStack) -> u32 {
+        let Some(host) = host_api() else { return 0 };
+        let Some(add) = host.inventory_item_add else {
+            return 0;
+        };
+        item.with_raw(|item| {
+            let mut added = 0;
+            let status = unsafe { add(host.context, self.raw_id(), item, &mut added) };
+            if status == dragonfly_plugin_sys::DF_STATUS_OK {
+                added
+            } else {
+                0
+            }
+        })
+        .unwrap_or(0)
+    }
+
+    pub fn clear_slot(&self, slot: usize) {
+        let Ok(slot) = u32::try_from(slot) else {
+            return;
+        };
+        let Some(host) = host_api() else { return };
+        let Some(clear) = host.inventory_clear_slot else {
+            return;
+        };
+        let _ = unsafe { clear(host.context, self.raw_id(), slot) };
+    }
+
+    pub fn clear(&self) {
+        let Some(host) = host_api() else { return };
+        let Some(clear) = host.inventory_clear else {
+            return;
+        };
+        let _ = unsafe { clear(host.context, self.raw_id()) };
+    }
+}
+
+struct ItemSnapshot {
+    context: u64,
+    id: u64,
+    close: dragonfly_plugin_sys::DfHostItemStackCloseFn,
+}
+
+impl Drop for ItemSnapshot {
+    fn drop(&mut self) {
+        unsafe { (self.close)(self.context, self.id) }
+    }
+}
+
+impl Player {
+    pub const fn inventory(&self) -> Inventory {
+        Inventory {
+            player: *self,
+            kind: dragonfly_plugin_sys::DF_INVENTORY_MAIN,
+        }
+    }
+
+    pub const fn armour(&self) -> Inventory {
+        Inventory {
+            player: *self,
+            kind: dragonfly_plugin_sys::DF_INVENTORY_ARMOUR,
+        }
+    }
+
+    pub const fn offhand(&self) -> Inventory {
+        Inventory {
+            player: *self,
+            kind: dragonfly_plugin_sys::DF_INVENTORY_OFFHAND,
+        }
+    }
+
+    pub fn held_items(&self) -> (ItemStack, ItemStack) {
+        (
+            self.held_item(0).unwrap_or_default(),
+            self.held_item(1).unwrap_or_default(),
+        )
+    }
+
+    pub fn set_held_items(&self, main_hand: &ItemStack, off_hand: &ItemStack) {
+        let Some(host) = host_api() else { return };
+        let Some(set) = host.player_held_items_set else {
+            return;
+        };
+        let _ = main_hand.with_raw(|main_hand| {
+            off_hand.with_raw(|off_hand| unsafe {
+                set(host.context, self.raw_id(), main_hand, off_hand)
+            })
+        });
+    }
+
+    pub fn set_held_slot(&self, slot: u32) {
+        let Some(host) = host_api() else { return };
+        let Some(set) = host.player_held_slot_set else {
+            return;
+        };
+        let _ = unsafe { set(host.context, self.raw_id(), slot) };
+    }
+
+    fn held_item(&self, hand: u32) -> Option<ItemStack> {
+        read_item_stack(|host, snapshot, info| {
+            let open = host.player_held_item_open?;
+            Some(unsafe { open(host.context, self.raw_id(), hand, snapshot, info) })
+        })
     }
 }
 
@@ -1579,6 +1886,138 @@ fn bytes_view(value: &[u8]) -> dragonfly_plugin_sys::DfStringView {
     }
 }
 
+fn slice_pointer<T>(value: &[T]) -> *const T {
+    if value.is_empty() {
+        core::ptr::null()
+    } else {
+        value.as_ptr()
+    }
+}
+
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV3> {
+    unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
+}
+
+fn read_item_stack(
+    open: impl FnOnce(
+        &dragonfly_plugin_sys::DfHostApiV3,
+        *mut u64,
+        *mut dragonfly_plugin_sys::DfItemStackInfo,
+    ) -> Option<dragonfly_plugin_sys::DfStatus>,
+) -> Option<ItemStack> {
+    const MAX_ITEM_BYTES: u64 = 16 << 20;
+    const MAX_ITEM_LIST: usize = 256;
+
+    let host = host_api()?;
+    let read = host.item_stack_read?;
+    let close = host.item_stack_close?;
+    let mut snapshot_id = 0;
+    let mut info = dragonfly_plugin_sys::DfItemStackInfo::default();
+    if open(host, &mut snapshot_id, &mut info)? != dragonfly_plugin_sys::DF_STATUS_OK {
+        return None;
+    }
+    let snapshot = ItemSnapshot {
+        context: host.context,
+        id: snapshot_id,
+        close,
+    };
+    let lore_count = usize::try_from(info.lore_count).ok()?;
+    let enchantment_count = usize::try_from(info.enchantment_count).ok()?;
+    if lore_count > MAX_ITEM_LIST || enchantment_count > MAX_ITEM_LIST {
+        return None;
+    }
+    let total = [
+        info.identifier_len,
+        info.custom_name_len,
+        info.lore_bytes_len,
+        info.nbt_len,
+        info.values_nbt_len,
+    ]
+    .into_iter()
+    .try_fold(0u64, |total, length| total.checked_add(length))?;
+    if total > MAX_ITEM_BYTES {
+        return None;
+    }
+    let mut identifier = allocate_bytes(info.identifier_len)?;
+    let mut custom_name = allocate_bytes(info.custom_name_len)?;
+    let mut lore_bytes = allocate_bytes(info.lore_bytes_len)?;
+    let mut nbt = allocate_bytes(info.nbt_len)?;
+    let mut values_nbt = allocate_bytes(info.values_nbt_len)?;
+    let mut lore = vec![dragonfly_plugin_sys::DfByteSpan::default(); lore_count];
+    let mut enchantments =
+        vec![dragonfly_plugin_sys::DfItemEnchantment::default(); enchantment_count];
+    let mut data = dragonfly_plugin_sys::DfItemStackData {
+        identifier: bytes_buffer(&mut identifier),
+        custom_name: bytes_buffer(&mut custom_name),
+        lore_bytes: bytes_buffer(&mut lore_bytes),
+        nbt: bytes_buffer(&mut nbt),
+        values_nbt: bytes_buffer(&mut values_nbt),
+        lore: if lore.is_empty() {
+            core::ptr::null_mut()
+        } else {
+            lore.as_mut_ptr()
+        },
+        lore_capacity: lore.len() as u64,
+        enchantments: if enchantments.is_empty() {
+            core::ptr::null_mut()
+        } else {
+            enchantments.as_mut_ptr()
+        },
+        enchantment_capacity: enchantments.len() as u64,
+    };
+    if unsafe { read(host.context, snapshot.id, &mut data) } != dragonfly_plugin_sys::DF_STATUS_OK {
+        return None;
+    }
+    finish_buffer(&mut identifier, data.identifier)?;
+    finish_buffer(&mut custom_name, data.custom_name)?;
+    finish_buffer(&mut lore_bytes, data.lore_bytes)?;
+    finish_buffer(&mut nbt, data.nbt)?;
+    finish_buffer(&mut values_nbt, data.values_nbt)?;
+
+    let lore = lore
+        .into_iter()
+        .map(|span| {
+            let start = usize::try_from(span.offset).ok()?;
+            let length = usize::try_from(span.len).ok()?;
+            let end = start.checked_add(length)?;
+            Some(
+                std::str::from_utf8(lore_bytes.get(start..end)?)
+                    .ok()?
+                    .to_owned(),
+            )
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let nbt = if nbt.is_empty() {
+        std::collections::BTreeMap::new()
+    } else {
+        item_nbt::decode_values(&nbt).ok()?
+    };
+    let values = if values_nbt.is_empty() {
+        std::collections::BTreeMap::new()
+    } else {
+        item_nbt::decode_values(&values_nbt).ok()?
+    };
+    let enchantments = enchantments
+        .into_iter()
+        .map(|enchantment| {
+            AppliedEnchantment::new(Enchantment::from_id(enchantment.id), enchantment.level)
+        })
+        .collect();
+    Some(ItemStack {
+        identifier: String::from_utf8(identifier).ok()?,
+        metadata: info.metadata,
+        count: info.count,
+        damage: info.damage,
+        unbreakable: info.unbreakable != 0,
+        anvil_cost: info.anvil_cost,
+        custom_name: String::from_utf8(custom_name).ok()?,
+        lore,
+        nbt,
+        values,
+        enchantments,
+    })
+}
+
 fn allocate_bytes(length: u64) -> Option<Vec<u8>> {
     let length = usize::try_from(length).ok()?;
     let mut bytes = Vec::new();
@@ -1750,8 +2189,10 @@ impl<'a> PlayerHurtEventData<'a> {
         Player::from_id(self.input.player)
     }
 
-    pub fn source(&self) -> &str {
-        unsafe { string_view(self.input.source) }
+    pub fn damage_source(&self) -> DamageSource<'_> {
+        DamageSource {
+            raw: &self.input.source,
+        }
     }
 
     pub fn immune(&self) -> bool {
@@ -1886,8 +2327,10 @@ impl<'a> PlayerHealEventData<'a> {
         Player::from_id(self.input.player)
     }
 
-    pub fn source(&self) -> &str {
-        unsafe { string_view(self.input.source) }
+    pub fn healing_source(&self) -> HealingSource<'_> {
+        HealingSource {
+            raw: &self.input.source,
+        }
     }
 
     pub fn health(&self) -> f64 {
@@ -1968,8 +2411,10 @@ impl<'a> PlayerDeathEventData<'a> {
         Player::from_id(self.input.player)
     }
 
-    pub fn source(&self) -> &str {
-        unsafe { string_view(self.input.source) }
+    pub fn damage_source(&self) -> DamageSource<'_> {
+        DamageSource {
+            raw: &self.input.source,
+        }
     }
 
     pub fn keep_inventory(&self) -> bool {
@@ -2633,14 +3078,16 @@ mod tests {
     #[test]
     fn item_stack_builders_keep_typed_data() {
         let nested = Value::Compound(std::collections::BTreeMap::from([
-            ("enabled".to_owned(), Value::Bool(true)),
+            ("enabled".to_owned(), Value::from(true)),
             (
                 "levels".to_owned(),
                 Value::List(vec![Value::Int(1), Value::Int(2)]),
             ),
         ]));
-        let stack = ItemStack::new("minecraft:diamond_sword", 1, 0)
+        let stack = item::new(item::Sword::new(item::ToolTier::Diamond), 1)
             .with_damage(7)
+            .as_unbreakable()
+            .with_anvil_cost(4)
             .with_custom_name("Guard blade")
             .with_lore(["First line", "Second line"])
             .with_value("example:data", nested.clone())
@@ -2650,6 +3097,8 @@ mod tests {
         assert_eq!(stack.identifier(), "minecraft:diamond_sword");
         assert_eq!(stack.count(), 1);
         assert_eq!(stack.damage(), 7);
+        assert!(stack.unbreakable());
+        assert_eq!(stack.anvil_cost(), 4);
         assert_eq!(stack.custom_name(), "Guard blade");
         assert_eq!(stack.lore(), ["First line", "Second line"]);
         assert_eq!(stack.value("example:data"), Some(&nested));
@@ -2659,6 +3108,24 @@ mod tests {
         );
         assert_eq!(Enchantment::Sharpness.max_level(), Some(5));
         assert_eq!(Enchantment::Custom(512).id(), 512);
+    }
+
+    #[test]
+    fn generated_items_and_custom_metadata_are_typed() {
+        let diamond = item::new(item::Diamond, 4);
+        assert_eq!(diamond.identifier(), "minecraft:diamond");
+        assert_eq!(diamond.metadata(), 0);
+
+        let custom = item::new(item::Custom::new("example:variant").with_metadata(12), 2);
+        assert_eq!(custom.identifier(), "example:variant");
+        assert_eq!(custom.metadata(), 12);
+
+        let pickaxe = item::Pickaxe::new(item::ToolTier::Copper);
+        assert_eq!(pickaxe.tier(), item::ToolTier::Copper);
+        assert_eq!(
+            item::new(pickaxe, 1).identifier(),
+            "minecraft:copper_pickaxe"
+        );
     }
 
     #[test]

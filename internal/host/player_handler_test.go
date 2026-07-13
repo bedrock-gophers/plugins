@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,10 +40,10 @@ type runtimeStub struct {
 
 type testDamageSource struct{}
 
-func (testDamageSource) ReducedByArmour() bool     { return false }
+func (testDamageSource) ReducedByArmour() bool     { return true }
 func (testDamageSource) ReducedByResistance() bool { return false }
-func (testDamageSource) Fire() bool                { return false }
-func (testDamageSource) IgnoreTotem() bool         { return false }
+func (testDamageSource) Fire() bool                { return true }
+func (testDamageSource) IgnoreTotem() bool         { return true }
 
 type testHealingSource struct{}
 
@@ -250,6 +251,14 @@ func TestPlayerHandlerHurtAndHeal(t *testing.T) {
 		}
 		if runtime.hurtInput.Player.Generation != 13 || runtime.healInput.Player.Generation != 13 {
 			t.Fatalf("hurt=%+v heal=%+v", runtime.hurtInput, runtime.healInput)
+		}
+		if !strings.Contains(runtime.hurtInput.Source.Name, "testDamageSource") ||
+			!runtime.hurtInput.Source.ReducedByArmour || runtime.hurtInput.Source.ReducedByResistance ||
+			!runtime.hurtInput.Source.Fire || !runtime.hurtInput.Source.IgnoresTotem {
+			t.Fatalf("damage source = %+v", runtime.hurtInput.Source)
+		}
+		if !strings.Contains(runtime.healInput.Source.Name, "testHealingSource") {
+			t.Fatalf("healing source = %+v", runtime.healInput.Source)
 		}
 	})
 }

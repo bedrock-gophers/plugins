@@ -19,9 +19,15 @@ _Static_assert(sizeof(DfSkinAnimationView) == 48, "DfSkinAnimationView ABI layou
 _Static_assert(offsetof(DfSkinAnimationView, pixels) == 32, "DfSkinAnimationView.pixels ABI offset changed");
 _Static_assert(sizeof(DfSkinView) == 152, "DfSkinView ABI layout changed");
 _Static_assert(offsetof(DfSkinView, animations) == 136, "DfSkinView.animations ABI offset changed");
-_Static_assert(sizeof(DfHostApiV2) == 120, "DfHostApiV2 ABI layout changed");
-_Static_assert(offsetof(DfHostApiV2, player_skin_open) == 80, "DfHostApiV2.player_skin_open ABI offset changed");
-_Static_assert(offsetof(DfHostApiV2, player_skin_set) == 112, "DfHostApiV2.player_skin_set ABI offset changed");
+_Static_assert(sizeof(DfInventoryId) == 32, "DfInventoryId ABI layout changed");
+_Static_assert(sizeof(DfItemStackInfo) == 80, "DfItemStackInfo ABI layout changed");
+_Static_assert(sizeof(DfItemStackData) == 152, "DfItemStackData ABI layout changed");
+_Static_assert(sizeof(DfItemStackViewV3) == 120, "DfItemStackViewV3 ABI layout changed");
+_Static_assert(sizeof(DfHostApiV3) == 208, "DfHostApiV3 ABI layout changed");
+_Static_assert(offsetof(DfHostApiV3, player_skin_open) == 80, "DfHostApiV3.player_skin_open ABI offset changed");
+_Static_assert(offsetof(DfHostApiV3, player_skin_set) == 112, "DfHostApiV3.player_skin_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV3, inventory_size) == 120, "DfHostApiV3.inventory_size ABI offset changed");
+_Static_assert(offsetof(DfHostApiV3, player_held_slot_set) == 200, "DfHostApiV3.player_held_slot_set ABI offset changed");
 #endif
 
 extern DfStatus bg_go_player_text(uint64_t context, DfPlayerId player, uint32_t kind, DfStringView message);
@@ -37,6 +43,17 @@ extern DfStatus bg_go_player_skin_animation_info(uint64_t context, uint64_t snap
 extern DfStatus bg_go_player_skin_read(uint64_t context, uint64_t snapshot, DfSkinData *data);
 extern void bg_go_player_skin_close(uint64_t context, uint64_t snapshot);
 extern DfStatus bg_go_player_skin_set(uint64_t context, DfPlayerId player, const DfSkinView *skin);
+extern DfStatus bg_go_inventory_size(uint64_t context, DfInventoryId inventory, uint32_t *size);
+extern DfStatus bg_go_inventory_item_open(uint64_t context, DfInventoryId inventory, uint32_t slot, uint64_t *snapshot, DfItemStackInfo *info);
+extern DfStatus bg_go_player_held_item_open(uint64_t context, DfPlayerId player, uint32_t hand, uint64_t *snapshot, DfItemStackInfo *info);
+extern DfStatus bg_go_item_stack_read(uint64_t context, uint64_t snapshot, DfItemStackData *data);
+extern void bg_go_item_stack_close(uint64_t context, uint64_t snapshot);
+extern DfStatus bg_go_inventory_item_set(uint64_t context, DfInventoryId inventory, uint32_t slot, const DfItemStackViewV3 *item);
+extern DfStatus bg_go_inventory_item_add(uint64_t context, DfInventoryId inventory, const DfItemStackViewV3 *item, uint32_t *added);
+extern DfStatus bg_go_inventory_clear_slot(uint64_t context, DfInventoryId inventory, uint32_t slot);
+extern DfStatus bg_go_inventory_clear(uint64_t context, DfInventoryId inventory);
+extern DfStatus bg_go_player_held_items_set(uint64_t context, DfPlayerId player, const DfItemStackViewV3 *main_hand, const DfItemStackViewV3 *off_hand);
+extern DfStatus bg_go_player_held_slot_set(uint64_t context, DfPlayerId player, uint32_t slot);
 
 static DfStatus host_player_text(uint64_t context, DfPlayerId player, uint32_t kind, DfStringView message) {
     return bg_go_player_text(context, player, kind, message);
@@ -90,6 +107,18 @@ static DfStatus host_player_skin_set(uint64_t context, DfPlayerId player, const 
     return bg_go_player_skin_set(context, player, skin);
 }
 
+static DfStatus host_inventory_size(uint64_t context, DfInventoryId inventory, uint32_t *size) { return bg_go_inventory_size(context, inventory, size); }
+static DfStatus host_inventory_item_open(uint64_t context, DfInventoryId inventory, uint32_t slot, uint64_t *snapshot, DfItemStackInfo *info) { return bg_go_inventory_item_open(context, inventory, slot, snapshot, info); }
+static DfStatus host_player_held_item_open(uint64_t context, DfPlayerId player, uint32_t hand, uint64_t *snapshot, DfItemStackInfo *info) { return bg_go_player_held_item_open(context, player, hand, snapshot, info); }
+static DfStatus host_item_stack_read(uint64_t context, uint64_t snapshot, DfItemStackData *data) { return bg_go_item_stack_read(context, snapshot, data); }
+static void host_item_stack_close(uint64_t context, uint64_t snapshot) { bg_go_item_stack_close(context, snapshot); }
+static DfStatus host_inventory_item_set(uint64_t context, DfInventoryId inventory, uint32_t slot, const DfItemStackViewV3 *item) { return bg_go_inventory_item_set(context, inventory, slot, item); }
+static DfStatus host_inventory_item_add(uint64_t context, DfInventoryId inventory, const DfItemStackViewV3 *item, uint32_t *added) { return bg_go_inventory_item_add(context, inventory, item, added); }
+static DfStatus host_inventory_clear_slot(uint64_t context, DfInventoryId inventory, uint32_t slot) { return bg_go_inventory_clear_slot(context, inventory, slot); }
+static DfStatus host_inventory_clear(uint64_t context, DfInventoryId inventory) { return bg_go_inventory_clear(context, inventory); }
+static DfStatus host_player_held_items_set(uint64_t context, DfPlayerId player, const DfItemStackViewV3 *main_hand, const DfItemStackViewV3 *off_hand) { return bg_go_player_held_items_set(context, player, main_hand, off_hand); }
+static DfStatus host_player_held_slot_set(uint64_t context, DfPlayerId player, uint32_t slot) { return bg_go_player_held_slot_set(context, player, slot); }
+
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
 typedef void (*RuntimeDestroyFn)(DfRuntime *);
 typedef DfStatus (*RuntimeEnableFn)(DfRuntime *);
@@ -103,7 +132,7 @@ typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *)
 struct BgRuntimeLibrary {
     void *handle;
     DfRuntime *runtime;
-    DfHostApiV2 host_api;
+    DfHostApiV3 host_api;
     RuntimeDestroyFn destroy;
     RuntimeEnableFn enable;
     RuntimeDisableFn disable;
@@ -176,9 +205,9 @@ DfStatus bg_runtime_open(
         return DF_STATUS_ERROR;
     }
 
-    library->host_api = (DfHostApiV2) {
+    library->host_api = (DfHostApiV3) {
         .abi_version = DF_HOST_ABI_VERSION,
-        .struct_size = sizeof(DfHostApiV2),
+        .struct_size = sizeof(DfHostApiV3),
         .context = host_context,
         .player_text = host_player_text,
         .player_title = host_player_title,
@@ -193,6 +222,17 @@ DfStatus bg_runtime_open(
         .player_skin_read = host_player_skin_read,
         .player_skin_close = host_player_skin_close,
         .player_skin_set = host_player_skin_set,
+        .inventory_size = host_inventory_size,
+        .inventory_item_open = host_inventory_item_open,
+        .player_held_item_open = host_player_held_item_open,
+        .item_stack_read = host_item_stack_read,
+        .item_stack_close = host_item_stack_close,
+        .inventory_item_set = host_inventory_item_set,
+        .inventory_item_add = host_inventory_item_add,
+        .inventory_clear_slot = host_inventory_clear_slot,
+        .inventory_clear = host_inventory_clear,
+        .player_held_items_set = host_player_held_items_set,
+        .player_held_slot_set = host_player_held_slot_set,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

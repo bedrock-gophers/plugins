@@ -3,7 +3,7 @@
 use core::ffi::c_void;
 
 pub const DF_ABI_VERSION: u32 = 1;
-pub const DF_HOST_ABI_VERSION: u32 = 2;
+pub const DF_HOST_ABI_VERSION: u32 = 3;
 pub const DF_STATUS_OK: DfStatus = 0;
 pub const DF_STATUS_ERROR: DfStatus = 1;
 pub type DfStatus = i32;
@@ -38,7 +38,38 @@ impl Default for DfStringBuffer {
 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
+pub struct DfDamageSourceView { pub name: DfStringView, pub flags: u32 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfHealingSourceView { pub name: DfStringView }
+pub const DF_DAMAGE_SOURCE_REDUCED_BY_ARMOUR: u32 = 1;
+pub const DF_DAMAGE_SOURCE_REDUCED_BY_RESISTANCE: u32 = 2;
+pub const DF_DAMAGE_SOURCE_FIRE: u32 = 4;
+pub const DF_DAMAGE_SOURCE_IGNORES_TOTEM: u32 = 8;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct DfItemStackView { pub identifier: DfStringView, pub metadata: i32, pub count: i32, pub damage: i32 }
+pub const DF_INVENTORY_MAIN: u32 = 0;
+pub const DF_INVENTORY_ARMOUR: u32 = 1;
+pub const DF_INVENTORY_OFFHAND: u32 = 2;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfInventoryId { pub player: DfPlayerId, pub kind: u32, pub reserved: u32 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfByteSpan { pub offset: u64, pub len: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfItemEnchantment { pub id: u32, pub level: u32 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfItemStackInfo { pub metadata: i32, pub count: u32, pub damage: u32, pub unbreakable: u8, pub anvil_cost: i32, pub identifier_len: u64, pub custom_name_len: u64, pub lore_bytes_len: u64, pub lore_count: u64, pub nbt_len: u64, pub values_nbt_len: u64, pub enchantment_count: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfItemStackData { pub identifier: DfStringBuffer, pub custom_name: DfStringBuffer, pub lore_bytes: DfStringBuffer, pub nbt: DfStringBuffer, pub values_nbt: DfStringBuffer, pub lore: *mut DfByteSpan, pub lore_capacity: u64, pub enchantments: *mut DfItemEnchantment, pub enchantment_capacity: u64 }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfItemStackViewV3 { pub identifier: DfStringView, pub metadata: i32, pub count: u32, pub damage: u32, pub unbreakable: u8, pub anvil_cost: i32, pub custom_name: DfStringView, pub lore: *const DfStringView, pub lore_count: u64, pub nbt: DfStringView, pub values_nbt: DfStringView, pub enchantments: *const DfItemEnchantment, pub enchantment_count: u64 }
 pub const DF_PLAYER_TRANSFORM_TELEPORT: u32 = 0;
 pub const DF_PLAYER_TRANSFORM_MOVE: u32 = 1;
 pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
@@ -193,9 +224,20 @@ pub type DfHostPlayerSkinAnimationInfoFn = unsafe extern "C" fn(context: u64, sn
 pub type DfHostPlayerSkinReadFn = unsafe extern "C" fn(context: u64, snapshot: u64, data: *mut DfSkinData) -> DfStatus;
 pub type DfHostPlayerSkinCloseFn = unsafe extern "C" fn(context: u64, snapshot: u64);
 pub type DfHostPlayerSkinSetFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, skin: *const DfSkinView) -> DfStatus;
+pub type DfHostInventorySizeFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, size: *mut u32) -> DfStatus;
+pub type DfHostInventoryItemOpenFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, slot: u32, snapshot: *mut u64, info: *mut DfItemStackInfo) -> DfStatus;
+pub type DfHostPlayerHeldItemOpenFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, hand: u32, snapshot: *mut u64, info: *mut DfItemStackInfo) -> DfStatus;
+pub type DfHostItemStackReadFn = unsafe extern "C" fn(context: u64, snapshot: u64, data: *mut DfItemStackData) -> DfStatus;
+pub type DfHostItemStackCloseFn = unsafe extern "C" fn(context: u64, snapshot: u64);
+pub type DfHostInventoryItemSetFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, slot: u32, item: *const DfItemStackViewV3) -> DfStatus;
+pub type DfHostInventoryItemAddFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, item: *const DfItemStackViewV3, added: *mut u32) -> DfStatus;
+pub type DfHostInventoryClearSlotFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId, slot: u32) -> DfStatus;
+pub type DfHostInventoryClearFn = unsafe extern "C" fn(context: u64, inventory: DfInventoryId) -> DfStatus;
+pub type DfHostPlayerHeldItemsSetFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, main_hand: *const DfItemStackViewV3, off_hand: *const DfItemStackViewV3) -> DfStatus;
+pub type DfHostPlayerHeldSlotSetFn = unsafe extern "C" fn(context: u64, player: DfPlayerId, slot: u32) -> DfStatus;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfHostApiV2 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn> }
+pub struct DfHostApiV3 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn>, pub inventory_size: Option<DfHostInventorySizeFn>, pub inventory_item_open: Option<DfHostInventoryItemOpenFn>, pub player_held_item_open: Option<DfHostPlayerHeldItemOpenFn>, pub item_stack_read: Option<DfHostItemStackReadFn>, pub item_stack_close: Option<DfHostItemStackCloseFn>, pub inventory_item_set: Option<DfHostInventoryItemSetFn>, pub inventory_item_add: Option<DfHostInventoryItemAddFn>, pub inventory_clear_slot: Option<DfHostInventoryClearSlotFn>, pub inventory_clear: Option<DfHostInventoryClearFn>, pub player_held_items_set: Option<DfHostPlayerHeldItemsSetFn>, pub player_held_slot_set: Option<DfHostPlayerHeldSlotSetFn> }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandParameter { pub kind: u32, pub optional: u8, pub name: DfStringView, pub values: *const DfStringView, pub value_count: u64 }
@@ -300,7 +342,7 @@ pub const DF_SUBSCRIPTION_PLAYER_HURT: u64 = 1u64 << 4;
 pub struct DfPlayerHurtInput {
     pub player: DfPlayerId,
     pub immune: u8,
-    pub source: DfStringView,
+    pub source: DfDamageSourceView,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -316,7 +358,7 @@ pub const DF_SUBSCRIPTION_PLAYER_HEAL: u64 = 1u64 << 5;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfPlayerHealInput {
     pub player: DfPlayerId,
-    pub source: DfStringView,
+    pub source: DfHealingSourceView,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -377,7 +419,7 @@ pub const DF_SUBSCRIPTION_PLAYER_DEATH: u64 = 1u64 << 9;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DfPlayerDeathInput {
     pub player: DfPlayerId,
-    pub source: DfStringView,
+    pub source: DfDamageSourceView,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -664,7 +706,7 @@ pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> Df
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
 pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
 pub type DfCommandEnumOptionsFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, overload: u64, parameter: u64, context: *const DfCommandEnumContext, output: *mut DfStringBuffer) -> DfStatus;
-pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV2) -> DfStatus;
+pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV3) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 
