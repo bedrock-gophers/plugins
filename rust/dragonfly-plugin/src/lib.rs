@@ -5,6 +5,8 @@ mod command_descriptor_test;
 #[cfg(test)]
 mod items_generated_test;
 #[cfg(test)]
+mod player_effect_snapshot_test;
+#[cfg(test)]
 mod player_transfer_test;
 
 extern crate self as dragonfly_plugin;
@@ -1622,6 +1624,69 @@ impl Player {
                 particles_hidden: false,
             },
         );
+    }
+
+    /// Returns a transaction-coherent snapshot of the player's active lasting effects.
+    ///
+    /// Host failures and malformed snapshots are intentionally hidden as an empty vector.
+    pub fn effects(&self) -> Vec<effect::Effect> {
+        const MAX_EFFECTS: usize = 256;
+        const MAX_ATTEMPTS: usize = 3;
+
+        let Some(host) = host_api() else {
+            return Vec::new();
+        };
+        let Some(snapshot) = host.player_effects else {
+            return Vec::new();
+        };
+        let mut capacity = 0;
+        for _ in 0..MAX_ATTEMPTS {
+            let mut values = vec![dragonfly_plugin_sys::DfEffectView::default(); capacity];
+            let mut raw = dragonfly_plugin_sys::DfEffectBuffer {
+                data: if values.is_empty() {
+                    core::ptr::null_mut()
+                } else {
+                    values.as_mut_ptr()
+                },
+                len: 0,
+                capacity: values.len() as u64,
+            };
+            let status =
+                unsafe { snapshot(host.context, current_invocation(), self.raw_id(), &mut raw) };
+            let Ok(length) = usize::try_from(raw.len) else {
+                return Vec::new();
+            };
+            if length > MAX_EFFECTS {
+                return Vec::new();
+            }
+            if status == dragonfly_plugin_sys::DF_STATUS_OK {
+                if length > values.len() {
+                    return Vec::new();
+                }
+                values.truncate(length);
+                return values
+                    .into_iter()
+                    .map(effect::Effect::from_snapshot)
+                    .collect::<Option<Vec<_>>>()
+                    .unwrap_or_default();
+            }
+            if status != dragonfly_plugin_sys::DF_STATUS_ERROR || length <= values.len() {
+                return Vec::new();
+            }
+            capacity = length;
+        }
+        Vec::new()
+    }
+
+    /// Clears every registered lasting effect currently active on the player.
+    pub fn clear_effects(&self) {
+        let Some(host) = host_api() else {
+            return;
+        };
+        let Some(clear) = host.player_effects_clear else {
+            return;
+        };
+        let _ = unsafe { clear(host.context, current_invocation(), self.raw_id()) };
     }
 
     fn change_effect(&self, operation: u32, effect: effect::Effect) {

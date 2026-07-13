@@ -127,6 +127,56 @@ pub fn instant_with_potency(effect_type: impl InstantType, level: i32, potency: 
 }
 
 impl Effect {
+    pub(crate) fn from_snapshot(raw: dragonfly_plugin_sys::DfEffectView) -> Option<Self> {
+        if raw.level <= 0 || raw.potency != 1.0 || raw.particles_hidden > 1 {
+            return None;
+        }
+        match raw.mode {
+            dragonfly_plugin_sys::DF_EFFECT_MODE_TIMED
+            | dragonfly_plugin_sys::DF_EFFECT_MODE_AMBIENT => {}
+            dragonfly_plugin_sys::DF_EFFECT_MODE_INFINITE if raw.duration_milliseconds == 0 => {}
+            _ => return None,
+        }
+        Some(Self {
+            effect_type: raw.effect_type,
+            level: raw.level,
+            duration: Duration::from_millis(raw.duration_milliseconds),
+            potency: raw.potency,
+            mode: raw.mode,
+            particles_hidden: raw.particles_hidden != 0,
+        })
+    }
+
+    /// Returns the signed Dragonfly registration ID for this effect type.
+    pub fn type_id(&self) -> i32 {
+        self.effect_type
+    }
+
+    /// Returns the effect level.
+    pub fn level(&self) -> i32 {
+        self.level
+    }
+
+    /// Returns the remaining duration, or zero for an infinite effect.
+    pub fn duration(&self) -> Duration {
+        self.duration
+    }
+
+    /// Reports whether this is an ambient effect.
+    pub fn ambient(&self) -> bool {
+        self.mode == dragonfly_plugin_sys::DF_EFFECT_MODE_AMBIENT
+    }
+
+    /// Reports whether this effect has no duration limit.
+    pub fn infinite(&self) -> bool {
+        self.mode == dragonfly_plugin_sys::DF_EFFECT_MODE_INFINITE
+    }
+
+    /// Reports whether client particles are hidden.
+    pub fn particles_hidden(&self) -> bool {
+        self.particles_hidden
+    }
+
     /// Returns this effect with client particles hidden.
     pub fn without_particles(mut self) -> Self {
         self.particles_hidden = true;
