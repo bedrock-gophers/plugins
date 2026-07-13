@@ -304,6 +304,41 @@ func TestPlayerIdentityHostCalls(t *testing.T) {
 	}
 }
 
+func TestPlayerSoundAndDisconnectHostCalls(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := PlayerID{Generation: 11}
+	for _, arguments := range []string{"sound", "disconnect", "kick"} {
+		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
+		})
+		if err != nil || output.Failed {
+			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
+		}
+	}
+	if !slices.Equal(host.states, []PlayerStateKind{PlayerStateSound}) || host.values[0].Integer != int64(SoundLevelUp) {
+		t.Fatalf("states=%v values=%+v", host.states, host.values)
+	}
+	wantKinds := []PlayerTextKind{PlayerTextDisconnect, PlayerTextKick}
+	wantTexts := []string{"Disconnected by Rust plugin.", "Kicked by Rust plugin."}
+	if !slices.Equal(host.kinds, wantKinds) || !slices.Equal(host.texts, wantTexts) {
+		t.Fatalf("kinds=%v texts=%v", host.kinds, host.texts)
+	}
+}
+
 func TestCommand(t *testing.T) {
 	runtime := openTestRuntime(t)
 	commands, err := runtime.Commands()

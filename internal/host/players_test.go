@@ -94,6 +94,9 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		if !players.SendPlayerText(id, native.PlayerTextNameTag, "Rust Player") || player.NameTag() != "Rust Player" {
 			t.Fatalf("name tag = %q", player.NameTag())
 		}
+		if !players.SetPlayerState(id, native.PlayerStateSound, native.PlayerStateValue{Integer: int64(native.SoundLevelUp)}) {
+			t.Fatal("play sound failed")
+		}
 		if !players.ChangePlayerEffect(id, native.PlayerEffectAdd, native.PlayerEffect{
 			Type: native.EffectSpeed, Level: 2, Duration: 30 * time.Second,
 		}) {

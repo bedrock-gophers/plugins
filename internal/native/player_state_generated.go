@@ -18,6 +18,7 @@ const (
 	PlayerStateScale              PlayerStateKind = 8
 	PlayerStateInvisible          PlayerStateKind = 9
 	PlayerStateImmobile           PlayerStateKind = 10
+	PlayerStateSound              PlayerStateKind = 11
 )
 
 type PlayerStateValue struct {
@@ -82,4 +83,75 @@ const (
 	PlayerTextPopup        PlayerTextKind = 2
 	PlayerTextJukeboxPopup PlayerTextKind = 3
 	PlayerTextNameTag      PlayerTextKind = 4
+	PlayerTextDisconnect   PlayerTextKind = 5
+	PlayerTextKick         PlayerTextKind = 6
+)
+
+type SoundType uint32
+
+const (
+	SoundAnvilBreak                 SoundType = 0
+	SoundAnvilLand                  SoundType = 1
+	SoundAnvilUse                   SoundType = 2
+	SoundArrowHit                   SoundType = 3
+	SoundBarrelClose                SoundType = 4
+	SoundBarrelOpen                 SoundType = 5
+	SoundBlastFurnaceCrackle        SoundType = 6
+	SoundBowShoot                   SoundType = 7
+	SoundBurning                    SoundType = 8
+	SoundBurp                       SoundType = 9
+	SoundCampfireCrackle            SoundType = 10
+	SoundChestClose                 SoundType = 11
+	SoundChestOpen                  SoundType = 12
+	SoundClick                      SoundType = 13
+	SoundComposterEmpty             SoundType = 14
+	SoundComposterFill              SoundType = 15
+	SoundComposterFillLayer         SoundType = 16
+	SoundComposterReady             SoundType = 17
+	SoundCopperScraped              SoundType = 18
+	SoundCrossbowShoot              SoundType = 19
+	SoundDecoratedPotInsertFailed   SoundType = 20
+	SoundDeny                       SoundType = 21
+	SoundDoorCrash                  SoundType = 22
+	SoundDrowning                   SoundType = 23
+	SoundEnderChestClose            SoundType = 24
+	SoundEnderChestOpen             SoundType = 25
+	SoundExperience                 SoundType = 26
+	SoundExplosion                  SoundType = 27
+	SoundFireCharge                 SoundType = 28
+	SoundFireExtinguish             SoundType = 29
+	SoundFireworkBlast              SoundType = 30
+	SoundFireworkHugeBlast          SoundType = 31
+	SoundFireworkLaunch             SoundType = 32
+	SoundFireworkTwinkle            SoundType = 33
+	SoundFizz                       SoundType = 34
+	SoundFurnaceCrackle             SoundType = 35
+	SoundGhastShoot                 SoundType = 36
+	SoundGhastWarning               SoundType = 37
+	SoundGlassBreak                 SoundType = 38
+	SoundIgnite                     SoundType = 39
+	SoundItemAdd                    SoundType = 40
+	SoundItemBreak                  SoundType = 41
+	SoundItemFrameRemove            SoundType = 42
+	SoundItemFrameRotate            SoundType = 43
+	SoundItemThrow                  SoundType = 44
+	SoundLecternBookPlace           SoundType = 45
+	SoundLevelUp                    SoundType = 46
+	SoundLightningExplode           SoundType = 47
+	SoundLightningThunder           SoundType = 48
+	SoundMusicDiscEnd               SoundType = 49
+	SoundPop                        SoundType = 50
+	SoundPotionBrewed               SoundType = 51
+	SoundPowerOff                   SoundType = 52
+	SoundPowerOn                    SoundType = 53
+	SoundSignWaxed                  SoundType = 54
+	SoundSmokerCrackle              SoundType = 55
+	SoundStopUsingSpyglass          SoundType = 56
+	SoundTnt                        SoundType = 57
+	SoundTeleport                   SoundType = 58
+	SoundThunder                    SoundType = 59
+	SoundTotem                      SoundType = 60
+	SoundUseSpyglass                SoundType = 61
+	SoundWaxRemoved                 SoundType = 62
+	SoundWaxedSignFailedInteraction SoundType = 63
 )
