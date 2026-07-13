@@ -14,6 +14,7 @@ import (
 	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/item/enchantment"
 	"github.com/df-mc/dragonfly/server/player"
+	playerskin "github.com/df-mc/dragonfly/server/player/skin"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
 )
@@ -53,6 +54,7 @@ type playerRuntime interface {
 	HandlePlayerItemUseOnEntity(native.InvocationID, native.PlayerItemUseOnEntityInput, bool) (bool, error)
 	HandlePlayerChangeWorld(native.InvocationID, native.PlayerChangeWorldInput) error
 	HandlePlayerRespawn(native.InvocationID, native.PlayerRespawnInput, native.Vec3, native.WorldID) (native.PlayerRespawnOutput, error)
+	HandlePlayerSkinChange(native.InvocationID, native.PlayerSkinChangeInput, native.PlayerSkin, bool) (native.PlayerSkinChangeOutput, error)
 }
 
 type playerWorldResolver interface {
@@ -232,6 +234,36 @@ func (h *PlayerHandler) HandleRespawn(p *player.Player, position *mgl64.Vec3, de
 	}
 	*position = mgl64.Vec3{output.Position.X, output.Position.Y, output.Position.Z}
 	*destination = returnedWorld
+}
+
+func (h *PlayerHandler) HandleSkinChange(ctx *player.Context, candidate *playerskin.Skin) {
+	if h.runtime.Subscriptions()&native.PlayerSkinChangeSubscription == 0 || candidate == nil {
+		return
+	}
+	p := ctx.Player()
+	value, ok := playerSkinToNative(*candidate)
+	if !ok {
+		return
+	}
+	invocation, leave := h.players.BeginInvocation(p.Tx())
+	defer leave()
+	output, err := h.runtime.HandlePlayerSkinChange(invocation, native.PlayerSkinChangeInput{Player: h.playerID(p)}, value, ctx.Cancelled())
+	if err != nil {
+		if output.Cancelled {
+			ctx.Cancel()
+		}
+		h.log.Error("native plugin skin-change handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if output.Cancelled {
+		ctx.Cancel()
+	}
+	converted, ok := playerSkinFromNative(output.Skin)
+	if !ok {
+		h.log.Error("native plugin skin-change handler returned an invalid skin", "player", p.Name())
+		return
+	}
+	*candidate = converted
 }
 
 func (h *PlayerHandler) HandleAttackEntity(ctx *player.Context, target world.Entity, force, height *float64, critical *bool) {

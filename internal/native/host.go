@@ -517,8 +517,10 @@ func drainHostForms(host uint64, closing bool) {
 }
 
 type skinSnapshot struct {
-	host uint64
-	skin PlayerSkin
+	host       uint64
+	invocation InvocationID
+	skin       PlayerSkin
+	eventOwned bool
 }
 
 type itemSnapshot struct {
@@ -569,38 +571,65 @@ func resolveHost(id uint64) (Host, bool) {
 	return host.(Host), true
 }
 
-func registerSkinSnapshot(host uint64, skin PlayerSkin) (uint64, bool) {
+func registerSkinSnapshot(host uint64, invocation InvocationID, skin PlayerSkin, eventOwned bool) (uint64, bool) {
 	skinSnapshotMu.Lock()
 	defer skinSnapshotMu.Unlock()
 	if skinSnapshotCounts[host] >= maxSkinSnapshotsPerHost {
 		return 0, false
 	}
 	id := skinSnapshotSequence.Add(1)
-	skinSnapshots[id] = skinSnapshot{host: host, skin: clonePlayerSkin(skin)}
+	skinSnapshots[id] = skinSnapshot{host: host, invocation: invocation, skin: clonePlayerSkin(skin), eventOwned: eventOwned}
 	skinSnapshotCounts[host]++
 	return id, true
 }
 
-func resolveSkinSnapshot(host, id uint64) (PlayerSkin, bool) {
+func resolveSkinSnapshot(host uint64, invocation InvocationID, id uint64) (PlayerSkin, bool) {
 	skinSnapshotMu.Lock()
 	defer skinSnapshotMu.Unlock()
 	value, ok := skinSnapshots[id]
-	if !ok || value.host != host {
+	if !ok || value.host != host || value.invocation != invocation {
 		return PlayerSkin{}, false
 	}
-	return value.skin, true
+	return clonePlayerSkin(value.skin), true
 }
 
-func unregisterSkinSnapshot(host, id uint64) {
+func replaceEventSkinSnapshot(host uint64, invocation InvocationID, id uint64, skin PlayerSkin) bool {
 	skinSnapshotMu.Lock()
 	defer skinSnapshotMu.Unlock()
 	value, ok := skinSnapshots[id]
-	if ok && value.host == host {
-		delete(skinSnapshots, id)
-		skinSnapshotCounts[host]--
-		if skinSnapshotCounts[host] == 0 {
-			delete(skinSnapshotCounts, host)
-		}
+	if !ok || value.host != host || value.invocation != invocation || !value.eventOwned {
+		return false
+	}
+	value.skin = clonePlayerSkin(skin)
+	skinSnapshots[id] = value
+	return true
+}
+
+func unregisterSkinSnapshot(host uint64, invocation InvocationID, id uint64) {
+	skinSnapshotMu.Lock()
+	defer skinSnapshotMu.Unlock()
+	value, ok := skinSnapshots[id]
+	if !ok || value.host != host || value.invocation != invocation || value.eventOwned {
+		return
+	}
+	deleteSkinSnapshotLocked(host, id)
+}
+
+func forceUnregisterSkinSnapshot(host uint64, invocation InvocationID, id uint64) {
+	skinSnapshotMu.Lock()
+	defer skinSnapshotMu.Unlock()
+	value, ok := skinSnapshots[id]
+	if !ok || value.host != host || value.invocation != invocation {
+		return
+	}
+	deleteSkinSnapshotLocked(host, id)
+}
+
+func deleteSkinSnapshotLocked(host, id uint64) {
+	delete(skinSnapshots, id)
+	skinSnapshotCounts[host]--
+	if skinSnapshotCounts[host] == 0 {
+		delete(skinSnapshotCounts, host)
 	}
 }
 

@@ -52,6 +52,7 @@ const (
 	PlayerItemUseOnEntitySubscription uint64 = 1073741824
 	PlayerChangeWorldSubscription     uint64 = 2147483648
 	PlayerRespawnSubscription         uint64 = 4294967296
+	PlayerSkinChangeSubscription      uint64 = 8589934592
 	MaxChatReplacementBytes                  = 4096
 	MaxCommandOutputBytes                    = 4096
 	MaxCommandEnumBytes                      = 4096
@@ -307,6 +308,13 @@ type PlayerRespawnInput struct {
 type PlayerRespawnOutput struct {
 	Position Vec3
 	World    WorldID
+}
+type PlayerSkinChangeInput struct {
+	Player PlayerID
+}
+type PlayerSkinChangeOutput struct {
+	Cancelled bool
+	Skin      PlayerSkin
 }
 
 type Command struct {
@@ -1305,6 +1313,37 @@ func (r *Runtime) HandlePlayerRespawn(invocation InvocationID, input PlayerRespa
 		Position: Vec3{X: float64(state.position.x), Y: float64(state.position.y), Z: float64(state.position.z)},
 		World:    WorldID(state.world.value),
 	}, nil
+}
+
+func (r *Runtime) HandlePlayerSkinChange(invocation InvocationID, input PlayerSkinChangeInput, skin PlayerSkin, cancelled bool) (PlayerSkinChangeOutput, error) {
+	output := PlayerSkinChangeOutput{Cancelled: cancelled, Skin: clonePlayerSkin(skin)}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	if input.Player.Generation == 0 || !validPlayerSkinPayload(skin) {
+		return output, errors.New("invalid skin-change input")
+	}
+	snapshot, ok := registerSkinSnapshot(r.hostContext, invocation, skin, true)
+	if !ok {
+		return output, errors.New("skin snapshot limit reached")
+	}
+	defer forceUnregisterSkinSnapshot(r.hostContext, invocation, snapshot)
+
+	var nativeInput C.DfPlayerSkinChangeInput
+	nativeInput.invocation = C.DfInvocationId(invocation)
+	fillPlayerID(&nativeInput.player, input.Player)
+	nativeInput.snapshot = C.uint64_t(snapshot)
+	state := C.DfPlayerSkinChangeState{cancelled: C.uint8_t(boolByte(cancelled))}
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_SKIN_CHANGE, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+		output.Cancelled = state.cancelled != 0
+		return output, fmt.Errorf("native skin-change handler failed with status %d", int32(status))
+	}
+	output.Cancelled = state.cancelled != 0
+	finalSkin, ok := resolveSkinSnapshot(r.hostContext, invocation, snapshot)
+	if !ok || !validPlayerSkinPayload(finalSkin) {
+		return output, errors.New("native skin-change handler returned an invalid skin")
+	}
+	return PlayerSkinChangeOutput{Cancelled: state.cancelled != 0, Skin: finalSkin}, nil
 }
 
 func (r *Runtime) openEventItemSnapshot(item ItemStack) (C.DfItemStackSnapshot, bool) {

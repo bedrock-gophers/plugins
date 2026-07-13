@@ -12,9 +12,9 @@ use dragonfly_plugin_sys::{
     DF_EVENT_PLAYER_ITEM_USE_ON_ENTITY, DF_EVENT_PLAYER_JOIN, DF_EVENT_PLAYER_JUMP,
     DF_EVENT_PLAYER_LECTERN_PAGE_TURN, DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_PUNCH_AIR,
     DF_EVENT_PLAYER_QUIT, DF_EVENT_PLAYER_RESPAWN, DF_EVENT_PLAYER_SIGN_EDIT,
-    DF_EVENT_PLAYER_SLEEP, DF_EVENT_PLAYER_START_BREAK, DF_EVENT_PLAYER_TELEPORT,
-    DF_EVENT_PLAYER_TOGGLE_SNEAK, DF_EVENT_PLAYER_TOGGLE_SPRINT, DF_HOST_ABI_VERSION,
-    DF_STATUS_ERROR, DF_STATUS_OK, DF_SUBSCRIPTION_PLAYER_ATTACK_ENTITY,
+    DF_EVENT_PLAYER_SKIN_CHANGE, DF_EVENT_PLAYER_SLEEP, DF_EVENT_PLAYER_START_BREAK,
+    DF_EVENT_PLAYER_TELEPORT, DF_EVENT_PLAYER_TOGGLE_SNEAK, DF_EVENT_PLAYER_TOGGLE_SPRINT,
+    DF_HOST_ABI_VERSION, DF_STATUS_ERROR, DF_STATUS_OK, DF_SUBSCRIPTION_PLAYER_ATTACK_ENTITY,
     DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK, DF_SUBSCRIPTION_PLAYER_BLOCK_PICK,
     DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE, DF_SUBSCRIPTION_PLAYER_CHANGE_WORLD,
     DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_DEATH,
@@ -27,10 +27,11 @@ use dragonfly_plugin_sys::{
     DF_SUBSCRIPTION_PLAYER_ITEM_USE_ON_ENTITY, DF_SUBSCRIPTION_PLAYER_JOIN,
     DF_SUBSCRIPTION_PLAYER_JUMP, DF_SUBSCRIPTION_PLAYER_LECTERN_PAGE_TURN,
     DF_SUBSCRIPTION_PLAYER_MOVE, DF_SUBSCRIPTION_PLAYER_PUNCH_AIR, DF_SUBSCRIPTION_PLAYER_QUIT,
-    DF_SUBSCRIPTION_PLAYER_RESPAWN, DF_SUBSCRIPTION_PLAYER_SIGN_EDIT, DF_SUBSCRIPTION_PLAYER_SLEEP,
+    DF_SUBSCRIPTION_PLAYER_RESPAWN, DF_SUBSCRIPTION_PLAYER_SIGN_EDIT,
+    DF_SUBSCRIPTION_PLAYER_SKIN_CHANGE, DF_SUBSCRIPTION_PLAYER_SLEEP,
     DF_SUBSCRIPTION_PLAYER_START_BREAK, DF_SUBSCRIPTION_PLAYER_TELEPORT,
     DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK, DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT, DfCommandDescriptor,
-    DfCommandInput, DfCommandState, DfHostApiV12, DfItemStackSnapshot, DfPlayerAttackEntityInput,
+    DfCommandInput, DfCommandState, DfHostApiV13, DfItemStackSnapshot, DfPlayerAttackEntityInput,
     DfPlayerAttackEntityState, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
     DfPlayerBlockPickInput, DfPlayerBlockPickState, DfPlayerBlockPlaceInput,
     DfPlayerBlockPlaceState, DfPlayerChangeWorldInput, DfPlayerChangeWorldState, DfPlayerChatInput,
@@ -46,11 +47,11 @@ use dragonfly_plugin_sys::{
     DfPlayerJumpInput, DfPlayerJumpState, DfPlayerLecternPageTurnInput,
     DfPlayerLecternPageTurnState, DfPlayerMoveInput, DfPlayerMoveState, DfPlayerPunchAirInput,
     DfPlayerPunchAirState, DfPlayerQuitInput, DfPlayerQuitState, DfPlayerRespawnInput,
-    DfPlayerRespawnState, DfPlayerSignEditInput, DfPlayerSignEditState, DfPlayerSleepInput,
-    DfPlayerSleepState, DfPlayerStartBreakInput, DfPlayerStartBreakState, DfPlayerTeleportInput,
-    DfPlayerTeleportState, DfPlayerToggleSneakInput, DfPlayerToggleSneakState,
-    DfPlayerToggleSprintInput, DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn,
-    DfStatus, DfStringView,
+    DfPlayerRespawnState, DfPlayerSignEditInput, DfPlayerSignEditState, DfPlayerSkinChangeInput,
+    DfPlayerSkinChangeState, DfPlayerSleepInput, DfPlayerSleepState, DfPlayerStartBreakInput,
+    DfPlayerStartBreakState, DfPlayerTeleportInput, DfPlayerTeleportState,
+    DfPlayerToggleSneakInput, DfPlayerToggleSneakState, DfPlayerToggleSprintInput,
+    DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -63,7 +64,7 @@ use std::slice;
 #[repr(C)]
 pub struct DfRuntimeConfig {
     pub plugin_directory: DfStringView,
-    pub host: *const DfHostApiV12,
+    pub host: *const DfHostApiV13,
 }
 
 pub struct DfRuntime {
@@ -100,7 +101,7 @@ impl Drop for LoadedPlugin {
 }
 
 impl DfRuntime {
-    fn load(plugin_directory: &Path, host: *const DfHostApiV12) -> Result<Self, String> {
+    fn load(plugin_directory: &Path, host: *const DfHostApiV13) -> Result<Self, String> {
         let mut paths = native_libraries(plugin_directory)?;
         paths.sort();
 
@@ -1314,6 +1315,42 @@ impl DfRuntime {
         }
         DF_STATUS_OK
     }
+
+    fn handle_skin_change(
+        &self,
+        input: &DfPlayerSkinChangeInput,
+        state: &mut DfPlayerSkinChangeState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_SKIN_CHANGE == 0
+            {
+                continue;
+            }
+            if !valid_skin_change(input, state) {
+                return DF_STATUS_ERROR;
+            }
+            let was_cancelled = state.cancelled != 0;
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_SKIN_CHANGE,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if status != DF_STATUS_OK || !valid_skin_change(input, state) {
+                return DF_STATUS_ERROR;
+            }
+        }
+        DF_STATUS_OK
+    }
 }
 
 impl Drop for DfRuntime {
@@ -1334,6 +1371,10 @@ fn valid_respawn(input: &DfPlayerRespawnInput, state: &DfPlayerRespawnState) -> 
         && state.position.y.is_finite()
         && state.position.z.is_finite()
         && state.world.value != 0
+}
+
+fn valid_skin_change(input: &DfPlayerSkinChangeInput, state: &DfPlayerSkinChangeState) -> bool {
+    input.player.generation != 0 && input.snapshot != 0 && state.cancelled <= 1
 }
 
 fn valid_chat_state(state: &DfPlayerChatState) -> bool {
@@ -1387,7 +1428,7 @@ impl LoadedPlugin {
         self.enabled = false;
     }
 
-    unsafe fn open(path: &Path, host: *const DfHostApiV12) -> Result<Self, String> {
+    unsafe fn open(path: &Path, host: *const DfHostApiV13) -> Result<Self, String> {
         // SAFETY: loading native plugins is the purpose of this trusted plugin runtime.
         let library = unsafe { Library::new(path) }
             .map_err(|err| format!("load {}: {err}", path.display()))?;
@@ -1643,7 +1684,7 @@ pub unsafe extern "C" fn df_runtime_create(
             return Err("null host API".to_owned());
         };
         if host_api.abi_version != DF_HOST_ABI_VERSION
-            || host_api.struct_size < size_of::<DfHostApiV12>() as u32
+            || host_api.struct_size < size_of::<DfHostApiV13>() as u32
         {
             return Err("incompatible host API".to_owned());
         }
@@ -2152,6 +2193,27 @@ pub unsafe extern "C" fn df_runtime_handle_event(
                 DF_STATUS_ERROR
             }
         }
+        DF_EVENT_PLAYER_SKIN_CHANGE => {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.cast::<DfPlayerSkinChangeInput>().as_ref() },
+                unsafe { state.cast::<DfPlayerSkinChangeState>().as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            if !valid_skin_change(input, state) {
+                return DF_STATUS_ERROR;
+            }
+            let status = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime.handle_skin_change(input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR);
+            if status == DF_STATUS_OK && valid_skin_change(input, state) {
+                DF_STATUS_OK
+            } else {
+                DF_STATUS_ERROR
+            }
+        }
         _ => DF_STATUS_ERROR,
     }
 }
@@ -2603,9 +2665,9 @@ mod tests {
             std::env::temp_dir().join(format!("dragonfly-runtime-{}", std::process::id()));
         let _ = fs::remove_dir_all(&directory);
         fs::create_dir_all(&directory).unwrap();
-        let host = DfHostApiV12 {
+        let host = DfHostApiV13 {
             abi_version: DF_HOST_ABI_VERSION,
-            struct_size: size_of::<DfHostApiV12>() as u32,
+            struct_size: size_of::<DfHostApiV13>() as u32,
             context: 0,
             player_text: None,
             player_title: None,
@@ -2659,6 +2721,8 @@ mod tests {
             player_sound_play: None,
             player_heal: None,
             player_hurt: None,
+            skin_snapshot_info: None,
+            skin_snapshot_set: None,
         };
         let runtime = DfRuntime::load(&directory, ptr::from_ref(&host)).unwrap();
         assert!(runtime.plugins.is_empty());
@@ -2798,6 +2862,43 @@ mod tests {
         state.position.y = 64.0;
 
         state.world.value = 0;
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
+    }
+
+    #[test]
+    fn generic_dispatch_validates_skin_change_state() {
+        let mut runtime = DfRuntime {
+            plugins: Vec::new(),
+            commands: Vec::new(),
+            subscriptions: 0,
+        };
+        let mut input = DfPlayerSkinChangeInput {
+            invocation: 7,
+            player: DfPlayerId {
+                generation: 1,
+                ..Default::default()
+            },
+            snapshot: 9,
+        };
+        let mut state = DfPlayerSkinChangeState { cancelled: 0 };
+        let mut dispatch = |input: &DfPlayerSkinChangeInput,
+                            state: &mut DfPlayerSkinChangeState| unsafe {
+            df_runtime_handle_event(
+                ptr::from_mut(&mut runtime),
+                DF_EVENT_PLAYER_SKIN_CHANGE,
+                ptr::from_ref(input).cast(),
+                ptr::from_mut(state).cast(),
+            )
+        };
+
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_OK);
+        input.snapshot = 0;
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
+        input.snapshot = 9;
+        input.player.generation = 0;
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
+        input.player.generation = 1;
+        state.cancelled = 2;
         assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
     }
 

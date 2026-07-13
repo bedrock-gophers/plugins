@@ -751,18 +751,89 @@ func TestPlayerEntityVisibilityHostCalls(t *testing.T) {
 	}
 }
 
+func TestSkinSnapshotsAreInvocationScopedAndOwned(t *testing.T) {
+	host := registerHost(noopHost{})
+	t.Cleanup(func() { unregisterHost(host) })
+	original := PlayerSkin{
+		Width: 1, Height: 1, Pixels: []byte{1, 2, 3, 4},
+		Animations: []SkinAnimation{{Width: 1, Height: 1, FrameCount: 1, Pixels: []byte{5, 6, 7, 8}}},
+	}
+	normal, ok := registerSkinSnapshot(host, 11, original, false)
+	if !ok {
+		t.Fatal("normal snapshot was not registered")
+	}
+	original.Pixels[0] = 99
+	if _, ok := resolveSkinSnapshot(host+1, 11, normal); ok {
+		t.Fatal("snapshot resolved for wrong host")
+	}
+	if _, ok := resolveSkinSnapshot(host, 12, normal); ok {
+		t.Fatal("snapshot resolved for wrong invocation")
+	}
+	resolved, ok := resolveSkinSnapshot(host, 11, normal)
+	if !ok || resolved.Pixels[0] != 1 || resolved.Animations[0].Pixels[0] != 5 {
+		t.Fatalf("snapshot did not deep-copy input: %#v", resolved)
+	}
+	resolved.Pixels[0], resolved.Animations[0].Pixels[0] = 88, 77
+	resolvedAgain, _ := resolveSkinSnapshot(host, 11, normal)
+	if resolvedAgain.Pixels[0] != 1 || resolvedAgain.Animations[0].Pixels[0] != 5 {
+		t.Fatal("resolved skin aliased registry storage")
+	}
+	if replaceEventSkinSnapshot(host, 11, normal, original) {
+		t.Fatal("ordinary snapshot was mutable")
+	}
+	unregisterSkinSnapshot(host, 12, normal)
+	if _, ok := resolveSkinSnapshot(host, 11, normal); !ok {
+		t.Fatal("wrong invocation closed snapshot")
+	}
+	unregisterSkinSnapshot(host, 11, normal)
+	if _, ok := resolveSkinSnapshot(host, 11, normal); ok {
+		t.Fatal("ordinary snapshot remained after close")
+	}
+
+	event, ok := registerSkinSnapshot(host, 21, original, true)
+	if !ok {
+		t.Fatal("event snapshot was not registered")
+	}
+	unregisterSkinSnapshot(host, 21, event)
+	if _, ok := resolveSkinSnapshot(host, 21, event); !ok {
+		t.Fatal("guest closed event-owned snapshot")
+	}
+	replacement := clonePlayerSkin(original)
+	replacement.Pixels[0] = 42
+	if !replaceEventSkinSnapshot(host, 21, event, replacement) {
+		t.Fatal("event snapshot replacement failed")
+	}
+	replacement.Pixels[0] = 43
+	got, _ := resolveSkinSnapshot(host, 21, event)
+	if got.Pixels[0] != 42 {
+		t.Fatal("event replacement aliased caller storage")
+	}
+	forceUnregisterSkinSnapshot(host, 21, event)
+	if _, ok := resolveSkinSnapshot(host, 21, event); ok {
+		t.Fatal("event snapshot remained after owner cleanup")
+	}
+}
+
 func TestPlayerSkinRoundTrip(t *testing.T) {
 	library, plugins := nativeArtifacts(t)
+	pixels := make([]byte, 64*64*4)
+	pixels[0], pixels[len(pixels)-1] = 127, 255
+	capePixels := make([]byte, 64*32*4)
+	capePixels[0], capePixels[len(capePixels)-1] = 9, 255
+	headAnimation := make([]byte, 32*32*4)
+	headAnimation[0] = 1
+	bodyAnimation := make([]byte, 128*128*4)
+	bodyAnimation[len(bodyAnimation)-1] = 8
 	want := PlayerSkin{
 		Width: 64, Height: 64, Persona: true,
 		PlayFabID: "playfab-id", FullID: "full-skin-id",
-		Pixels:       []byte{0, 1, 2, 127, 128, 254, 255},
+		Pixels:       pixels,
 		ModelDefault: "geometry.humanoid.custom", ModelAnimatedFace: "geometry.animated_face",
 		Model:     []byte(`{"geometry":{"description":{"identifier":"geometry.test"}}}`),
-		CapeWidth: 64, CapeHeight: 32, CapePixels: []byte{9, 8, 7, 0, 255},
+		CapeWidth: 64, CapeHeight: 32, CapePixels: capePixels,
 		Animations: []SkinAnimation{
-			{Width: 32, Height: 32, Type: 0, FrameCount: 7, Expression: -3, Pixels: []byte{1, 3, 5, 7}},
-			{Width: 128, Height: 128, Type: 2, FrameCount: 1 << 33, Expression: 1 << 34, Pixels: []byte{2, 4, 6, 8}},
+			{Width: 32, Height: 32, Type: 0, FrameCount: 7, Expression: -3, Pixels: headAnimation},
+			{Width: 128, Height: 128, Type: 2, FrameCount: 1 << 33, Expression: 1 << 34, Pixels: bodyAnimation},
 		},
 	}
 	host := &recordingHost{skin: want}
@@ -1624,6 +1695,37 @@ func TestPlayerRespawnRoundTrip(t *testing.T) {
 	}
 	if host.worldLookup != "minecraft:overworld" {
 		t.Fatalf("respawn world lookup = %q", host.worldLookup)
+	}
+}
+
+func TestPlayerSkinChangeRoundTrip(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerSkinChangeSubscription == 0 {
+		t.Fatal("skin-change subscription missing")
+	}
+	skin := PlayerSkin{
+		Width: 64, Height: 64, FullID: "candidate", Pixels: make([]byte, 64*64*4),
+	}
+	player := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 41}
+	output, err := runtime.HandlePlayerSkinChange(73, PlayerSkinChangeInput{Player: player}, skin, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Cancelled || !reflect.DeepEqual(output.Skin, skin) {
+		t.Fatalf("skin-change output = %#v", output)
+	}
+	output, err = runtime.HandlePlayerSkinChange(74, PlayerSkinChangeInput{Player: player}, skin, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !output.Cancelled {
+		t.Fatal("plugin cleared existing skin-change cancellation")
+	}
+	skinSnapshotMu.Lock()
+	count := skinSnapshotCounts[runtime.hostContext]
+	skinSnapshotMu.Unlock()
+	if count != 0 {
+		t.Fatalf("skin-change leaked %d snapshot(s)", count)
 	}
 }
 

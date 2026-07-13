@@ -252,3 +252,10 @@ events:
     state:
       - { name: position, type: vec3 }
       - { name: world, type: world_id }
+  - name: skin_change
+    id: 34
+    input:
+      - { name: player, type: player_id }
+      - { name: snapshot, type: u64 }
+    state:
+      - { name: cancelled, type: bool }

@@ -456,7 +456,7 @@ For each event, mirror Dragonfly capability exactly. Example: `HandleMove` permi
 
 Dragonfly v0.11 entity values are transaction-scoped. The host registry stores stable `EntityHandle` references and cached identity, never reusable `*player.Player` pointers. Every command, event, and form-response callback receives a monotonic opaque invocation ID mapped to exactly one live `*world.Tx`. The Rust SDK scopes that ID with panic-safe thread-local storage and returns it on host calls. A target player is resolved from its handle only inside that exact transaction; the host never searches concurrent callbacks for a usable transaction.
 
-Host callbacks execute synchronously while the plugin callback is active. Large values such as skins and item stacks use bounded Go-owned snapshots with RAII close on the Rust side. No Go pointer crosses or survives the ABI.
+Host callbacks execute synchronously while the plugin callback is active. Large values such as skins and item stacks use bounded Go-owned snapshots. Ordinary snapshots use RAII close on the Rust side. Event-owned snapshots survive the complete plugin chain and are closed only by the runtime. No Go pointer crosses or survives the ABI.
 
 Forms are the deliberate asynchronous exception. `Player::send_form` transfers an owned `FnOnce + Send + 'static` callback into a bounded host registry. Dragonfly retains only an opaque registration ID, and dispatches the submitted or closed response inside the response transaction. Player disconnect, runtime disable, and runtime destruction drain pending callbacks before plugin libraries unload. The public API is fire-and-forget: host transport failures discard the callback without exposing native status values.
 
@@ -481,7 +481,7 @@ Current host actions include:
 
 Every synchronous player callback registers one invocation ID for its exact transaction. Same-world block operations use that `world.Tx` directly. Calls with no invocation are off-owner: writes enqueue through `World.Do` and reads use `world.Call`. Cross-world writes from callbacks enqueue, while cross-world synchronous block reads are rejected because reciprocal owner calls can deadlock. Save/unload are rejected from callbacks and run only off-owner. Transaction values never cross or survive the ABI; the asynchronous task API will provide callback-safe cross-world reads and lifecycle operations.
 
-The host ABI is currently v12. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+The host ABI is currently v13. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
 
 ## Entities
 
@@ -504,6 +504,8 @@ Projectile factories preserve Dragonfly owner resolution and built-in behavior. 
 `Event::PlayerChangeWorld` mirrors Dragonfly's post-transfer callback. Dragonfly emits it on the player's first tick in the destination, not while initially joining and not for a same-world re-add. The callback is immutable and exposes `player()`, `before() -> Option<World>`, and `after() -> World`. Its invocation owns the destination transaction. The host records the source's stable world handle when the player departs, so `before()` remains exact even if that now-empty world unloads before the destination tick. Synchronous source-world reads remain unavailable from the destination callback; destination operations reuse the active transaction and cross-world writes follow the normal queued path.
 
 `Event::PlayerRespawn` mirrors Dragonfly's pre-transfer respawn hook. It exposes mutable position and managed destination-world state without inventing cancellation. The callback invocation owns the source transaction because Dragonfly has not removed the player yet. Returned position and world changes are accepted together only when the position is finite and the destination handle names a live managed world. A destination that closes after the callback may still reject Dragonfly's later transfer; Dragonfly then restores the player to the source world.
+
+`Event::PlayerSkinChange` mirrors Dragonfly's mutable pre-commit skin hook. `event.player().skin()` reads the old committed skin, while `event.skin()` reads the proposed candidate. `set_skin()` and `edit_skin()` synchronously deep-copy a replacement into one invocation-bound, event-owned host snapshot; later plugins see that replacement. Snapshot metadata is queried from the host for every read rather than stored in guest-writable event state. Cancellation is default-allowed and monotonic, including when a later plugin fails. Dragonfly discards the candidate and resynchronises the old skin when cancelled. Runtime or conversion failures preserve the original candidate and otherwise fail open. Plugins never retain pointers into Go skin buffers and cannot close the event-owned snapshot.
 
 ## Particles and sounds
 

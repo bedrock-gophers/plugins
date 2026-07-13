@@ -129,7 +129,16 @@ impl Plugin for MovementGuard {
 Events continue by default. Cancellation is monotonic; no `allow()` API exists.
 Plugin identity defaults to Cargo's package name; handler code does not repeat it.
 
-Event types live only under `Event::Player*`. Damage and healing sources are typed values: hurt/death expose matchable `damage::Source` values, while heal exposes `healing::Source`. Attack, projectile, thorns, block, poison, food, and every other Dragonfly source retain their concrete payloads. `Event::PlayerChangeWorld` is emitted after transfer on the first destination tick. `Event::PlayerRespawn` runs before transfer and may replace both the spawn position and managed destination world.
+Event types live only under `Event::Player*`. Damage and healing sources are typed values: hurt/death expose matchable `damage::Source` values, while heal exposes `healing::Source`. Attack, projectile, thorns, block, poison, food, and every other Dragonfly source retain their concrete payloads. `Event::PlayerChangeWorld` is emitted after transfer on the first destination tick. `Event::PlayerRespawn` runs before transfer and may replace both the spawn position and managed destination world. `Event::PlayerSkinChange` exposes the proposed skin through `skin()`, `set_skin()`, and `edit_skin()` and remains cancellable/default-allowed. `event.player().skin()` still returns the old committed skin, matching Dragonfly.
+
+```rust
+fn on_skin_change(&self, event: &mut Event::PlayerSkinChange<'_>) {
+    if event.skin().width > 128 {
+        event.cancel();
+    }
+    event.edit_skin(|skin| skin.model_config.default = "geometry.humanoid.custom".into());
+}
+```
 
 Player healing and damage use the same typed sources and return Dragonfly's domain results:
 

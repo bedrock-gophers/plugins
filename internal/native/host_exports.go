@@ -14,8 +14,10 @@ import (
 )
 
 const (
+	maxSkinDimension   = 4096
 	maxSkinDataBytes   = 64 << 20
-	maxSkinAnimations  = 256
+	maxSkinAnimations  = 64
+	maxSkinIDBytes     = 4096
 	maxScoreboardLines = 15
 	maxFormJSONBytes   = 1 << 20
 )
@@ -355,7 +357,7 @@ func bg_go_player_skin_open(context C.uint64_t, invocation C.DfInvocationId, pla
 	if !ok || !validPlayerSkinPayload(value) {
 		return C.DF_STATUS_ERROR
 	}
-	snapshotID, ok := registerSkinSnapshot(uint64(context), value)
+	snapshotID, ok := registerSkinSnapshot(uint64(context), InvocationID(invocation), value, false)
 	if !ok {
 		return C.DF_STATUS_ERROR
 	}
@@ -366,7 +368,7 @@ func bg_go_player_skin_open(context C.uint64_t, invocation C.DfInvocationId, pla
 
 //export bg_go_player_skin_animation_info
 func bg_go_player_skin_animation_info(context C.uint64_t, invocation C.DfInvocationId, snapshot C.uint64_t, index C.uint64_t, info *C.DfSkinAnimationInfo) C.DfStatus {
-	value, ok := resolveSkinSnapshot(uint64(context), uint64(snapshot))
+	value, ok := resolveSkinSnapshot(uint64(context), InvocationID(invocation), uint64(snapshot))
 	if !ok || info == nil || uint64(index) >= uint64(len(value.Animations)) {
 		return C.DF_STATUS_ERROR
 	}
@@ -381,7 +383,7 @@ func bg_go_player_skin_animation_info(context C.uint64_t, invocation C.DfInvocat
 
 //export bg_go_player_skin_read
 func bg_go_player_skin_read(context C.uint64_t, invocation C.DfInvocationId, snapshot C.uint64_t, data *C.DfSkinData) C.DfStatus {
-	value, ok := resolveSkinSnapshot(uint64(context), uint64(snapshot))
+	value, ok := resolveSkinSnapshot(uint64(context), InvocationID(invocation), uint64(snapshot))
 	if !ok || data == nil || len(value.Animations) > maxSkinAnimations || uint64(data.animation_capacity) < uint64(len(value.Animations)) {
 		return C.DF_STATUS_ERROR
 	}
@@ -421,42 +423,78 @@ func bg_go_player_skin_read(context C.uint64_t, invocation C.DfInvocationId, sna
 
 //export bg_go_player_skin_close
 func bg_go_player_skin_close(context C.uint64_t, invocation C.DfInvocationId, snapshot C.uint64_t) {
-	unregisterSkinSnapshot(uint64(context), uint64(snapshot))
+	unregisterSkinSnapshot(uint64(context), InvocationID(invocation), uint64(snapshot))
 }
 
 //export bg_go_player_skin_set
 func bg_go_player_skin_set(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, view *C.DfSkinView) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
-	if !ok || view == nil || !validSkinViewPayload(view) {
+	if !ok || view == nil {
 		return C.DF_STATUS_ERROR
+	}
+	value, ok := copyPlayerSkinView(view)
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	if !host.SetPlayerSkin(InvocationID(invocation), playerID(player), value) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_skin_snapshot_info
+func bg_go_skin_snapshot_info(context C.uint64_t, invocation C.DfInvocationId, snapshot C.uint64_t, info *C.DfSkinInfo) C.DfStatus {
+	value, ok := resolveSkinSnapshot(uint64(context), InvocationID(invocation), uint64(snapshot))
+	if !ok || info == nil {
+		return C.DF_STATUS_ERROR
+	}
+	fillSkinInfo(info, value)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_skin_snapshot_set
+func bg_go_skin_snapshot_set(context C.uint64_t, invocation C.DfInvocationId, snapshot C.uint64_t, view *C.DfSkinView) C.DfStatus {
+	if view == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := copyPlayerSkinView(view)
+	if !ok || !replaceEventSkinSnapshot(uint64(context), InvocationID(invocation), uint64(snapshot), value) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+func copyPlayerSkinView(view *C.DfSkinView) (PlayerSkin, bool) {
+	if view == nil || !validSkinViewPayload(view) {
+		return PlayerSkin{}, false
 	}
 	playFabID, ok := copySkinView(view.play_fab_id)
 	if !ok {
-		return C.DF_STATUS_ERROR
+		return PlayerSkin{}, false
 	}
 	fullID, ok := copySkinView(view.full_id)
 	if !ok {
-		return C.DF_STATUS_ERROR
+		return PlayerSkin{}, false
 	}
 	pixels, ok := copySkinView(view.pixels)
 	if !ok {
-		return C.DF_STATUS_ERROR
+		return PlayerSkin{}, false
 	}
 	modelDefault, ok := copySkinView(view.model_default)
 	if !ok {
-		return C.DF_STATUS_ERROR
+		return PlayerSkin{}, false
 	}
 	modelAnimatedFace, ok := copySkinView(view.model_animated_face)
 	if !ok {
-		return C.DF_STATUS_ERROR
+		return PlayerSkin{}, false
 	}
 	model, ok := copySkinView(view.model)
 	if !ok {
-		return C.DF_STATUS_ERROR
+		return PlayerSkin{}, false
 	}
 	capePixels, ok := copySkinView(view.cape_pixels)
 	if !ok {
-		return C.DF_STATUS_ERROR
+		return PlayerSkin{}, false
 	}
 	value := PlayerSkin{
 		Width: uint32(view.width), Height: uint32(view.height), Persona: view.persona != 0,
@@ -465,15 +503,12 @@ func bg_go_player_skin_set(context C.uint64_t, invocation C.DfInvocationId, play
 		CapeWidth: uint32(view.cape_width), CapeHeight: uint32(view.cape_height), CapePixels: capePixels,
 	}
 	if view.animation_count != 0 {
-		if view.animations == nil {
-			return C.DF_STATUS_ERROR
-		}
 		animations := unsafe.Slice(view.animations, int(view.animation_count))
 		value.Animations = make([]SkinAnimation, len(animations))
 		for index, animation := range animations {
 			animationPixels, ok := copySkinView(animation.pixels)
 			if !ok {
-				return C.DF_STATUS_ERROR
+				return PlayerSkin{}, false
 			}
 			value.Animations[index] = SkinAnimation{
 				Width: uint32(animation.width), Height: uint32(animation.height), Type: uint32(animation.animation_type),
@@ -481,10 +516,10 @@ func bg_go_player_skin_set(context C.uint64_t, invocation C.DfInvocationId, play
 			}
 		}
 	}
-	if !host.SetPlayerSkin(InvocationID(invocation), playerID(player), value) {
-		return C.DF_STATUS_ERROR
+	if !validPlayerSkinPayload(value) {
+		return PlayerSkin{}, false
 	}
-	return C.DF_STATUS_OK
+	return value, true
 }
 
 func fillSkinInfo(info *C.DfSkinInfo, value PlayerSkin) {
@@ -527,7 +562,13 @@ func copySkinView(view C.DfStringView) ([]byte, bool) {
 }
 
 func validPlayerSkinPayload(value PlayerSkin) bool {
-	if len(value.Animations) > maxSkinAnimations {
+	if !validNativeSkinPixels(value.Width, value.Height, value.Pixels, true) ||
+		!validNativeSkinPixels(value.CapeWidth, value.CapeHeight, value.CapePixels, true) ||
+		len(value.Animations) > maxSkinAnimations ||
+		len(value.PlayFabID) > maxSkinIDBytes || len(value.FullID) > maxSkinIDBytes ||
+		len(value.ModelDefault) > maxSkinIDBytes || len(value.ModelAnimatedFace) > maxSkinIDBytes ||
+		!utf8.ValidString(value.PlayFabID) || !utf8.ValidString(value.FullID) ||
+		!utf8.ValidString(value.ModelDefault) || !utf8.ValidString(value.ModelAnimatedFace) {
 		return false
 	}
 	total := uint64(0)
@@ -541,6 +582,11 @@ func validPlayerSkinPayload(value PlayerSkin) bool {
 		total += uint64(length)
 	}
 	for _, animation := range value.Animations {
+		if !validNativeSkinPixels(animation.Width, animation.Height, animation.Pixels, false) ||
+			animation.Type > 2 || animation.FrameCount <= 0 || animation.FrameCount > int64(math.MaxInt) ||
+			animation.Expression < int64(math.MinInt) || animation.Expression > int64(math.MaxInt) {
+			return false
+		}
 		if uint64(len(animation.Pixels)) > uint64(maxSkinDataBytes)-total {
 			return false
 		}
@@ -549,8 +595,18 @@ func validPlayerSkinPayload(value PlayerSkin) bool {
 	return true
 }
 
+func validNativeSkinPixels(width, height uint32, pixels []byte, empty bool) bool {
+	if width > maxSkinDimension || height > maxSkinDimension {
+		return false
+	}
+	if width == 0 || height == 0 {
+		return empty && width == 0 && height == 0 && len(pixels) == 0
+	}
+	return uint64(width)*uint64(height)*4 == uint64(len(pixels))
+}
+
 func validSkinViewPayload(view *C.DfSkinView) bool {
-	if uint64(view.animation_count) > maxSkinAnimations || view.animation_count != 0 && view.animations == nil {
+	if view.persona > 1 || uint64(view.animation_count) > maxSkinAnimations || view.animation_count != 0 && view.animations == nil {
 		return false
 	}
 	total := uint64(0)

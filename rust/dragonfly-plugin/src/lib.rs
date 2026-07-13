@@ -57,6 +57,7 @@ pub mod Event {
     pub use super::PlayerQuitEventData as PlayerQuit;
     pub use super::PlayerRespawnEventData as PlayerRespawn;
     pub use super::PlayerSignEditEventData as PlayerSignEdit;
+    pub use super::PlayerSkinChangeEventData as PlayerSkinChange;
     pub use super::PlayerSleepEventData as PlayerSleep;
     pub use super::PlayerStartBreakEventData as PlayerStartBreak;
     pub use super::PlayerTeleportEventData as PlayerTeleport;
@@ -64,7 +65,7 @@ pub mod Event {
     pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV12> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV13> =
     AtomicPtr::new(core::ptr::null_mut());
 
 std::thread_local! {
@@ -94,7 +95,7 @@ pub fn with_invocation<R>(
 }
 
 const MAX_SKIN_DATA_BYTES: u64 = 64 << 20;
-const MAX_SKIN_ANIMATIONS: usize = 256;
+const MAX_SKIN_ANIMATIONS: usize = 64;
 pub const MAX_SCOREBOARD_LINES: usize = 15;
 
 struct SkinSnapshot {
@@ -113,7 +114,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV12) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV13) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -1170,39 +1171,9 @@ impl Player {
         let Some(set) = host.player_skin_set else {
             return;
         };
-        let animations: Vec<_> = skin
-            .animations
-            .iter()
-            .map(|animation| dragonfly_plugin_sys::DfSkinAnimationView {
-                width: animation.width,
-                height: animation.height,
-                animation_type: animation.animation_type as u32,
-                frame_count: animation.frame_count,
-                expression: animation.expression,
-                pixels: bytes_view(&animation.pixels),
-            })
-            .collect();
-        let view = dragonfly_plugin_sys::DfSkinView {
-            width: skin.width,
-            height: skin.height,
-            persona: u8::from(skin.persona),
-            play_fab_id: string_view_from_str(&skin.play_fab_id),
-            full_id: string_view_from_str(&skin.full_id),
-            pixels: bytes_view(&skin.pixels),
-            model_default: string_view_from_str(&skin.model_config.default),
-            model_animated_face: string_view_from_str(&skin.model_config.animated_face),
-            model: bytes_view(&skin.model),
-            cape_width: skin.cape.width,
-            cape_height: skin.cape.height,
-            cape_pixels: bytes_view(&skin.cape.pixels),
-            animations: if animations.is_empty() {
-                core::ptr::null()
-            } else {
-                animations.as_ptr()
-            },
-            animation_count: animations.len() as u64,
-        };
-        let _ = unsafe { set(host.context, current_invocation(), self.raw_id(), &view) };
+        with_skin_view(skin, |view| {
+            let _ = unsafe { set(host.context, current_invocation(), self.raw_id(), view) };
+        });
     }
 
     fn send_text(&self, kind: u32, message: &str) {
@@ -1293,8 +1264,6 @@ impl Player {
         let host = HOST_API.load(Ordering::Acquire);
         let host = unsafe { host.as_ref() }?;
         let open = host.player_skin_open?;
-        let animation_info_fn = host.player_skin_animation_info?;
-        let read = host.player_skin_read?;
         let close = host.player_skin_close?;
 
         let mut snapshot_id = 0;
@@ -1312,133 +1281,13 @@ impl Player {
         if status != dragonfly_plugin_sys::DF_STATUS_OK {
             return None;
         }
-        let snapshot = SkinSnapshot {
+        let _snapshot = SkinSnapshot {
             context: host.context,
             invocation,
             id: snapshot_id,
             close,
         };
-
-        let animation_count = usize::try_from(info.animation_count).ok()?;
-        if animation_count > MAX_SKIN_ANIMATIONS {
-            return None;
-        }
-        let mut animation_info = Vec::new();
-        animation_info.try_reserve_exact(animation_count).ok()?;
-        for index in 0..animation_count {
-            let mut animation = dragonfly_plugin_sys::DfSkinAnimationInfo::default();
-            let status = unsafe {
-                animation_info_fn(
-                    host.context,
-                    snapshot.invocation,
-                    snapshot.id,
-                    index as u64,
-                    &mut animation,
-                )
-            };
-            if status != dragonfly_plugin_sys::DF_STATUS_OK {
-                return None;
-            }
-            animation_info.push(animation);
-        }
-
-        let mut total_bytes = 0u64;
-        for length in [
-            info.play_fab_id_len,
-            info.full_id_len,
-            info.pixels_len,
-            info.model_default_len,
-            info.model_animated_face_len,
-            info.model_len,
-            info.cape_pixels_len,
-        ]
-        .into_iter()
-        .chain(animation_info.iter().map(|animation| animation.pixels_len))
-        {
-            total_bytes = total_bytes.checked_add(length)?;
-            if total_bytes > MAX_SKIN_DATA_BYTES {
-                return None;
-            }
-        }
-
-        let mut play_fab_id = allocate_bytes(info.play_fab_id_len)?;
-        let mut full_id = allocate_bytes(info.full_id_len)?;
-        let mut pixels = allocate_bytes(info.pixels_len)?;
-        let mut model_default = allocate_bytes(info.model_default_len)?;
-        let mut model_animated_face = allocate_bytes(info.model_animated_face_len)?;
-        let mut model = allocate_bytes(info.model_len)?;
-        let mut cape_pixels = allocate_bytes(info.cape_pixels_len)?;
-        let mut animation_pixels = animation_info
-            .iter()
-            .map(|animation| allocate_bytes(animation.pixels_len))
-            .collect::<Option<Vec<_>>>()?;
-        let mut animation_buffers: Vec<_> = animation_pixels
-            .iter_mut()
-            .map(|pixels| bytes_buffer(pixels))
-            .collect();
-        let mut data = dragonfly_plugin_sys::DfSkinData {
-            play_fab_id: bytes_buffer(&mut play_fab_id),
-            full_id: bytes_buffer(&mut full_id),
-            pixels: bytes_buffer(&mut pixels),
-            model_default: bytes_buffer(&mut model_default),
-            model_animated_face: bytes_buffer(&mut model_animated_face),
-            model: bytes_buffer(&mut model),
-            cape_pixels: bytes_buffer(&mut cape_pixels),
-            animation_pixels: if animation_buffers.is_empty() {
-                core::ptr::null_mut()
-            } else {
-                animation_buffers.as_mut_ptr()
-            },
-            animation_capacity: animation_buffers.len() as u64,
-        };
-        let status = unsafe { read(host.context, snapshot.invocation, snapshot.id, &mut data) };
-        if status != dragonfly_plugin_sys::DF_STATUS_OK {
-            return None;
-        }
-
-        finish_buffer(&mut play_fab_id, data.play_fab_id)?;
-        finish_buffer(&mut full_id, data.full_id)?;
-        finish_buffer(&mut pixels, data.pixels)?;
-        finish_buffer(&mut model_default, data.model_default)?;
-        finish_buffer(&mut model_animated_face, data.model_animated_face)?;
-        finish_buffer(&mut model, data.model)?;
-        finish_buffer(&mut cape_pixels, data.cape_pixels)?;
-        for (pixels, buffer) in animation_pixels.iter_mut().zip(animation_buffers) {
-            finish_buffer(pixels, buffer)?;
-        }
-
-        Some(Skin {
-            width: info.width,
-            height: info.height,
-            persona: info.persona != 0,
-            play_fab_id: String::from_utf8(play_fab_id).ok()?,
-            full_id: String::from_utf8(full_id).ok()?,
-            pixels,
-            model_config: SkinModelConfig {
-                default: String::from_utf8(model_default).ok()?,
-                animated_face: String::from_utf8(model_animated_face).ok()?,
-            },
-            model,
-            cape: Cape {
-                width: info.cape_width,
-                height: info.cape_height,
-                pixels: cape_pixels,
-            },
-            animations: animation_info
-                .into_iter()
-                .zip(animation_pixels)
-                .map(|(animation, pixels)| {
-                    Some(SkinAnimation {
-                        width: animation.width,
-                        height: animation.height,
-                        animation_type: SkinAnimationType::from_raw(animation.animation_type)?,
-                        pixels,
-                        frame_count: animation.frame_count,
-                        expression: animation.expression,
-                    })
-                })
-                .collect::<Option<Vec<_>>>()?,
-        })
+        read_skin_snapshot(host, invocation, snapshot_id, info)
     }
 
     fn state(&self, kind: u32) -> dragonfly_plugin_sys::DfPlayerStateValue {
@@ -1533,6 +1382,175 @@ impl Player {
         }
         Ok(player)
     }
+}
+
+fn with_skin_view<R>(
+    skin: &Skin,
+    function: impl FnOnce(&dragonfly_plugin_sys::DfSkinView) -> R,
+) -> R {
+    let animations: Vec<_> = skin
+        .animations
+        .iter()
+        .map(|animation| dragonfly_plugin_sys::DfSkinAnimationView {
+            width: animation.width,
+            height: animation.height,
+            animation_type: animation.animation_type as u32,
+            frame_count: animation.frame_count,
+            expression: animation.expression,
+            pixels: bytes_view(&animation.pixels),
+        })
+        .collect();
+    let view = dragonfly_plugin_sys::DfSkinView {
+        width: skin.width,
+        height: skin.height,
+        persona: u8::from(skin.persona),
+        play_fab_id: string_view_from_str(&skin.play_fab_id),
+        full_id: string_view_from_str(&skin.full_id),
+        pixels: bytes_view(&skin.pixels),
+        model_default: string_view_from_str(&skin.model_config.default),
+        model_animated_face: string_view_from_str(&skin.model_config.animated_face),
+        model: bytes_view(&skin.model),
+        cape_width: skin.cape.width,
+        cape_height: skin.cape.height,
+        cape_pixels: bytes_view(&skin.cape.pixels),
+        animations: if animations.is_empty() {
+            core::ptr::null()
+        } else {
+            animations.as_ptr()
+        },
+        animation_count: animations.len() as u64,
+    };
+    function(&view)
+}
+
+fn read_skin_snapshot(
+    host: &dragonfly_plugin_sys::DfHostApiV13,
+    invocation: dragonfly_plugin_sys::DfInvocationId,
+    snapshot: u64,
+    info: dragonfly_plugin_sys::DfSkinInfo,
+) -> Option<Skin> {
+    let animation_info_fn = host.player_skin_animation_info?;
+    let read = host.player_skin_read?;
+    let animation_count = usize::try_from(info.animation_count).ok()?;
+    if animation_count > MAX_SKIN_ANIMATIONS {
+        return None;
+    }
+    let mut animation_info = Vec::new();
+    animation_info.try_reserve_exact(animation_count).ok()?;
+    for index in 0..animation_count {
+        let mut animation = dragonfly_plugin_sys::DfSkinAnimationInfo::default();
+        let status = unsafe {
+            animation_info_fn(
+                host.context,
+                invocation,
+                snapshot,
+                index as u64,
+                &mut animation,
+            )
+        };
+        if status != dragonfly_plugin_sys::DF_STATUS_OK {
+            return None;
+        }
+        animation_info.push(animation);
+    }
+
+    let mut total_bytes = 0u64;
+    for length in [
+        info.play_fab_id_len,
+        info.full_id_len,
+        info.pixels_len,
+        info.model_default_len,
+        info.model_animated_face_len,
+        info.model_len,
+        info.cape_pixels_len,
+    ]
+    .into_iter()
+    .chain(animation_info.iter().map(|animation| animation.pixels_len))
+    {
+        total_bytes = total_bytes.checked_add(length)?;
+        if total_bytes > MAX_SKIN_DATA_BYTES {
+            return None;
+        }
+    }
+
+    let mut play_fab_id = allocate_bytes(info.play_fab_id_len)?;
+    let mut full_id = allocate_bytes(info.full_id_len)?;
+    let mut pixels = allocate_bytes(info.pixels_len)?;
+    let mut model_default = allocate_bytes(info.model_default_len)?;
+    let mut model_animated_face = allocate_bytes(info.model_animated_face_len)?;
+    let mut model = allocate_bytes(info.model_len)?;
+    let mut cape_pixels = allocate_bytes(info.cape_pixels_len)?;
+    let mut animation_pixels = animation_info
+        .iter()
+        .map(|animation| allocate_bytes(animation.pixels_len))
+        .collect::<Option<Vec<_>>>()?;
+    let mut animation_buffers: Vec<_> = animation_pixels
+        .iter_mut()
+        .map(|pixels| bytes_buffer(pixels))
+        .collect();
+    let mut data = dragonfly_plugin_sys::DfSkinData {
+        play_fab_id: bytes_buffer(&mut play_fab_id),
+        full_id: bytes_buffer(&mut full_id),
+        pixels: bytes_buffer(&mut pixels),
+        model_default: bytes_buffer(&mut model_default),
+        model_animated_face: bytes_buffer(&mut model_animated_face),
+        model: bytes_buffer(&mut model),
+        cape_pixels: bytes_buffer(&mut cape_pixels),
+        animation_pixels: if animation_buffers.is_empty() {
+            core::ptr::null_mut()
+        } else {
+            animation_buffers.as_mut_ptr()
+        },
+        animation_capacity: animation_buffers.len() as u64,
+    };
+    let status = unsafe { read(host.context, invocation, snapshot, &mut data) };
+    if status != dragonfly_plugin_sys::DF_STATUS_OK {
+        return None;
+    }
+
+    finish_buffer(&mut play_fab_id, data.play_fab_id)?;
+    finish_buffer(&mut full_id, data.full_id)?;
+    finish_buffer(&mut pixels, data.pixels)?;
+    finish_buffer(&mut model_default, data.model_default)?;
+    finish_buffer(&mut model_animated_face, data.model_animated_face)?;
+    finish_buffer(&mut model, data.model)?;
+    finish_buffer(&mut cape_pixels, data.cape_pixels)?;
+    for (pixels, buffer) in animation_pixels.iter_mut().zip(animation_buffers) {
+        finish_buffer(pixels, buffer)?;
+    }
+
+    Some(Skin {
+        width: info.width,
+        height: info.height,
+        persona: info.persona != 0,
+        play_fab_id: String::from_utf8(play_fab_id).ok()?,
+        full_id: String::from_utf8(full_id).ok()?,
+        pixels,
+        model_config: SkinModelConfig {
+            default: String::from_utf8(model_default).ok()?,
+            animated_face: String::from_utf8(model_animated_face).ok()?,
+        },
+        model,
+        cape: Cape {
+            width: info.cape_width,
+            height: info.cape_height,
+            pixels: cape_pixels,
+        },
+        animations: animation_info
+            .into_iter()
+            .zip(animation_pixels)
+            .map(|(animation, pixels)| {
+                Some(SkinAnimation {
+                    width: animation.width,
+                    height: animation.height,
+                    animation_type: SkinAnimationType::from_raw(animation.animation_type)?,
+                    pixels,
+                    frame_count: animation.frame_count,
+                    expression: animation.expression,
+                })
+            })
+            .collect::<Option<Vec<_>>>()?,
+    })
 }
 
 include!("player_state_generated.rs");
@@ -2136,13 +2154,13 @@ fn slice_pointer<T>(value: &[T]) -> *const T {
     }
 }
 
-fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV12> {
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV13> {
     unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
 }
 
 fn read_item_stack(
     open: impl FnOnce(
-        &dragonfly_plugin_sys::DfHostApiV12,
+        &dragonfly_plugin_sys::DfHostApiV13,
         *mut u64,
         *mut dragonfly_plugin_sys::DfItemStackInfo,
     ) -> Option<dragonfly_plugin_sys::DfStatus>,
@@ -2164,7 +2182,7 @@ fn read_item_stack(
 }
 
 fn read_item_stack_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV12,
+    host: &dragonfly_plugin_sys::DfHostApiV13,
     invocation: dragonfly_plugin_sys::DfInvocationId,
     snapshot_id: u64,
     info: dragonfly_plugin_sys::DfItemStackInfo,
@@ -3348,6 +3366,85 @@ impl<'a> PlayerRespawnEventData<'a> {
     }
 }
 
+pub struct PlayerSkinChangeEventData<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerSkinChangeInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerSkinChangeState,
+}
+
+impl<'a> PlayerSkinChangeEventData<'a> {
+    /// # Safety
+    /// Both references must belong to the same active skin-change callback.
+    /// The runtime owns the snapshot until the complete plugin chain returns.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerSkinChangeInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerSkinChangeState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+
+    pub fn skin(&self) -> Skin {
+        self.read_skin().unwrap_or_default()
+    }
+
+    pub fn set_skin(&mut self, skin: &Skin) {
+        let Some(host) = host_api() else {
+            return;
+        };
+        let Some(set) = host.skin_snapshot_set else {
+            return;
+        };
+        with_skin_view(skin, |view| {
+            let _ = unsafe {
+                set(
+                    host.context,
+                    self.input.invocation,
+                    self.input.snapshot,
+                    view,
+                )
+            };
+        });
+    }
+
+    pub fn edit_skin(&mut self, edit: impl FnOnce(&mut Skin)) {
+        let Some(mut skin) = self.read_skin() else {
+            return;
+        };
+        edit(&mut skin);
+        self.set_skin(&skin);
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+
+    fn read_skin(&self) -> Option<Skin> {
+        let host = host_api()?;
+        let info_fn = host.skin_snapshot_info?;
+        let mut info = dragonfly_plugin_sys::DfSkinInfo::default();
+        let status = unsafe {
+            info_fn(
+                host.context,
+                self.input.invocation,
+                self.input.snapshot,
+                &mut info,
+            )
+        };
+        if status != dragonfly_plugin_sys::DF_STATUS_OK {
+            return None;
+        }
+        read_skin_snapshot(host, self.input.invocation, self.input.snapshot, info)
+    }
+}
+
 pub trait Plugin: Default + Send + Sync + 'static {
     fn on_enable(&self) {}
     fn on_disable(&self) {}
@@ -3384,6 +3481,7 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_item_use_on_entity(&self, _event: &mut Event::PlayerItemUseOnEntity<'_>) {}
     fn on_change_world(&self, _event: &Event::PlayerChangeWorld<'_>) {}
     fn on_respawn(&self, _event: &mut Event::PlayerRespawn<'_>) {}
+    fn on_skin_change(&self, _event: &mut Event::PlayerSkinChange<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }
@@ -3597,6 +3695,25 @@ mod tests {
             }
         );
         assert_eq!(event.world().raw_id().value, 43);
+    }
+
+    #[test]
+    fn skin_change_exposes_player_and_monotonic_cancellation() {
+        let input = dragonfly_plugin_sys::DfPlayerSkinChangeInput {
+            invocation: 31,
+            player: dragonfly_plugin_sys::DfPlayerId {
+                bytes: [11; 16],
+                generation: 37,
+            },
+            snapshot: 41,
+        };
+        let mut state = dragonfly_plugin_sys::DfPlayerSkinChangeState { cancelled: 0 };
+        let mut event = unsafe { PlayerSkinChangeEventData::from_raw(&input, &mut state) };
+
+        assert_eq!(event.player().id().generation(), 37);
+        assert!(!event.cancelled());
+        event.cancel();
+        assert!(event.cancelled());
     }
 
     #[test]

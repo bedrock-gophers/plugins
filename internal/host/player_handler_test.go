@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/player"
+	playerskin "github.com/df-mc/dragonfly/server/player/skin"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
 	"github.com/google/uuid"
@@ -48,6 +50,10 @@ type runtimeStub struct {
 	respawnInput        native.PlayerRespawnInput
 	respawnOutput       native.PlayerRespawnOutput
 	respawnTx           *world.World
+	skinChangeInput     native.PlayerSkinChangeInput
+	skinChangeOutput    native.PlayerSkinChangeOutput
+	skinChangeCalled    bool
+	skinChangeErr       error
 	players             *Players
 }
 
@@ -183,6 +189,18 @@ func (r *runtimeStub) HandlePlayerRespawn(invocation native.InvocationID, input 
 		return native.PlayerRespawnOutput{Position: position, World: worldID}, nil
 	}
 	return r.respawnOutput, nil
+}
+
+func (r *runtimeStub) HandlePlayerSkinChange(_ native.InvocationID, input native.PlayerSkinChangeInput, skin native.PlayerSkin, cancelled bool) (native.PlayerSkinChangeOutput, error) {
+	r.skinChangeCalled = true
+	r.skinChangeInput = input
+	if r.skinChangeErr != nil {
+		return r.skinChangeOutput, r.skinChangeErr
+	}
+	if r.skinChangeOutput.Skin.Width == 0 && r.skinChangeOutput.Skin.Height == 0 {
+		return native.PlayerSkinChangeOutput{Cancelled: cancelled, Skin: skin}, nil
+	}
+	return r.skinChangeOutput, nil
 }
 
 func TestPlayerHandlerChangeWorldFiresOnFirstDestinationTick(t *testing.T) {
@@ -397,6 +415,64 @@ func TestPlayerHandlerMove(t *testing.T) {
 			t.Fatalf("unexpected movement input: %+v", runtime.moveInput)
 		}
 	})
+}
+
+func TestPlayerHandlerSkinChangeMutatesAndCancelsCandidate(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		cancelled bool
+		fail      bool
+		invalid   bool
+		wantModel string
+	}{
+		{name: "allowed", wantModel: "geometry.changed"},
+		{name: "cancelled", cancelled: true, wantModel: "geometry.old"},
+		{name: "failure after cancellation", cancelled: true, fail: true, wantModel: "geometry.old"},
+		{name: "failure fails open", fail: true, wantModel: "geometry.proposed"},
+		{name: "invalid skin keeps cancellation", cancelled: true, invalid: true, wantModel: "geometry.old"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			withPlayer(t, func(p *player.Player) {
+				old := playerskin.New(64, 64)
+				old.ModelConfig.Default = "geometry.old"
+				p.SetSkin(old)
+
+				changed := playerskin.New(64, 64)
+				changed.ModelConfig.Default = "geometry.changed"
+				output, ok := playerSkinToNative(changed)
+				if !ok {
+					t.Fatal("test skin did not convert")
+				}
+				runtime := &runtimeStub{
+					subscriptions: native.PlayerSkinChangeSubscription,
+					skinChangeOutput: native.PlayerSkinChangeOutput{
+						Cancelled: test.cancelled,
+						Skin:      output,
+					},
+				}
+				if test.fail {
+					runtime.skinChangeErr = errors.New("plugin failed")
+				}
+				if test.invalid {
+					runtime.skinChangeOutput.Skin = native.PlayerSkin{Width: 1, Height: 1}
+				}
+				players := NewPlayers()
+				playerID := players.Register(p, 95)
+				p.Handle(NewPlayerHandler(runtime, nil, players, nil))
+
+				proposed := playerskin.New(64, 64)
+				proposed.FullID = "proposed"
+				proposed.ModelConfig.Default = "geometry.proposed"
+				p.SetSkin(proposed)
+				if !runtime.skinChangeCalled || runtime.skinChangeInput.Player != playerID {
+					t.Fatalf("skin-change input = %#v", runtime.skinChangeInput)
+				}
+				if got := p.Skin().ModelConfig.Default; got != test.wantModel {
+					t.Fatalf("committed model = %q, want %q", got, test.wantModel)
+				}
+			})
+		})
+	}
 }
 
 func TestPlayerHandlerAttackEntityUsesStableTargetID(t *testing.T) {

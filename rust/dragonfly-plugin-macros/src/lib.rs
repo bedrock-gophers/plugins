@@ -881,6 +881,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_respawn = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_respawn"),
     );
+    let handles_skin_change = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_skin_change"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -913,7 +916,8 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_attack_entity) << 29)
         | (u64::from(handles_item_use_on_entity) << 30)
         | (u64::from(handles_change_world) << 31)
-        | (u64::from(handles_respawn) << 32);
+        | (u64::from(handles_respawn) << 32)
+        | (u64::from(handles_skin_change) << 33);
 
     quote! {
         #[doc(hidden)]
@@ -959,14 +963,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
 
             unsafe extern "C" fn set_host(
                 instance: *mut ::dragonfly_plugin::__private::c_void,
-                host: *const ::dragonfly_plugin::__private::sys::DfHostApiV12,
+                host: *const ::dragonfly_plugin::__private::sys::DfHostApiV13,
             ) -> ::dragonfly_plugin::__private::sys::DfStatus {
                 if instance.is_null() || host.is_null() {
                     return ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR;
                 }
                 let host_header = unsafe { &*host };
                 if host_header.abi_version != ::dragonfly_plugin::__private::sys::DF_HOST_ABI_VERSION
-                    || host_header.struct_size < ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfHostApiV12>() as u32
+                    || host_header.struct_size < ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfHostApiV13>() as u32
                 {
                     return ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR;
                 }
@@ -1348,6 +1352,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerRespawnState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerRespawnEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_respawn(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_SKIN_CHANGE => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerSkinChangeInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerSkinChangeState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerSkinChangeEventData::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_skin_change(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,
