@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestPlayerEffectSnapshotViewValidation(t *testing.T) {
@@ -36,5 +37,45 @@ func TestPlayerEffectSnapshotViewValidation(t *testing.T) {
 				t.Fatalf("invalid effect accepted: %#v", value)
 			}
 		})
+	}
+}
+
+func TestPlayerEffectSnapshotViewsEnforceBound(t *testing.T) {
+	value := PlayerEffect{Type: EffectSpeed, Level: 1, Duration: time.Second, Potency: 1, Mode: PlayerEffectTimed}
+	values := make([]PlayerEffect, maxPlayerEffects)
+	for index := range values {
+		values[index] = value
+	}
+	if encoded, ok := playerEffectSnapshotViews(values); !ok || len(encoded) != maxPlayerEffects {
+		t.Fatalf("maximum snapshot length=%d ok=%v", len(encoded), ok)
+	}
+	values = append(values, value)
+	if encoded, ok := playerEffectSnapshotViews(values); ok || encoded != nil {
+		t.Fatalf("oversized snapshot length=%d ok=%v", len(encoded), ok)
+	}
+}
+
+func TestPlayerEffectBufferRequiresPointerForNonZeroCapacity(t *testing.T) {
+	if validPlayerEffectBuffer(nil, 1) {
+		t.Fatal("accepted null data with non-zero capacity")
+	}
+	if !validPlayerEffectBuffer(nil, 0) {
+		t.Fatal("rejected zero-capacity sizing buffer")
+	}
+	value := byte(0)
+	if !validPlayerEffectBuffer(unsafe.Pointer(&value), 1) {
+		t.Fatal("rejected non-null data buffer")
+	}
+}
+
+func TestWriteBoundedSnapshotDoesNotPartiallyWrite(t *testing.T) {
+	sentinel := []int{41}
+	writes := 0
+	required, ok := writeBoundedSnapshot([]int{1, 2}, 1, func(values []int) {
+		writes++
+		copy(sentinel, values)
+	})
+	if ok || required != 2 || writes != 0 || sentinel[0] != 41 {
+		t.Fatalf("required=%d ok=%v writes=%d sentinel=%v", required, ok, writes, sentinel)
 	}
 }

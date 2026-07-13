@@ -14,11 +14,15 @@ type playerEffectSnapshotRecordingHost struct {
 	effectCalls       int
 	clearCalls        int
 	messages          []string
+	snapshot          []PlayerEffect
 }
 
 func (h *playerEffectSnapshotRecordingHost) PlayerEffects(invocation InvocationID, player PlayerID) ([]PlayerEffect, bool) {
 	h.effectsInvocation, h.player = invocation, player
 	h.effectCalls++
+	if h.snapshot != nil {
+		return append([]PlayerEffect(nil), h.snapshot...), true
+	}
 	return []PlayerEffect{
 		{Type: -7, Level: 2, Duration: 1500 * time.Millisecond, Potency: 1, Mode: PlayerEffectAmbient, ParticlesHidden: true},
 		{Type: EffectDarkness, Level: 1, Potency: 1, Mode: PlayerEffectInfinite},
@@ -78,5 +82,26 @@ func TestPlayerEffectsCrossRustAndCHostBoundary(t *testing.T) {
 		if !strings.Contains(joined, fragment) {
 			t.Fatalf("messages %q do not contain %q", joined, fragment)
 		}
+	}
+
+	value := PlayerEffect{Type: EffectSpeed, Level: 1, Duration: time.Second, Potency: 1, Mode: PlayerEffectTimed}
+	host.snapshot = make([]PlayerEffect, maxPlayerEffects)
+	for index := range host.snapshot {
+		host.snapshot[index] = value
+	}
+	input.Invocation, input.Arguments = 73, "effects"
+	output, err = runtime.HandleCommand(commandNamed(t, commands, "player").Index, input)
+	if err != nil || output.Failed || host.effectCalls != 4 {
+		t.Fatalf("maximum snapshot output=%+v error=%v calls=%d", output, err, host.effectCalls)
+	}
+	host.snapshot = append(host.snapshot, value)
+	host.messages = nil
+	input.Invocation = 79
+	output, err = runtime.HandleCommand(commandNamed(t, commands, "player").Index, input)
+	if err != nil || output.Failed || host.effectCalls != 5 {
+		t.Fatalf("oversized snapshot output=%+v error=%v calls=%d", output, err, host.effectCalls)
+	}
+	if len(host.messages) != 1 || host.messages[0] != "No active effects." {
+		t.Fatalf("oversized snapshot messages = %#v", host.messages)
 	}
 }

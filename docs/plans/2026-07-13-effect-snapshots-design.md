@@ -1,6 +1,6 @@
 # Player effect snapshots and clear-all
 
-Status: Implementation-ready
+Status: Implemented; automated gates pass, Bedrock acceptance pending
 
 ## Goal
 
@@ -33,6 +33,11 @@ Clear-all snapshots `Player.Effects()` and calls `RemoveEffect` for every type
 inside one player-owner mutation. It therefore clears built-in and registered
 custom effects without one FFI round trip per effect. This is one owner pass,
 not a rollback transaction: an effect `End` hook may add another effect.
+Before the first player tick, Dragonfly's first `RemoveEffect` flushes its
+pending initial list. Valid initial instant effects are therefore applied once
+before the lasting effects are removed. The host rejects invalid initial level
+or duration values before triggering that flush. A side-effect-free discard of
+Dragonfly's private initial list is not available through its public API.
 
 ## Host ABI v18
 
@@ -71,9 +76,9 @@ three capacity attempts, beginning with a zero-capacity sizing probe.
 
 The host converts the complete Go snapshot to a temporary C-view slice before
 touching caller memory. It sets the required length and returns an error on
-insufficient capacity without partial writes. A non-empty buffer requires a
-non-null data pointer. Snapshot output accepts only positive levels, potency
-exactly `1.0`, finite timed/ambient modes, or infinite mode with zero duration,
+insufficient capacity without partial writes. A buffer with non-zero capacity
+requires a non-null data pointer. Snapshot output accepts only positive levels,
+potency exactly `1.0`, finite timed/ambient modes, or infinite mode with zero duration,
 and a particle-hidden byte of zero or one. Durations use millisecond transport
 granularity. Sub-millisecond positive values floor to zero; negative remaining
 durations between Dragonfly expiry passes clamp to zero.
@@ -107,3 +112,20 @@ must exercise Rust through the runtime and C bridge into a Go host.
 Host ABI v18 is reserved exclusively for this milestone. The obsolete
 transferable-entities experiment must rebase on the completed v18 prefix and
 append its independent fields as host ABI v19.
+
+Implementation milestones:
+
+- `421a9cd` records the bounded snapshot and clear-all design.
+- `fc1711a` appends the v18 ABI and implements the Go/C host path.
+- `5be79e8` exposes the safe Rust snapshot, accessors, and clear operation.
+- `e13a216` adds runnable command examples and Rust-to-C-to-Go integration.
+
+Automated evidence completed on 2026-07-13:
+
+- `go test -race ./...`
+- generated ABI/block checks
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo test --workspace`
+- focused native cross-language integration
+- full `make test`, including every runnable example plugin

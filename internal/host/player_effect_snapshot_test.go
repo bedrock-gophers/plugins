@@ -4,6 +4,7 @@ import (
 	"context"
 	"image/color"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -171,5 +172,76 @@ func TestPlayersClearEffectsRejectsUnregisteredBeforeRemoval(t *testing.T) {
 		}
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+type snapshotInitialInstantEffect struct{}
+
+var snapshotInitialInstantApplications atomic.Int64
+
+func (snapshotInitialInstantEffect) RGBA() color.RGBA { return color.RGBA{} }
+func (snapshotInitialInstantEffect) Apply(world.Entity, effect.Effect) {
+	snapshotInitialInstantApplications.Add(1)
+}
+
+func TestPlayersClearEffectsMatchesDragonflyInitialEffectFlush(t *testing.T) {
+	w := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	id := uuid.MustParse("a77ae85d-9493-4194-a8ec-83a30352a291")
+	handle := world.EntitySpawnOpts{ID: id}.New(player.Type, player.Config{
+		UUID: id, Name: "InitialInstantClear", Effects: []effect.Effect{
+			effect.New(effect.Speed, 1, time.Second),
+			effect.NewInstant(snapshotInitialInstantEffect{}, 1),
+		},
+	})
+	snapshotInitialInstantApplications.Store(0)
+	if err := w.Do(func(tx *world.Tx) {
+		connected := tx.AddEntity(handle).(*player.Player)
+		players := NewPlayers()
+		playerID := players.Register(connected, 85)
+		invocation, leave := players.BeginInvocation(tx)
+		defer leave()
+		if !players.ClearPlayerEffects(invocation, playerID) {
+			t.Fatal("clear rejected valid initial effects")
+		}
+		if effects := connected.Effects(); len(effects) != 0 {
+			t.Fatalf("effects after clear = %#v", effects)
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if applications := snapshotInitialInstantApplications.Load(); applications != 1 {
+		t.Fatalf("initial instant applications = %d", applications)
+	}
+}
+
+func TestPlayersClearEffectsRejectsMalformedInitialInstantBeforeFlush(t *testing.T) {
+	w := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	id := uuid.MustParse("c0c83213-c43f-46d5-82d7-c3bf27ee83c7")
+	handle := world.EntitySpawnOpts{ID: id}.New(player.Type, player.Config{
+		UUID: id, Name: "MalformedInitialClear", Effects: []effect.Effect{
+			effect.New(effect.Speed, 1, time.Second),
+			effect.NewInstant(snapshotInitialInstantEffect{}, 0),
+		},
+	})
+	snapshotInitialInstantApplications.Store(0)
+	if err := w.Do(func(tx *world.Tx) {
+		connected := tx.AddEntity(handle).(*player.Player)
+		players := NewPlayers()
+		playerID := players.Register(connected, 86)
+		invocation, leave := players.BeginInvocation(tx)
+		defer leave()
+		if players.ClearPlayerEffects(invocation, playerID) {
+			t.Fatal("clear accepted a malformed initial instant effect")
+		}
+		if effects := connected.Effects(); len(effects) != 2 {
+			t.Fatalf("initial effects changed after rejection: %#v", effects)
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if applications := snapshotInitialInstantApplications.Load(); applications != 0 {
+		t.Fatalf("malformed initial instant applications = %d", applications)
 	}
 }

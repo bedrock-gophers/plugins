@@ -594,6 +594,11 @@ func (p *Players) ClearPlayerEffects(invocation native.InvocationID, id native.P
 	cleared, ok := readPlayer(p, invocation, id, func(connected *player.Player) bool {
 		types := make([]effect.Type, 0, len(connected.Effects()))
 		for _, current := range connected.Effects() {
+			// Dragonfly flushes every pending initial effect on the first RemoveEffect.
+			// Validate even non-lasting entries before that flush can call EffectManager.Add.
+			if current.Level() <= 0 || current.Duration() < 0 {
+				return false
+			}
 			if _, lasting := current.Type().(effect.LastingType); !lasting {
 				continue
 			}
