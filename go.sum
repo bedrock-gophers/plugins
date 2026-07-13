@@ -1,13 +1,13 @@
-github.com/bedrock-gophers/plugins v0.0.0-20260713013544-323b2a85e961 h1:tcKsLmhErs8oVpmtMn+ddRE//WcYf91K207uQATmWDU=
-github.com/bedrock-gophers/plugins v0.0.0-20260713013544-323b2a85e961/go.mod h1:R+5K+Ef1g2hUozP5qjGudd87zNF6VLjA9GEEn3y+KhA=
+github.com/bedrock-gophers/plugins v0.0.0-20260713014721-a83c8b574320 h1:Ui91E+KzKULUmvf8+Q9vTcm4CrVXOSuE7OLe2dkaOo8=
+github.com/bedrock-gophers/plugins v0.0.0-20260713014721-a83c8b574320/go.mod h1:5nipRGQLgVHp5ZKZ3TIGg0WXN1VEA7gy2P/9fByVPG0=
 github.com/brentp/intintmap v0.0.0-20251106190759-56907b1f8479 h1:UZbbt19ACBOFO+CiDQFjaEoPJkBhj7GNGtIq59WR6Os=
 github.com/brentp/intintmap v0.0.0-20251106190759-56907b1f8479/go.mod h1:TOk10ahXejq9wkEaym3KPRNeuR/h5Jx+s8QRWIa2oTM=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/coreos/go-oidc/v3 v3.17.0 h1:hWBGaQfbi0iVviX4ibC7bk8OKT5qNr4klBaCHVNvehc=
 github.com/coreos/go-oidc/v3 v3.17.0/go.mod h1:wqPbKFrVnE90vty060SB40FCJ8fTHTxSwyXJqZH+sI8=
-github.com/df-mc/dragonfly v0.10.15-0.20260711115619-a3fb52159c77 h1:aTBuEYNFiajFby0HEnZ7Bc+YIXK5TNpjb82YML9vS1Y=
-github.com/df-mc/dragonfly v0.10.15-0.20260711115619-a3fb52159c77/go.mod h1:OFJjCz3xfDalVZEtV4lJdbenwKDEAczKHikHN7kVwMc=
+github.com/df-mc/dragonfly v0.11.0 h1:bylZOYzHRuaBxYewToTPa3v1m74aKfG0yd433ZiypfQ=
+github.com/df-mc/dragonfly v0.11.0/go.mod h1:OFJjCz3xfDalVZEtV4lJdbenwKDEAczKHikHN7kVwMc=
 github.com/df-mc/go-playfab v1.0.0 h1:6gVukk3aQbJ934GJFdcZJHVIw9lhauK+KHOevbwJA10=
 github.com/df-mc/go-playfab v1.0.0/go.mod h1:nGOlE+JFGOH5Z0iidEgJapHhndFi/oNk17RN9pKCF+k=
 github.com/df-mc/go-xsapi v1.0.1 h1:H1SbxYr4rXOqZSB8MwiODbDUsHRihxbHf+YOljUWgXw=
