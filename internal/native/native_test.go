@@ -135,6 +135,7 @@ func TestValidEntityTypeDefinition(t *testing.T) {
 type recordingHost struct {
 	noopHost
 	player            PlayerID
+	textPlayers       []PlayerID
 	texts             []string
 	kinds             []PlayerTextKind
 	title             PlayerTitle
@@ -205,6 +206,7 @@ type recordingHost struct {
 
 func (h *recordingHost) SendPlayerText(_ InvocationID, player PlayerID, kind PlayerTextKind, message string) bool {
 	h.player = player
+	h.textPlayers = append(h.textPlayers, player)
 	h.kinds = append(h.kinds, kind)
 	h.texts = append(h.texts, message)
 	return true
@@ -756,8 +758,9 @@ func TestPlayerIdentityHostCalls(t *testing.T) {
 	}
 	wantKinds := []PlayerTextKind{PlayerTextNameTag, PlayerTextMessage, PlayerTextMessage, PlayerTextMessage, PlayerTextMessage}
 	wantTexts := []string{"Rust Player", "Name tag set.", "Scale: 1.5", "Invisible: true", "Immobile: true"}
-	if !slices.Equal(host.kinds, wantKinds) || !slices.Equal(host.texts, wantTexts) {
-		t.Fatalf("text kinds=%v values=%v", host.kinds, host.texts)
+	wantPlayers := []PlayerID{id, id, id, id, id}
+	if !slices.Equal(host.textPlayers, wantPlayers) || !slices.Equal(host.kinds, wantKinds) || !slices.Equal(host.texts, wantTexts) {
+		t.Fatalf("text players=%+v kinds=%v values=%v", host.textPlayers, host.kinds, host.texts)
 	}
 	want := []PlayerStateKind{PlayerStateScale, PlayerStateInvisible, PlayerStateImmobile}
 	if !slices.Equal(host.states, want) || host.values[0].Number != 1.5 || host.values[1].Integer != 1 || host.values[2].Integer != 1 {
@@ -798,8 +801,9 @@ func TestPlayerSoundAndDisconnectHostCalls(t *testing.T) {
 	}
 	wantKinds := []PlayerTextKind{PlayerTextMessage, PlayerTextDisconnect, PlayerTextKick}
 	wantTexts := []string{"Played level-up sound.", "Disconnected by Rust plugin.", "Kicked by Rust plugin."}
-	if !slices.Equal(host.kinds, wantKinds) || !slices.Equal(host.texts, wantTexts) {
-		t.Fatalf("kinds=%v texts=%v", host.kinds, host.texts)
+	wantPlayers := []PlayerID{id, id, id}
+	if !slices.Equal(host.textPlayers, wantPlayers) || !slices.Equal(host.kinds, wantKinds) || !slices.Equal(host.texts, wantTexts) {
+		t.Fatalf("players=%+v kinds=%v texts=%v", host.textPlayers, host.kinds, host.texts)
 	}
 }
 
@@ -1410,8 +1414,8 @@ func TestPingCommandUsesPlayerLatency(t *testing.T) {
 	if output.Failed || output.Message != "" {
 		t.Fatalf("output = %#v", output)
 	}
-	if host.player != id || !slices.Equal(host.kinds, []PlayerTextKind{PlayerTextMessage}) || !slices.Equal(host.texts, []string{"Danick's ping: 37ms"}) {
-		t.Fatalf("host calls = player %+v kinds %v texts %q", host.player, host.kinds, host.texts)
+	if host.player != id || !slices.Equal(host.textPlayers, []PlayerID{id}) || !slices.Equal(host.kinds, []PlayerTextKind{PlayerTextMessage}) || !slices.Equal(host.texts, []string{"Danick's ping: 37ms"}) {
+		t.Fatalf("host calls = player %+v text players %+v kinds %v texts %q", host.player, host.textPlayers, host.kinds, host.texts)
 	}
 }
 
