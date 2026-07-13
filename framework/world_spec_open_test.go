@@ -1,10 +1,12 @@
 package framework
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/bedrock-gophers/plugins/internal/host"
 	"github.com/bedrock-gophers/plugins/internal/native"
@@ -165,6 +167,63 @@ func TestWorldManagerUnloadReleasesProviderPathAfterClose(t *testing.T) {
 	}
 	if second == first {
 		t.Fatalf("world handle was reused: %d", second)
+	}
+}
+
+func TestWorldManagerCloseCustomWaitsForOpeningsAndRejectsNewOpens(t *testing.T) {
+	manager, _ := persistentTestManager(t)
+	opening := &worldOpening{done: make(chan struct{})}
+	manager.mu.Lock()
+	manager.openings["example:opening"] = opening
+	manager.providerPaths["synthetic"] = "example:opening"
+	manager.mu.Unlock()
+
+	closed := make(chan error, 1)
+	go func() { closed <- manager.CloseCustom() }()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		manager.mu.RLock()
+		closing := manager.closing
+		manager.mu.RUnlock()
+		if closing {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("CloseCustom did not enter closing state")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if _, err := manager.OpenSpec("example:late", validWorldSpec("late")); err == nil {
+		t.Fatal("open accepted after shutdown started")
+	}
+	select {
+	case err := <-closed:
+		t.Fatalf("CloseCustom returned before opening completed: %v", err)
+	default:
+	}
+	manager.mu.Lock()
+	delete(manager.openings, "example:opening")
+	delete(manager.providerPaths, "synthetic")
+	close(opening.done)
+	manager.mu.Unlock()
+	if err := <-closed; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorldManagerRetainsProviderPathWhenCloseFails(t *testing.T) {
+	manager := NewWorldManager()
+	spec := normalizedWorldSpec{absoluteProviderPath: "/reserved"}
+	entry := &managedWorld{id: 1, name: "example:failing", spec: &spec}
+	manager.worlds[entry.name] = entry
+	manager.handles[entry.id] = entry
+	manager.providerPaths[spec.absoluteProviderPath] = entry.name
+	want := errors.New("close failed")
+	if err := manager.finishWorldClose(entry, func() error { return want }); !errors.Is(err, want) {
+		t.Fatalf("close error = %v, want %v", err, want)
+	}
+	if owner, ok := manager.providerPaths[spec.absoluteProviderPath]; !ok || owner != entry.name {
+		t.Fatalf("provider reservation = %q, %v", owner, ok)
 	}
 }
 

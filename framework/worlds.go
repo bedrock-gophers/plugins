@@ -65,6 +65,9 @@ type WorldManager struct {
 	registriesReady bool
 	openings        map[WorldID]*worldOpening
 	providerPaths   map[string]WorldID
+	closing         bool
+	closeDone       chan struct{}
+	closeErr        error
 }
 
 // NewWorldManager constructs an in-memory manager, primarily useful to embedders and tests.
@@ -161,6 +164,10 @@ func (m *WorldManager) OpenSpec(name WorldID, value WorldSpec) (native.WorldID, 
 	}
 
 	m.mu.Lock()
+	if m.closing {
+		m.mu.Unlock()
+		return 0, errors.New("world manager is closing")
+	}
 	if entry, exists := m.worlds[name]; exists {
 		if entry.unloading || entry.spec == nil || *entry.spec != spec {
 			m.mu.Unlock()
@@ -286,6 +293,9 @@ func (m *WorldManager) register(name WorldID, w *world.World, core bool) (native
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.closing {
+		return 0, errors.New("world manager is closing")
+	}
 	if _, exists := m.worlds[name]; exists {
 		return 0, fmt.Errorf("world %q already exists", name)
 	}
@@ -459,20 +469,31 @@ func (m *WorldManager) unload(invocation native.InvocationID, entry *managedWorl
 		return fmt.Errorf("world %q contains %d player(s)", entry.name, players)
 	}
 	entry.closed = true
-	closeErr := entry.world.Close()
-	m.mu.Lock()
-	delete(m.worlds, entry.name)
-	delete(m.handles, entry.id)
-	delete(m.byWorld, entry.world)
-	if entry.spec != nil {
-		delete(m.providerPaths, entry.spec.absoluteProviderPath)
-	}
-	m.mu.Unlock()
-	return closeErr
+	return m.finishWorldClose(entry, entry.world.Close)
 }
 
 // CloseCustom closes all custom worlds. Dragonfly closes core dimensions itself.
 func (m *WorldManager) CloseCustom() error {
+	m.mu.Lock()
+	if m.closing {
+		done := m.closeDone
+		m.mu.Unlock()
+		<-done
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+		return m.closeErr
+	}
+	m.closing = true
+	m.closeDone = make(chan struct{})
+	openings := make([]<-chan struct{}, 0, len(m.openings))
+	for _, opening := range m.openings {
+		openings = append(openings, opening.done)
+	}
+	m.mu.Unlock()
+	for _, done := range openings {
+		<-done
+	}
+
 	m.mu.Lock()
 	custom := make([]*managedWorld, 0, len(m.worlds))
 	for _, entry := range m.worlds {
@@ -488,23 +509,33 @@ func (m *WorldManager) CloseCustom() error {
 		entry.lifecycle.Lock()
 		if !entry.closed {
 			entry.closed = true
-			if err := entry.world.Close(); err != nil {
+			if err := m.finishWorldClose(entry, entry.world.Close); err != nil {
 				failures = append(failures, err)
 			}
 		}
 		entry.lifecycle.Unlock()
-		m.mu.Lock()
-		if m.worlds[entry.name] == entry {
-			delete(m.worlds, entry.name)
-			delete(m.handles, entry.id)
-			delete(m.byWorld, entry.world)
-		}
-		if entry.spec != nil {
-			delete(m.providerPaths, entry.spec.absoluteProviderPath)
-		}
-		m.mu.Unlock()
 	}
-	return errors.Join(failures...)
+	err := errors.Join(failures...)
+	m.mu.Lock()
+	m.closeErr = err
+	close(m.closeDone)
+	m.mu.Unlock()
+	return err
+}
+
+func (m *WorldManager) finishWorldClose(entry *managedWorld, closeWorld func() error) error {
+	err := closeWorld()
+	m.mu.Lock()
+	if m.worlds[entry.name] == entry {
+		delete(m.worlds, entry.name)
+		delete(m.handles, entry.id)
+		delete(m.byWorld, entry.world)
+	}
+	if err == nil && entry.spec != nil {
+		delete(m.providerPaths, entry.spec.absoluteProviderPath)
+	}
+	m.mu.Unlock()
+	return err
 }
 
 // Native Host implementation.
