@@ -279,7 +279,6 @@ Remaining world parity:
 - World listing, dimensions, loaded-only block reads, and block-entity NBT.
 - Memory/flat/provider/generator specs and portal routing.
 - Player evacuation and transfer between worlds.
-- Typed sounds and particles.
 - World load/unload events and plugin access policy.
 - Rust-defined providers and generators through capability adapters.
 
@@ -496,6 +495,8 @@ Entity spawn returns a handle synchronously, so it currently requires the target
 `World::entities()` mirrors `Tx.Entities()`. `World::players()` provides stable player identities. `Tx.Viewers(position)` cannot honestly map to players: `world.Viewer` is an opaque output interface with no identity. Viewer identity support therefore needs an upstream Dragonfly capability API; returning fake player handles would be incorrect.
 
 Projectile factories preserve Dragonfly owner resolution and built-in behavior. Current Dragonfly has no global projectile-impact callback: its per-config `Hit` callback is post-effect, non-cancellable, and misses surviving arrow/block collisions. A global cancellable projectile-hit event requires an upstream pre-impact hook. Reimplementing private potion, pearl, bottle, and arrow behavior in this project is rejected because it would drift from raw Dragonfly.
+
+Dragonfly v0.11 also has no generic living-entity hurt or death handler. `world.Handler` exposes entity spawn/despawn only, and despawn is not death: it also covers manual removal, transfer, expiry, and unload and carries no damage source. Each `entity.Living` implementation owns `Hurt` and its death transition. The runtime therefore does not synthesize global entity hurt/death events from attack or despawn callbacks. Player hurt/death remain exact through `player.Handler`; future framework-owned custom living proxies will emit their own exact pre-damage and death callbacks. Covering arbitrary third-party living implementations requires a generic Dragonfly hook upstream.
 
 `Event::PlayerAttackEntity` is bridged at Dragonfly's native pre-damage handler. It exposes attacker, stable target entity, cancellable default-allowed state, knockback force/height, and critical flag. Cancellation remains monotonic across plugins.
 

@@ -68,6 +68,8 @@ if let Some(world) = World::overworld() {
 
 `World::entities()` and `World::players()` resolve within the current transaction. `Entity` exposes its managed world, type, position, rotation, optional velocity/name tag, teleport, velocity/name-tag mutation, and despawn. Dragonfly v0.11 has no exported generic rotation setter, so rotation mutation is deliberately absent rather than implemented with reflection. Projectiles use typed owner handles (`Arrow`, `Snowball`, `Egg`, `EnderPearl`, bottles, and potions). Dragonfly has no global pre-impact projectile hook; a correct cancellable projectile-hit event needs an upstream hook and is not faked by rebuilding private projectile behaviour.
 
+Dragonfly v0.11 has no generic living-entity hurt/death handler either. Player hurt/death events are exact; framework-owned custom living entities will emit exact callbacks from their own implementation. Despawn is never treated as death.
+
 Synchronous entity spawning inside a callback must target that callback's current world. Cross-world spawning will return an asynchronous handle task when the task API lands; off-callback code may already spawn in any managed world.
 
 Particles mirror Dragonfly's concrete types rather than inventing string identifiers:
