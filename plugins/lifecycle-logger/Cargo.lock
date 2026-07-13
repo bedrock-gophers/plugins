@@ -5,17 +5,18 @@ version = 4
 [[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=9c84f9d5f98bfd769166da1d4e6a3a0ca298f080#9c84f9d5f98bfd769166da1d4e6a3a0ca298f080"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=45c5cf632ad123280660e0e6aa8bfe96aaf03308#45c5cf632ad123280660e0e6aa8bfe96aaf03308"
 dependencies = [
  "dragonfly-plugin-macros",
  "dragonfly-plugin-sys",
+ "linkme",
  "serde_json",
 ]
 
 [[package]]
 name = "dragonfly-plugin-macros"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=9c84f9d5f98bfd769166da1d4e6a3a0ca298f080#9c84f9d5f98bfd769166da1d4e6a3a0ca298f080"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=45c5cf632ad123280660e0e6aa8bfe96aaf03308#45c5cf632ad123280660e0e6aa8bfe96aaf03308"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -25,7 +26,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=9c84f9d5f98bfd769166da1d4e6a3a0ca298f080#9c84f9d5f98bfd769166da1d4e6a3a0ca298f080"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=45c5cf632ad123280660e0e6aa8bfe96aaf03308#45c5cf632ad123280660e0e6aa8bfe96aaf03308"
 
 [[package]]
 name = "itoa"
@@ -38,6 +39,26 @@ name = "lifecycle-logger"
 version = "0.1.0"
 dependencies = [
  "dragonfly-plugin",
+]
+
+[[package]]
+name = "linkme"
+version = "0.3.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e83272d46373fb8decca684579ac3e7c8f3d71d4cc3aa693df8759e260ae41cf"
+dependencies = [
+ "linkme-impl",
+]
+
+[[package]]
+name = "linkme-impl"
+version = "0.3.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32d59e20403c7d08fe62b4376edfe5c7fb2ef1e6b1465379686d0f21c8df444b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
