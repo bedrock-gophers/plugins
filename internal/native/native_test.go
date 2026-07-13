@@ -754,7 +754,9 @@ func TestPlayerIdentityHostCalls(t *testing.T) {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
 		}
 	}
-	if !slices.Equal(host.kinds, []PlayerTextKind{PlayerTextNameTag}) || !slices.Equal(host.texts, []string{"Rust Player"}) {
+	wantKinds := []PlayerTextKind{PlayerTextNameTag, PlayerTextMessage, PlayerTextMessage, PlayerTextMessage, PlayerTextMessage}
+	wantTexts := []string{"Rust Player", "Name tag set.", "Scale: 1.5", "Invisible: true", "Immobile: true"}
+	if !slices.Equal(host.kinds, wantKinds) || !slices.Equal(host.texts, wantTexts) {
 		t.Fatalf("text kinds=%v values=%v", host.kinds, host.texts)
 	}
 	want := []PlayerStateKind{PlayerStateScale, PlayerStateInvisible, PlayerStateImmobile}
@@ -794,8 +796,8 @@ func TestPlayerSoundAndDisconnectHostCalls(t *testing.T) {
 	if len(host.playerSounds) != 1 || host.playerSounds[0].Kind != SoundLevelUp {
 		t.Fatalf("sounds=%+v", host.playerSounds)
 	}
-	wantKinds := []PlayerTextKind{PlayerTextDisconnect, PlayerTextKick}
-	wantTexts := []string{"Disconnected by Rust plugin.", "Kicked by Rust plugin."}
+	wantKinds := []PlayerTextKind{PlayerTextMessage, PlayerTextDisconnect, PlayerTextKick}
+	wantTexts := []string{"Played level-up sound.", "Disconnected by Rust plugin.", "Kicked by Rust plugin."}
 	if !slices.Equal(host.kinds, wantKinds) || !slices.Equal(host.texts, wantTexts) {
 		t.Fatalf("kinds=%v texts=%v", host.kinds, host.texts)
 	}
@@ -1374,7 +1376,16 @@ func commandNamed(t *testing.T, commands []Command, name string) Command {
 }
 
 func TestPingCommandUsesPlayerLatency(t *testing.T) {
-	runtime := openTestRuntime(t)
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
 	commands, err := runtime.Commands()
 	if err != nil {
 		t.Fatal(err)
@@ -1384,6 +1395,7 @@ func TestPingCommandUsesPlayerLatency(t *testing.T) {
 	id.UUID[0] = 1
 	input := CommandInput{
 		Source:       "Danick",
+		SourceKind:   CommandSourcePlayer,
 		SourcePlayer: &id,
 		OnlinePlayers: []CommandPlayer{{
 			Player:              id,
@@ -1395,8 +1407,11 @@ func TestPingCommandUsesPlayerLatency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Failed || output.Message != "Danick's ping: 37ms" {
+	if output.Failed || output.Message != "" {
 		t.Fatalf("output = %#v", output)
+	}
+	if host.player != id || !slices.Equal(host.kinds, []PlayerTextKind{PlayerTextMessage}) || !slices.Equal(host.texts, []string{"Danick's ping: 37ms"}) {
+		t.Fatalf("host calls = player %+v kinds %v texts %q", host.player, host.kinds, host.texts)
 	}
 }
 
