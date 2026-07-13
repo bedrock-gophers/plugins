@@ -12,7 +12,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=910794e052e262474bd8136bd827d0998987a8a2#910794e052e262474bd8136bd827d0998987a8a2"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=17be9955dedf342d158287b210c377a7a0a96f24#17be9955dedf342d158287b210c377a7a0a96f24"
 dependencies = [
  "dragonfly-plugin-macros",
  "dragonfly-plugin-sys",
@@ -23,7 +23,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-macros"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=910794e052e262474bd8136bd827d0998987a8a2#910794e052e262474bd8136bd827d0998987a8a2"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=17be9955dedf342d158287b210c377a7a0a96f24#17be9955dedf342d158287b210c377a7a0a96f24"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -33,7 +33,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=910794e052e262474bd8136bd827d0998987a8a2#910794e052e262474bd8136bd827d0998987a8a2"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=17be9955dedf342d158287b210c377a7a0a96f24#17be9955dedf342d158287b210c377a7a0a96f24"
 
 [[package]]
 name = "itoa"

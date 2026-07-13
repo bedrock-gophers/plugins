@@ -6,6 +6,36 @@ use dragonfly::{Context, Player, Plugin, Vec3, World, block, entity, item, plugi
 struct Marker;
 
 #[derive(Default)]
+struct TrainingDummy {
+    hits: i64,
+}
+
+#[dragonfly::entity(network = "minecraft:iron_golem", width = 1.4, height = 2.7)]
+impl entity::Living for TrainingDummy {
+    const INITIAL_HEALTH: f64 = 40.0;
+    const MAX_HEALTH: f64 = 40.0;
+    const STATE_VERSION: u32 = 1;
+
+    fn load(state: &entity::SavedState<'_>) -> Self {
+        Self {
+            hits: state.i64("hits").unwrap_or_default(),
+        }
+    }
+
+    fn save(&self, state: &mut entity::SavedStateMut) {
+        state.set("hits", self.hits);
+    }
+
+    fn hurt(&mut self, event: &mut entity::Hurt<'_>) {
+        self.hits += 1;
+        event.set_damage(event.damage().min(5.0));
+        event
+            .entity()
+            .set_name_tag(&format!("Training dummy — {} hits", self.hits));
+    }
+}
+
+#[derive(Default)]
 struct EntityCommand;
 
 #[plugin]
@@ -14,7 +44,7 @@ impl Plugin for EntityCommand {
     #[command]
     fn root(&self, context: &mut Context<'_, Player>) {
         context.source().message(
-            "Use /entity text, /entity marker, /entity lightning, /entity tnt, /entity snowball, /entity sword, /entity sand, or /entity list.",
+            "Use /entity text, /entity marker, /entity dummy, /entity lightning, /entity tnt, /entity snowball, /entity sword, /entity sand, or /entity list.",
         );
     }
 
@@ -26,6 +56,11 @@ impl Plugin for EntityCommand {
     #[subcommand("marker")]
     fn marker(&self, context: &mut Context<'_, Player>) {
         self.spawn(context, Marker);
+    }
+
+    #[subcommand("dummy")]
+    fn dummy(&self, context: &mut Context<'_, Player>) {
+        self.spawn(context, TrainingDummy::default());
     }
 
     #[subcommand("lightning")]
@@ -68,10 +103,7 @@ impl Plugin for EntityCommand {
 
     #[subcommand("sand")]
     fn sand(&self, context: &mut Context<'_, Player>) {
-        self.spawn(
-            context,
-            entity::FallingBlock::new(block::new("minecraft:sand")),
-        );
+        self.spawn(context, entity::FallingBlock::new(block::Sand));
     }
 
     #[subcommand("list")]

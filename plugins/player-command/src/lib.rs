@@ -111,8 +111,10 @@ impl Plugin for PlayerCommand {
 
     #[subcommand("hurt-block")]
     fn hurt_block(&self, context: &mut Context<'_, Player>, amount: f64) {
-        let cactus = block::new("minecraft:cactus").with_property("age", 4i32);
-        let result = context.source().hurt(amount, damage::Block::new(cactus));
+        let result = context.source().hurt(
+            amount,
+            damage::Block::new(block::Cactus::new(block::CactusAge::Value4)),
+        );
         context.reply(&format!("Damage: {}", result.0));
     }
 

@@ -38,17 +38,14 @@ impl Plugin for ParticleCommand {
 
     #[subcommand("block-break")]
     fn block_break(&self, context: &mut Context<'_, Player>) {
-        self.add(
-            context,
-            particle::BlockBreak::new(block::new("minecraft:diamond_block")),
-        );
+        self.add(context, particle::BlockBreak::new(block::DiamondBlock));
     }
 
     #[subcommand("punch-block")]
     fn punch_block(&self, context: &mut Context<'_, Player>) {
         self.add(
             context,
-            particle::PunchBlock::new(block::new("minecraft:grass_block"), BlockFace::Up),
+            particle::PunchBlock::new(block::GrassBlock, BlockFace::Up),
         );
     }
 

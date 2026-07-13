@@ -28,11 +28,7 @@ impl Plugin for SoundCommand {
         self.play(
             context,
             sound::DoorOpen::new(
-                block::new("minecraft:wooden_door")
-                    .with_property("minecraft:cardinal_direction", "north")
-                    .with_property("door_hinge_bit", false)
-                    .with_property("open_bit", false)
-                    .with_property("upper_block_bit", false),
+                block::WoodenDoor::new().with_cardinal_direction(block::CardinalDirection::North),
             ),
         );
     }
