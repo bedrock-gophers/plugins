@@ -1,11 +1,15 @@
 package host
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/player"
+	"github.com/df-mc/dragonfly/server/world"
+	"github.com/go-gl/mathgl/mgl64"
+	"github.com/google/uuid"
 )
 
 func TestPlayersInventoryItemRoundTrip(t *testing.T) {
@@ -106,4 +110,97 @@ func TestPlayersRejectInvalidNativeItems(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestPlayersSetInventoryItemRejectsInvalidSlots(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		playerID := players.Register(player, 11)
+		invocation, leave := players.BeginInvocation(player.Tx())
+		defer leave()
+
+		tests := []struct {
+			name        string
+			inventory   native.InventoryID
+			validSlot   uint32
+			invalidSlot uint32
+			stack       native.ItemStack
+		}{
+			{
+				name:        "main",
+				inventory:   native.InventoryID{Player: playerID, Kind: native.InventoryMain},
+				validSlot:   35,
+				invalidSlot: 36,
+				stack:       native.ItemStack{Identifier: "minecraft:apple", Count: 1},
+			},
+			{
+				name:        "armour",
+				inventory:   native.InventoryID{Player: playerID, Kind: native.InventoryArmour},
+				validSlot:   3,
+				invalidSlot: 4,
+				stack:       native.ItemStack{Identifier: "minecraft:diamond_boots", Count: 1},
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				if players.SetInventoryItem(invocation, test.inventory, test.invalidSlot, test.stack) {
+					t.Fatalf("invalid slot %d accepted", test.invalidSlot)
+				}
+				if !players.SetInventoryItem(invocation, test.inventory, test.validSlot, test.stack) {
+					t.Fatalf("valid slot %d rejected", test.validSlot)
+				}
+				got, ok := players.InventoryItem(invocation, test.inventory, test.validSlot)
+				if !ok || got.Identifier != test.stack.Identifier || got.Count != test.stack.Count {
+					t.Fatalf("valid set did not persist: got=%#v ok=%v", got, ok)
+				}
+			})
+		}
+	})
+}
+
+func TestPlayersSetInventoryItemSchedulesAcrossWorldInvocation(t *testing.T) {
+	source := world.Config{Synchronous: true}.New()
+	destination := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() {
+		_ = source.Close()
+		_ = destination.Close()
+	})
+	players := NewPlayers()
+	spawn := func(id uuid.UUID, name string) *world.EntityHandle {
+		position := mgl64.Vec3{1, 64, 1}
+		return world.EntitySpawnOpts{ID: id, Position: position}.New(
+			player.Type,
+			player.Config{UUID: id, Name: name, Position: position},
+		)
+	}
+	sourceHandle := spawn(uuid.MustParse("ac1c3bc0-5f73-4561-93ec-f12d42f4ca41"), "Source")
+	destinationHandle := spawn(uuid.MustParse("9743d9ae-bf63-47c3-9f38-9661d0313d03"), "Destination")
+	var destinationID native.PlayerID
+	if err := destination.Do(func(tx *world.Tx) {
+		destinationID = players.Register(tx.AddEntity(destinationHandle).(*player.Player), 52)
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := source.Do(func(tx *world.Tx) {
+		connected := tx.AddEntity(sourceHandle).(*player.Player)
+		players.Register(connected, 51)
+		invocation, leave := players.BeginInvocation(tx)
+		defer leave()
+		accepted := players.SetInventoryItem(invocation, native.InventoryID{
+			Player: destinationID,
+			Kind:   native.InventoryMain,
+		}, 0, native.ItemStack{Identifier: "minecraft:apple", Count: 1})
+		if !accepted {
+			t.Fatal("cross-world inventory write was not scheduled")
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := players.InventoryItem(0, native.InventoryID{
+		Player: destinationID,
+		Kind:   native.InventoryMain,
+	}, 0)
+	if !ok || got.Identifier != "minecraft:apple" || got.Count != 1 {
+		t.Fatalf("scheduled item = %#v, %v", got, ok)
+	}
 }

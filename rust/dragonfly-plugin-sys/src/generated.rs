@@ -915,6 +915,21 @@ pub struct DfPlayerChangeWorldState {
     pub _reserved: u8,
 }
 
+pub const DF_EVENT_PLAYER_RESPAWN: DfEventId = 33;
+pub const DF_SUBSCRIPTION_PLAYER_RESPAWN: u64 = 1u64 << 32;
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerRespawnInput {
+    pub invocation: DfInvocationId,
+    pub player: DfPlayerId,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfPlayerRespawnState {
+    pub position: DfVec3,
+    pub world: DfWorldId,
+}
+
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
 pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;

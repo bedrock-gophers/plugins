@@ -72,7 +72,7 @@ func (p *Players) SetInventoryItem(invocation native.InvocationID, id native.Inv
 	if !ok {
 		return false
 	}
-	if id.Kind == native.InventoryOffhand && slot != 0 {
+	if !validInventorySlot(id.Kind, slot) {
 		return false
 	}
 	return p.mutatePlayer(invocation, id.Player, func(connected *player.Player) {
@@ -81,10 +81,22 @@ func (p *Players) SetInventoryItem(invocation native.InvocationID, id native.Inv
 			connected.SetHeldItems(main, stack)
 			return
 		}
-		if inv, valid := playerInventory(connected, id.Kind); valid {
-			_ = inv.SetItem(int(slot), stack)
-		}
+		inv, _ := playerInventory(connected, id.Kind)
+		_ = inv.SetItem(int(slot), stack)
 	})
+}
+
+func validInventorySlot(kind native.InventoryKind, slot uint32) bool {
+	switch kind {
+	case native.InventoryMain:
+		return slot < 36
+	case native.InventoryArmour:
+		return slot < 4
+	case native.InventoryOffhand:
+		return slot == 0
+	default:
+		return false
+	}
 }
 
 func (p *Players) AddInventoryItem(invocation native.InvocationID, id native.InventoryID, value native.ItemStack) (uint32, bool) {

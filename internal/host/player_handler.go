@@ -48,10 +48,12 @@ type playerRuntime interface {
 	HandlePlayerAttackEntity(native.InvocationID, native.PlayerAttackEntityInput, float64, float64, bool, bool) (native.PlayerAttackEntityOutput, error)
 	HandlePlayerItemUseOnEntity(native.InvocationID, native.PlayerItemUseOnEntityInput, bool) (bool, error)
 	HandlePlayerChangeWorld(native.InvocationID, native.PlayerChangeWorldInput) error
+	HandlePlayerRespawn(native.InvocationID, native.PlayerRespawnInput, native.Vec3, native.WorldID) (native.PlayerRespawnOutput, error)
 }
 
 type playerWorldResolver interface {
 	WorldHandle(*world.World) (native.WorldID, bool)
+	WorldByHandle(native.WorldID) (*world.World, bool)
 }
 
 func (h *PlayerHandler) HandleJump(p *player.Player) {
@@ -196,6 +198,36 @@ func (h *PlayerHandler) HandleChangeWorld(p *player.Player, before, after *world
 	if err := h.runtime.HandlePlayerChangeWorld(invocation, input); err != nil {
 		h.log.Error("native plugin change-world handler failed", "player", p.Name(), "error", err)
 	}
+}
+
+func (h *PlayerHandler) HandleRespawn(p *player.Player, position *mgl64.Vec3, destination **world.World) {
+	if h.runtime.Subscriptions()&native.PlayerRespawnSubscription == 0 || h.worlds == nil || position == nil || destination == nil || *destination == nil {
+		return
+	}
+	destinationID, ok := h.worlds.WorldHandle(*destination)
+	if !ok {
+		return
+	}
+	invocation, leave := h.players.BeginInvocation(p.Tx())
+	defer leave()
+	output, err := h.runtime.HandlePlayerRespawn(invocation, native.PlayerRespawnInput{Player: h.playerID(p)}, native.Vec3{
+		X: position.X(), Y: position.Y(), Z: position.Z(),
+	}, destinationID)
+	if err != nil {
+		h.log.Error("native plugin respawn handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	if !finite(output.Position.X, output.Position.Y, output.Position.Z) {
+		h.log.Error("native plugin respawn handler returned an invalid position", "player", p.Name())
+		return
+	}
+	returnedWorld, ok := h.worlds.WorldByHandle(output.World)
+	if !ok {
+		h.log.Error("native plugin respawn handler returned an unknown world", "player", p.Name(), "world", output.World)
+		return
+	}
+	*position = mgl64.Vec3{output.Position.X, output.Position.Y, output.Position.Z}
+	*destination = returnedWorld
 }
 
 func (h *PlayerHandler) HandleAttackEntity(ctx *player.Context, target world.Entity, force, height *float64, critical *bool) {

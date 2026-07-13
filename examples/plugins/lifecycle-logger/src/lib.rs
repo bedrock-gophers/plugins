@@ -1,4 +1,4 @@
-use dragonfly::{Enchantment, Event, Plugin, Title, Value, plugin};
+use dragonfly::{Enchantment, Event, Plugin, Title, Value, World, plugin};
 
 #[derive(Default)]
 struct LifecycleLogger;
@@ -173,5 +173,22 @@ impl Plugin for LifecycleLogger {
             event.before(),
             event.after()
         );
+    }
+
+    fn on_respawn(&self, event: &mut Event::PlayerRespawn<'_>) {
+        eprintln!(
+            "player {:?} will respawn at {:?} in {:?}",
+            event.player().id(),
+            event.position(),
+            event.world()
+        );
+        let mut position = event.position();
+        if position.y < 0.0 {
+            position.y = 64.0;
+            event.set_position(position);
+            if let Some(overworld) = World::overworld() {
+                event.set_world(overworld);
+            }
+        }
     }
 }

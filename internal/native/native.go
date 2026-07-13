@@ -51,6 +51,7 @@ const (
 	PlayerAttackEntitySubscription    uint64 = 536870912
 	PlayerItemUseOnEntitySubscription uint64 = 1073741824
 	PlayerChangeWorldSubscription     uint64 = 2147483648
+	PlayerRespawnSubscription         uint64 = 4294967296
 	MaxChatReplacementBytes                  = 4096
 	MaxCommandOutputBytes                    = 4096
 	MaxCommandEnumBytes                      = 4096
@@ -253,6 +254,13 @@ type PlayerChangeWorldInput struct {
 	Player PlayerID
 	Before *WorldID
 	After  WorldID
+}
+type PlayerRespawnInput struct {
+	Player PlayerID
+}
+type PlayerRespawnOutput struct {
+	Position Vec3
+	World    WorldID
 }
 
 type Command struct {
@@ -1221,6 +1229,27 @@ func (r *Runtime) HandlePlayerChangeWorld(invocation InvocationID, input PlayerC
 		return fmt.Errorf("native change-world handler failed with status %d", int32(status))
 	}
 	return nil
+}
+
+func (r *Runtime) HandlePlayerRespawn(invocation InvocationID, input PlayerRespawnInput, position Vec3, world WorldID) (PlayerRespawnOutput, error) {
+	output := PlayerRespawnOutput{Position: position, World: world}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	var nativeInput C.DfPlayerRespawnInput
+	nativeInput.invocation = C.DfInvocationId(invocation)
+	fillPlayerID(&nativeInput.player, input.Player)
+	state := C.DfPlayerRespawnState{
+		position: C.DfVec3{x: C.double(position.X), y: C.double(position.Y), z: C.double(position.Z)},
+		world:    C.DfWorldId{value: C.uint64_t(world)},
+	}
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_RESPAWN, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("native respawn handler failed with status %d", int32(status))
+	}
+	return PlayerRespawnOutput{
+		Position: Vec3{X: float64(state.position.x), Y: float64(state.position.y), Z: float64(state.position.z)},
+		World:    WorldID(state.world.value),
+	}, nil
 }
 
 func (r *Runtime) openEventItemSnapshot(item ItemStack) (C.DfItemStackSnapshot, bool) {

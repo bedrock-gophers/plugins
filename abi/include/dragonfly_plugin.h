@@ -789,6 +789,18 @@ typedef struct {
     uint8_t _reserved;
 } DfPlayerChangeWorldState;
 
+#define DF_EVENT_PLAYER_RESPAWN 33u
+
+typedef struct {
+    DfInvocationId invocation;
+    DfPlayerId player;
+} DfPlayerRespawnInput;
+
+typedef struct {
+    DfVec3 position;
+    DfWorldId world;
+} DfPlayerRespawnState;
+
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);

@@ -84,6 +84,11 @@ mod tests {
         assert_eq!(offset_of!(DfPlayerChangeWorldInput, before), 32);
         assert_eq!(offset_of!(DfPlayerChangeWorldInput, after), 40);
         assert_eq!(size_of::<DfPlayerChangeWorldState>(), 1);
+        assert_eq!(size_of::<DfPlayerRespawnInput>(), 32);
+        assert_eq!(offset_of!(DfPlayerRespawnInput, player), 8);
+        assert_eq!(size_of::<DfPlayerRespawnState>(), 32);
+        assert_eq!(offset_of!(DfPlayerRespawnState, position), 0);
+        assert_eq!(offset_of!(DfPlayerRespawnState, world), 24);
         assert_eq!(size_of::<DfParticleViewV1>(), 40);
         assert_eq!(offset_of!(DfParticleViewV1, block), 32);
         assert_eq!(size_of::<DfSoundViewV1>(), 40);

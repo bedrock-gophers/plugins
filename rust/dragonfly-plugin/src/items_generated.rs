@@ -3,13 +3,13 @@
 pub trait Item {
     fn identifier(&self) -> &str;
 
-    fn metadata(&self) -> i32 { 0 }
+    fn metadata(&self) -> i16 { 0 }
 }
 
 impl<T: Item + ?Sized> Item for &T {
     fn identifier(&self) -> &str { (*self).identifier() }
 
-    fn metadata(&self) -> i32 { (*self).metadata() }
+    fn metadata(&self) -> i16 { (*self).metadata() }
 }
 
 pub mod item {
@@ -324,14 +324,14 @@ pub mod item {
     }
 
     #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-    pub struct Custom { identifier: std::string::String, metadata: i32 }
+    pub struct Custom { identifier: std::string::String, metadata: i16 }
 
     impl Custom {
         pub fn new(identifier: impl Into<std::string::String>) -> Self {
             Self { identifier: identifier.into(), metadata: 0 }
         }
 
-        pub fn with_metadata(mut self, metadata: i32) -> Self {
+        pub fn with_metadata(mut self, metadata: i16) -> Self {
             self.metadata = metadata;
             self
         }
@@ -340,7 +340,7 @@ pub mod item {
     impl Item for Custom {
         fn identifier(&self) -> &str { &self.identifier }
 
-        fn metadata(&self) -> i32 { self.metadata }
+        fn metadata(&self) -> i16 { self.metadata }
     }
 
     pub fn new(item: impl Item, count: u32) -> super::ItemStack {

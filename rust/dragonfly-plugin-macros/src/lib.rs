@@ -878,6 +878,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_change_world = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_change_world"),
     );
+    let handles_respawn = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_respawn"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -909,7 +912,8 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_item_drop) << 28)
         | (u64::from(handles_attack_entity) << 29)
         | (u64::from(handles_item_use_on_entity) << 30)
-        | (u64::from(handles_change_world) << 31);
+        | (u64::from(handles_change_world) << 31)
+        | (u64::from(handles_respawn) << 32);
 
     quote! {
         #[doc(hidden)]
@@ -1336,6 +1340,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let input = unsafe { &*input.cast::<sys::DfPlayerChangeWorldInput>() };
                         let event = unsafe { ::dragonfly_plugin::PlayerChangeWorldEventData::from_raw(input) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_change_world(plugin, &event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_RESPAWN => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerRespawnInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerRespawnState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerRespawnEventData::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_respawn(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

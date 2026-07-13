@@ -11,12 +11,13 @@ use dragonfly_plugin_sys::{
     DF_EVENT_PLAYER_ITEM_USE, DF_EVENT_PLAYER_ITEM_USE_ON_BLOCK,
     DF_EVENT_PLAYER_ITEM_USE_ON_ENTITY, DF_EVENT_PLAYER_JOIN, DF_EVENT_PLAYER_JUMP,
     DF_EVENT_PLAYER_LECTERN_PAGE_TURN, DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_PUNCH_AIR,
-    DF_EVENT_PLAYER_QUIT, DF_EVENT_PLAYER_SIGN_EDIT, DF_EVENT_PLAYER_SLEEP,
-    DF_EVENT_PLAYER_START_BREAK, DF_EVENT_PLAYER_TELEPORT, DF_EVENT_PLAYER_TOGGLE_SNEAK,
-    DF_EVENT_PLAYER_TOGGLE_SPRINT, DF_HOST_ABI_VERSION, DF_STATUS_ERROR, DF_STATUS_OK,
-    DF_SUBSCRIPTION_PLAYER_ATTACK_ENTITY, DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK,
-    DF_SUBSCRIPTION_PLAYER_BLOCK_PICK, DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE,
-    DF_SUBSCRIPTION_PLAYER_CHANGE_WORLD, DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_DEATH,
+    DF_EVENT_PLAYER_QUIT, DF_EVENT_PLAYER_RESPAWN, DF_EVENT_PLAYER_SIGN_EDIT,
+    DF_EVENT_PLAYER_SLEEP, DF_EVENT_PLAYER_START_BREAK, DF_EVENT_PLAYER_TELEPORT,
+    DF_EVENT_PLAYER_TOGGLE_SNEAK, DF_EVENT_PLAYER_TOGGLE_SPRINT, DF_HOST_ABI_VERSION,
+    DF_STATUS_ERROR, DF_STATUS_OK, DF_SUBSCRIPTION_PLAYER_ATTACK_ENTITY,
+    DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK, DF_SUBSCRIPTION_PLAYER_BLOCK_PICK,
+    DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE, DF_SUBSCRIPTION_PLAYER_CHANGE_WORLD,
+    DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_DEATH,
     DF_SUBSCRIPTION_PLAYER_EXPERIENCE_GAIN, DF_SUBSCRIPTION_PLAYER_FIRE_EXTINGUISH,
     DF_SUBSCRIPTION_PLAYER_FOOD_LOSS, DF_SUBSCRIPTION_PLAYER_HEAL,
     DF_SUBSCRIPTION_PLAYER_HELD_SLOT_CHANGE, DF_SUBSCRIPTION_PLAYER_HURT,
@@ -26,7 +27,7 @@ use dragonfly_plugin_sys::{
     DF_SUBSCRIPTION_PLAYER_ITEM_USE_ON_ENTITY, DF_SUBSCRIPTION_PLAYER_JOIN,
     DF_SUBSCRIPTION_PLAYER_JUMP, DF_SUBSCRIPTION_PLAYER_LECTERN_PAGE_TURN,
     DF_SUBSCRIPTION_PLAYER_MOVE, DF_SUBSCRIPTION_PLAYER_PUNCH_AIR, DF_SUBSCRIPTION_PLAYER_QUIT,
-    DF_SUBSCRIPTION_PLAYER_SIGN_EDIT, DF_SUBSCRIPTION_PLAYER_SLEEP,
+    DF_SUBSCRIPTION_PLAYER_RESPAWN, DF_SUBSCRIPTION_PLAYER_SIGN_EDIT, DF_SUBSCRIPTION_PLAYER_SLEEP,
     DF_SUBSCRIPTION_PLAYER_START_BREAK, DF_SUBSCRIPTION_PLAYER_TELEPORT,
     DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK, DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT, DfCommandDescriptor,
     DfCommandInput, DfCommandState, DfHostApiV10, DfItemStackSnapshot, DfPlayerAttackEntityInput,
@@ -44,11 +45,12 @@ use dragonfly_plugin_sys::{
     DfPlayerItemUseOnEntityState, DfPlayerItemUseState, DfPlayerJoinInput, DfPlayerJoinState,
     DfPlayerJumpInput, DfPlayerJumpState, DfPlayerLecternPageTurnInput,
     DfPlayerLecternPageTurnState, DfPlayerMoveInput, DfPlayerMoveState, DfPlayerPunchAirInput,
-    DfPlayerPunchAirState, DfPlayerQuitInput, DfPlayerQuitState, DfPlayerSignEditInput,
-    DfPlayerSignEditState, DfPlayerSleepInput, DfPlayerSleepState, DfPlayerStartBreakInput,
-    DfPlayerStartBreakState, DfPlayerTeleportInput, DfPlayerTeleportState,
-    DfPlayerToggleSneakInput, DfPlayerToggleSneakState, DfPlayerToggleSprintInput,
-    DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
+    DfPlayerPunchAirState, DfPlayerQuitInput, DfPlayerQuitState, DfPlayerRespawnInput,
+    DfPlayerRespawnState, DfPlayerSignEditInput, DfPlayerSignEditState, DfPlayerSleepInput,
+    DfPlayerSleepState, DfPlayerStartBreakInput, DfPlayerStartBreakState, DfPlayerTeleportInput,
+    DfPlayerTeleportState, DfPlayerToggleSneakInput, DfPlayerToggleSneakState,
+    DfPlayerToggleSprintInput, DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn,
+    DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -1280,6 +1282,38 @@ impl DfRuntime {
         }
         DF_STATUS_OK
     }
+
+    fn handle_respawn(
+        &self,
+        input: &DfPlayerRespawnInput,
+        state: &mut DfPlayerRespawnState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_RESPAWN == 0
+            {
+                continue;
+            }
+            if !valid_respawn(input, state) {
+                return DF_STATUS_ERROR;
+            }
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_RESPAWN,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if status != DF_STATUS_OK || !valid_respawn(input, state) {
+                return DF_STATUS_ERROR;
+            }
+        }
+        DF_STATUS_OK
+    }
 }
 
 impl Drop for DfRuntime {
@@ -1292,6 +1326,14 @@ fn valid_change_world_input(input: &DfPlayerChangeWorldInput) -> bool {
     input.player.generation != 0
         && input.after.value != 0
         && (input.before.value == 0 || input.before.value != input.after.value)
+}
+
+fn valid_respawn(input: &DfPlayerRespawnInput, state: &DfPlayerRespawnState) -> bool {
+    input.player.generation != 0
+        && state.position.x.is_finite()
+        && state.position.y.is_finite()
+        && state.position.z.is_finite()
+        && state.world.value != 0
 }
 
 fn valid_chat_state(state: &DfPlayerChatState) -> bool {
@@ -2042,6 +2084,27 @@ pub unsafe extern "C" fn df_runtime_handle_event(
                 DF_STATUS_ERROR
             }
         }
+        DF_EVENT_PLAYER_RESPAWN => {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.cast::<DfPlayerRespawnInput>().as_ref() },
+                unsafe { state.cast::<DfPlayerRespawnState>().as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            if !valid_respawn(input, state) {
+                return DF_STATUS_ERROR;
+            }
+            let status = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime.handle_respawn(input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR);
+            if status == DF_STATUS_OK && valid_respawn(input, state) {
+                DF_STATUS_OK
+            } else {
+                DF_STATUS_ERROR
+            }
+        }
         _ => DF_STATUS_ERROR,
     }
 }
@@ -2636,6 +2699,55 @@ mod tests {
 
         input.after.value = 1;
         state._reserved = 1;
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
+    }
+
+    #[test]
+    fn generic_dispatch_validates_respawn_state() {
+        let mut runtime = DfRuntime {
+            plugins: Vec::new(),
+            commands: Vec::new(),
+            subscriptions: 0,
+        };
+        let mut input = DfPlayerRespawnInput {
+            player: dragonfly_plugin_sys::DfPlayerId {
+                generation: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut state = DfPlayerRespawnState {
+            position: dragonfly_plugin_sys::DfVec3 {
+                x: 1.0,
+                y: 64.0,
+                z: 2.0,
+            },
+            world: dragonfly_plugin_sys::DfWorldId { value: 1 },
+        };
+        let mut dispatch = |input: &DfPlayerRespawnInput, state: &mut DfPlayerRespawnState| unsafe {
+            df_runtime_handle_event(
+                ptr::from_mut(&mut runtime),
+                DF_EVENT_PLAYER_RESPAWN,
+                ptr::from_ref(input).cast(),
+                ptr::from_mut(state).cast(),
+            )
+        };
+
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_OK);
+
+        input.player.generation = 0;
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
+        input.player.generation = 1;
+
+        state.position.x = f64::NAN;
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
+        state.position.x = 1.0;
+
+        state.position.y = f64::INFINITY;
+        assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
+        state.position.y = 64.0;
+
+        state.world.value = 0;
         assert_eq!(dispatch(&input, &mut state), DF_STATUS_ERROR);
     }
 }

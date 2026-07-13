@@ -245,3 +245,10 @@ events:
       - { name: before, type: world_id }
       - { name: after, type: world_id }
     state: []
+  - name: respawn
+    id: 33
+    input:
+      - { name: player, type: player_id }
+    state:
+      - { name: position, type: vec3 }
+      - { name: world, type: world_id }

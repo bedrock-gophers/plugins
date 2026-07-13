@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +45,9 @@ type runtimeStub struct {
 	changeWorldInput    native.PlayerChangeWorldInput
 	changeWorldTx       *world.World
 	changeWorldCalls    int
+	respawnInput        native.PlayerRespawnInput
+	respawnOutput       native.PlayerRespawnOutput
+	respawnTx           *world.World
 	players             *Players
 }
 
@@ -168,6 +172,19 @@ func (r *runtimeStub) HandlePlayerChangeWorld(invocation native.InvocationID, in
 	return nil
 }
 
+func (r *runtimeStub) HandlePlayerRespawn(invocation native.InvocationID, input native.PlayerRespawnInput, position native.Vec3, worldID native.WorldID) (native.PlayerRespawnOutput, error) {
+	r.respawnInput = input
+	if r.players != nil {
+		if tx, ok := r.players.InvocationTx(invocation); ok {
+			r.respawnTx = tx.World()
+		}
+	}
+	if r.respawnOutput == (native.PlayerRespawnOutput{}) {
+		return native.PlayerRespawnOutput{Position: position, World: worldID}, nil
+	}
+	return r.respawnOutput, nil
+}
+
 func TestPlayerHandlerChangeWorldFiresOnFirstDestinationTick(t *testing.T) {
 	before := world.Config{Synchronous: true}.New()
 	after := world.Config{Synchronous: true}.New()
@@ -232,6 +249,107 @@ type worldResolverStub map[*world.World]native.WorldID
 func (r worldResolverStub) WorldHandle(w *world.World) (native.WorldID, bool) {
 	id, ok := r[w]
 	return id, ok
+}
+
+func (r worldResolverStub) WorldByHandle(id native.WorldID) (*world.World, bool) {
+	for w, candidate := range r {
+		if candidate == id {
+			return w, true
+		}
+	}
+	return nil, false
+}
+
+func TestPlayerHandlerRespawnMutatesPositionAndWorld(t *testing.T) {
+	destination := world.Config{Synchronous: true}.New()
+	redirected := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() {
+		_ = destination.Close()
+		_ = redirected.Close()
+	})
+	withPlayerTx(t, func(tx *world.Tx, p *player.Player) {
+		players := NewPlayers()
+		players.Register(p, 41)
+		runtime := &runtimeStub{
+			subscriptions: native.PlayerRespawnSubscription,
+			players:       players,
+			respawnOutput: native.PlayerRespawnOutput{
+				Position: native.Vec3{X: 10, Y: 72, Z: -4},
+				World:    13,
+			},
+		}
+		handler := NewPlayerHandler(runtime, nil, players, worldResolverStub{destination: 12, redirected: 13})
+		position := mgl64.Vec3{1, 64, 2}
+		chosenWorld := destination
+
+		handler.HandleRespawn(p, &position, &chosenWorld)
+
+		if runtime.respawnInput.Player.Generation != 41 {
+			t.Fatalf("unexpected respawn input: %#v", runtime.respawnInput)
+		}
+		if runtime.respawnTx != tx.World() {
+			t.Fatal("respawn invocation did not use the player's source transaction")
+		}
+		if position != (mgl64.Vec3{10, 72, -4}) {
+			t.Fatalf("unexpected respawn position: %v", position)
+		}
+		if chosenWorld != redirected {
+			t.Fatal("respawn world was not redirected")
+		}
+	})
+}
+
+func TestPlayerHandlerRespawnRejectsUnknownWorldHandle(t *testing.T) {
+	destination := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() { _ = destination.Close() })
+	withPlayerTx(t, func(_ *world.Tx, p *player.Player) {
+		players := NewPlayers()
+		players.Register(p, 42)
+		runtime := &runtimeStub{
+			subscriptions: native.PlayerRespawnSubscription,
+			respawnOutput: native.PlayerRespawnOutput{
+				Position: native.Vec3{X: 10, Y: 72, Z: -4},
+				World:    999,
+			},
+		}
+		handler := NewPlayerHandler(runtime, nil, players, worldResolverStub{destination: 12})
+		position := mgl64.Vec3{1, 64, 2}
+		chosenWorld := destination
+
+		handler.HandleRespawn(p, &position, &chosenWorld)
+
+		if position != (mgl64.Vec3{1, 64, 2}) {
+			t.Fatalf("invalid world changed respawn position: %v", position)
+		}
+		if chosenWorld != destination {
+			t.Fatal("invalid world changed respawn destination")
+		}
+	})
+}
+
+func TestPlayerHandlerRespawnRejectsNonFinitePosition(t *testing.T) {
+	destination := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() { _ = destination.Close() })
+	withPlayerTx(t, func(_ *world.Tx, p *player.Player) {
+		players := NewPlayers()
+		players.Register(p, 43)
+		runtime := &runtimeStub{
+			subscriptions: native.PlayerRespawnSubscription,
+			respawnOutput: native.PlayerRespawnOutput{
+				Position: native.Vec3{X: math.NaN(), Y: 72, Z: -4},
+				World:    12,
+			},
+		}
+		handler := NewPlayerHandler(runtime, nil, players, worldResolverStub{destination: 12})
+		position := mgl64.Vec3{1, 64, 2}
+		chosenWorld := destination
+
+		handler.HandleRespawn(p, &position, &chosenWorld)
+
+		if position != (mgl64.Vec3{1, 64, 2}) || chosenWorld != destination {
+			t.Fatal("invalid position changed respawn state")
+		}
+	})
 }
 
 func (r *runtimeStub) Subscriptions() uint64 { return r.subscriptions }

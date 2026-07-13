@@ -227,6 +227,15 @@ func (m *WorldManager) WorldHandle(w *world.World) (native.WorldID, bool) {
 	return m.handleByWorld(w)
 }
 
+// WorldByHandle resolves a stable native handle to a live managed Dragonfly world.
+func (m *WorldManager) WorldByHandle(id native.WorldID) (*world.World, bool) {
+	entry, ok := m.entryByHandle(id)
+	if !ok {
+		return nil, false
+	}
+	return entry.world, true
+}
+
 func liveWorld(entry *managedWorld, ok bool) (*managedWorld, bool) {
 	if !ok || entry.unloading {
 		return nil, false

@@ -52,6 +52,7 @@ pub mod Event {
     pub use super::PlayerMoveEventData as PlayerMove;
     pub use super::PlayerPunchAirEventData as PlayerPunchAir;
     pub use super::PlayerQuitEventData as PlayerQuit;
+    pub use super::PlayerRespawnEventData as PlayerRespawn;
     pub use super::PlayerSignEditEventData as PlayerSignEdit;
     pub use super::PlayerSleepEventData as PlayerSleep;
     pub use super::PlayerStartBreakEventData as PlayerStartBreak;
@@ -263,7 +264,7 @@ impl AppliedEnchantment {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemStack {
     identifier: String,
-    metadata: i32,
+    metadata: i16,
     count: u32,
     damage: u32,
     unbreakable: bool,
@@ -303,21 +304,21 @@ impl ItemStack {
 
     pub fn potion(potion: Potion, count: u32) -> Self {
         Self::new(
-            item::Custom::new("minecraft:potion").with_metadata(i32::from(potion.id())),
+            item::Custom::new("minecraft:potion").with_metadata(i16::from(potion.id())),
             count,
         )
     }
 
     pub fn splash_potion(potion: Potion, count: u32) -> Self {
         Self::new(
-            item::Custom::new("minecraft:splash_potion").with_metadata(i32::from(potion.id())),
+            item::Custom::new("minecraft:splash_potion").with_metadata(i16::from(potion.id())),
             count,
         )
     }
 
     pub fn lingering_potion(potion: Potion, count: u32) -> Self {
         Self::new(
-            item::Custom::new("minecraft:lingering_potion").with_metadata(i32::from(potion.id())),
+            item::Custom::new("minecraft:lingering_potion").with_metadata(i16::from(potion.id())),
             count,
         )
     }
@@ -326,7 +327,7 @@ impl ItemStack {
         &self.identifier
     }
 
-    pub fn metadata(&self) -> i32 {
+    pub fn metadata(&self) -> i16 {
         self.metadata
     }
 
@@ -491,7 +492,7 @@ impl ItemStack {
             .collect();
         let view = dragonfly_plugin_sys::DfItemStackViewV3 {
             identifier: string_view_from_str(&self.identifier),
-            metadata: self.metadata,
+            metadata: i32::from(self.metadata),
             count: self.count,
             damage: self.damage,
             unbreakable: u8::from(self.unbreakable),
@@ -2273,7 +2274,7 @@ fn read_item_stack_snapshot(
         .collect();
     Some(ItemStack {
         identifier: String::from_utf8(identifier).ok()?,
-        metadata: info.metadata,
+        metadata: i16::try_from(info.metadata).ok()?,
         count: info.count,
         damage: info.damage,
         unbreakable: info.unbreakable != 0,
@@ -3312,6 +3313,44 @@ impl<'a> PlayerChangeWorldEventData<'a> {
     }
 }
 
+pub struct PlayerRespawnEventData<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerRespawnInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerRespawnState,
+}
+
+impl<'a> PlayerRespawnEventData<'a> {
+    /// # Safety
+    /// Both references must belong to the same active respawn callback. The
+    /// runtime must have validated the player, position, and world handles.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerRespawnInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerRespawnState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+
+    pub fn position(&self) -> Vec3 {
+        self.state.position.into()
+    }
+
+    pub fn set_position(&mut self, position: Vec3) {
+        self.state.position = position.into();
+    }
+
+    pub fn world(&self) -> World {
+        World::from_valid_raw(self.state.world.value)
+    }
+
+    pub fn set_world(&mut self, world: World) {
+        self.state.world = world.raw_id();
+    }
+}
+
 pub trait Plugin: Default + Send + Sync + 'static {
     fn on_enable(&self) {}
     fn on_disable(&self) {}
@@ -3347,6 +3386,7 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_attack_entity(&self, _event: &mut Event::PlayerAttackEntity<'_>) {}
     fn on_item_use_on_entity(&self, _event: &mut Event::PlayerItemUseOnEntity<'_>) {}
     fn on_change_world(&self, _event: &Event::PlayerChangeWorld<'_>) {}
+    fn on_respawn(&self, _event: &mut Event::PlayerRespawn<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }
@@ -3516,6 +3556,53 @@ mod tests {
     }
 
     #[test]
+    fn respawn_exposes_mutable_position_and_world() {
+        let input = dragonfly_plugin_sys::DfPlayerRespawnInput {
+            invocation: 31,
+            player: dragonfly_plugin_sys::DfPlayerId {
+                bytes: [11; 16],
+                generation: 37,
+            },
+        };
+        let mut state = dragonfly_plugin_sys::DfPlayerRespawnState {
+            position: dragonfly_plugin_sys::DfVec3 {
+                x: 1.0,
+                y: 64.0,
+                z: 2.0,
+            },
+            world: dragonfly_plugin_sys::DfWorldId { value: 41 },
+        };
+        let mut event = unsafe { PlayerRespawnEventData::from_raw(&input, &mut state) };
+
+        assert_eq!(event.player().id().generation(), 37);
+        assert_eq!(
+            event.position(),
+            Vec3 {
+                x: 1.0,
+                y: 64.0,
+                z: 2.0
+            }
+        );
+        assert_eq!(event.world().raw_id().value, 41);
+
+        event.set_position(Vec3 {
+            x: -3.0,
+            y: 80.0,
+            z: 9.0,
+        });
+        event.set_world(World::from_valid_raw(43));
+        assert_eq!(
+            event.position(),
+            Vec3 {
+                x: -3.0,
+                y: 80.0,
+                z: 9.0
+            }
+        );
+        assert_eq!(event.world().raw_id().value, 43);
+    }
+
+    #[test]
     fn derived_command_parses_subcommands_and_enums() {
         assert_eq!(
             ModeCommand::parse("set creative").unwrap(),
@@ -3600,9 +3687,13 @@ mod tests {
         assert_eq!(diamond.identifier(), "minecraft:diamond");
         assert_eq!(diamond.metadata(), 0);
 
-        let custom = item::new(item::Custom::new("example:variant").with_metadata(12), 2);
+        let metadata: i16 = i16::MAX;
+        let custom = item::new(
+            item::Custom::new("example:variant").with_metadata(metadata),
+            2,
+        );
         assert_eq!(custom.identifier(), "example:variant");
-        assert_eq!(custom.metadata(), 12);
+        assert_eq!(custom.metadata(), metadata);
 
         let pickaxe = item::Pickaxe::new(item::ToolTier::Copper);
         assert_eq!(pickaxe.tier(), item::ToolTier::Copper);

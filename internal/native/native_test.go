@@ -1526,6 +1526,34 @@ func TestPlayerChangeWorldRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPlayerRespawnRoundTrip(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{worldID: 71, worldLookupOK: true}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.Subscriptions()&PlayerRespawnSubscription == 0 {
+		t.Fatal("respawn subscription missing")
+	}
+	player := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 41}
+	position := Vec3{X: 2, Y: -5, Z: -4}
+	output, err := runtime.HandlePlayerRespawn(73, PlayerRespawnInput{Player: player}, position, 53)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Position != (Vec3{X: 2, Y: 64, Z: -4}) || output.World != 71 {
+		t.Fatalf("respawn output = %#v", output)
+	}
+	if host.worldLookup != "minecraft:overworld" {
+		t.Fatalf("respawn world lookup = %q", host.worldLookup)
+	}
+}
+
 func TestCancellationIsMonotonic(t *testing.T) {
 	runtime := openTestRuntime(t)
 	cancelled, err := runtime.HandlePlayerMove(0, PlayerMoveInput{NewPosition: Vec3{Y: 64}}, true)

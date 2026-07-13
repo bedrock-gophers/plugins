@@ -129,7 +129,7 @@ impl Plugin for MovementGuard {
 Events continue by default. Cancellation is monotonic; no `allow()` API exists.
 Plugin identity defaults to Cargo's package name; handler code does not repeat it.
 
-Event types live only under `Event::Player*`. Damage and healing sources are typed values: hurt/death expose `damage_source()`, while heal exposes `healing_source()`. `Event::PlayerChangeWorld` is emitted after transfer on the first destination tick and exposes `before() -> Option<World>` plus `after() -> World`.
+Event types live only under `Event::Player*`. Damage and healing sources are typed values: hurt/death expose `damage_source()`, while heal exposes `healing_source()`. `Event::PlayerChangeWorld` is emitted after transfer on the first destination tick. `Event::PlayerRespawn` runs before transfer and may replace both the spawn position and managed destination world.
 
 Items are owned Rust values. Inventory handles stay attached to the generation-tagged player:
 
