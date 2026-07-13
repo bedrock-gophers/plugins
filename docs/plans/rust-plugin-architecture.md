@@ -1,6 +1,6 @@
 # Native Plugin Architecture Plan
 
-Status: Active implementation; initial managed-world/block slice complete, world sound/particle parity next
+Status: Active implementation; managed worlds, blocks, typed particles, and typed sounds complete
 
 Initial language: Rust
 
@@ -471,7 +471,7 @@ Current host actions include:
 
 Every synchronous player callback registers one invocation ID for its exact transaction. Same-world block operations use that `world.Tx` directly. Calls with no invocation are off-owner: writes enqueue through `World.Do` and reads use `world.Call`. Cross-world writes from callbacks enqueue, while cross-world synchronous block reads are rejected because reciprocal owner calls can deadlock. Save/unload are rejected from callbacks and run only off-owner. Transaction values never cross or survive the ABI; the asynchronous task API will provide callback-safe cross-world reads and lifecycle operations.
 
-The host ABI is currently v9. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+The host ABI is currently v10. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
 
 ## Entities
 
@@ -493,7 +493,7 @@ Projectile factories preserve Dragonfly owner resolution and built-in behavior. 
 
 `particle::Particle` is sealed and implemented by typed descriptors for all Dragonfly v0.11 built-ins. The flat `DfParticleViewV1` carries only the union of concrete fields: colour, block, face/area/instrument data, note pitch, and dragon-egg offset. Go reconstructs the exact `world/particle` type and calls `Tx.AddParticle`; same-world callbacks reuse their transaction and cross-world calls enqueue through `World.Do`. Dragonfly has no particle registry or identifier strings, so the SDK does not invent a second naming system.
 
-Sounds require the same typed descriptor pattern because Dragonfly serialises concrete `world/sound` types through a type switch. Parameterised sounds also carry blocks, items, instruments, discs, horns, liquids, or scalar state. The existing player-only zero-field enum remains temporary until the complete shared `sound::Sound` descriptor replaces it for both `Player::play_sound` and `World::play_sound`.
+`sound::Sound` is sealed and covers all Dragonfly v0.11 concrete sound types. Parameterised descriptors carry typed blocks, items, instruments, discs, horns, liquids, stages, or scalar state through `DfSoundViewV1`; Go reconstructs the exact `world/sound` value. `World::play_sound` calls `Tx.PlaySound`, preserving Dragonfly's cancellable world sound handler and viewer broadcast. `Player::play_sound` uses Dragonfly's private-to-player playback at the player's eye position. Both APIs share the same descriptor types.
 
 Dragonfly v0.11 does not expose `Player.StopSound`: the packet writer and player session are private. Exact stop-one/stop-all support needs an upstream public API and will not use reflection, `linkname`, or a fake `MusicDiscEnd` substitution.
 
@@ -565,6 +565,7 @@ Initial ABI foundation includes:
 - Stable entity handles, typed built-in/projectile spawning, state capabilities, and despawn.
 - Cancellable attack-entity event with stable target attribution.
 - Typed built-in world particles with block, colour, face, note, and offset parameters.
+- Typed built-in world and private-player sounds, including block, item, instrument, disc, horn, liquid, stage, and scalar parameters.
 
 Temporarily deferred from the first implementation milestone:
 

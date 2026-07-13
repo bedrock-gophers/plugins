@@ -3,7 +3,7 @@
 use core::ffi::c_void;
 
 pub const DF_ABI_VERSION: u32 = 1;
-pub const DF_HOST_ABI_VERSION: u32 = 9;
+pub const DF_HOST_ABI_VERSION: u32 = 10;
 pub const DF_STATUS_OK: DfStatus = 0;
 pub const DF_STATUS_ERROR: DfStatus = 1;
 pub type DfStatus = i32;
@@ -145,6 +145,9 @@ pub struct DfRgba { pub r: u8, pub g: u8, pub b: u8, pub a: u8 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfParticleViewV1 { pub kind: u32, pub data: u32, pub pitch: i32, pub colour: DfRgba, pub diff: DfBlockPos, pub block: *const DfBlockView }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfSoundViewV1 { pub kind: u32, pub data: u32, pub integer: i32, pub flags: u32, pub scalar: f64, pub block: *const DfBlockView, pub item: *const DfItemStackViewV3 }
 pub const DF_PLAYER_TRANSFORM_TELEPORT: u32 = 0;
 pub const DF_PLAYER_TRANSFORM_MOVE: u32 = 1;
 pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
@@ -166,7 +169,6 @@ pub const DF_PLAYER_STATE_EXPERIENCE_PROGRESS: u32 = 7;
 pub const DF_PLAYER_STATE_SCALE: u32 = 8;
 pub const DF_PLAYER_STATE_INVISIBLE: u32 = 9;
 pub const DF_PLAYER_STATE_IMMOBILE: u32 = 10;
-pub const DF_PLAYER_STATE_SOUND: u32 = 11;
 pub const DF_EFFECT_SPEED: u32 = 1;
 pub const DF_EFFECT_SLOWNESS: u32 = 2;
 pub const DF_EFFECT_HASTE: u32 = 3;
@@ -195,70 +197,93 @@ pub const DF_EFFECT_FATAL_POISON: u32 = 25;
 pub const DF_EFFECT_CONDUIT_POWER: u32 = 26;
 pub const DF_EFFECT_SLOW_FALLING: u32 = 27;
 pub const DF_EFFECT_DARKNESS: u32 = 30;
-pub const DF_SOUND_ANVIL_BREAK: u32 = 0;
-pub const DF_SOUND_ANVIL_LAND: u32 = 1;
-pub const DF_SOUND_ANVIL_USE: u32 = 2;
-pub const DF_SOUND_ARROW_HIT: u32 = 3;
-pub const DF_SOUND_BARREL_CLOSE: u32 = 4;
-pub const DF_SOUND_BARREL_OPEN: u32 = 5;
-pub const DF_SOUND_BLAST_FURNACE_CRACKLE: u32 = 6;
-pub const DF_SOUND_BOW_SHOOT: u32 = 7;
-pub const DF_SOUND_BURNING: u32 = 8;
-pub const DF_SOUND_BURP: u32 = 9;
-pub const DF_SOUND_CAMPFIRE_CRACKLE: u32 = 10;
-pub const DF_SOUND_CHEST_CLOSE: u32 = 11;
-pub const DF_SOUND_CHEST_OPEN: u32 = 12;
-pub const DF_SOUND_CLICK: u32 = 13;
-pub const DF_SOUND_COMPOSTER_EMPTY: u32 = 14;
-pub const DF_SOUND_COMPOSTER_FILL: u32 = 15;
-pub const DF_SOUND_COMPOSTER_FILL_LAYER: u32 = 16;
-pub const DF_SOUND_COMPOSTER_READY: u32 = 17;
-pub const DF_SOUND_COPPER_SCRAPED: u32 = 18;
-pub const DF_SOUND_CROSSBOW_SHOOT: u32 = 19;
-pub const DF_SOUND_DECORATED_POT_INSERT_FAILED: u32 = 20;
-pub const DF_SOUND_DENY: u32 = 21;
-pub const DF_SOUND_DOOR_CRASH: u32 = 22;
-pub const DF_SOUND_DROWNING: u32 = 23;
-pub const DF_SOUND_ENDER_CHEST_CLOSE: u32 = 24;
-pub const DF_SOUND_ENDER_CHEST_OPEN: u32 = 25;
-pub const DF_SOUND_EXPERIENCE: u32 = 26;
-pub const DF_SOUND_EXPLOSION: u32 = 27;
-pub const DF_SOUND_FIRE_CHARGE: u32 = 28;
-pub const DF_SOUND_FIRE_EXTINGUISH: u32 = 29;
-pub const DF_SOUND_FIREWORK_BLAST: u32 = 30;
-pub const DF_SOUND_FIREWORK_HUGE_BLAST: u32 = 31;
-pub const DF_SOUND_FIREWORK_LAUNCH: u32 = 32;
-pub const DF_SOUND_FIREWORK_TWINKLE: u32 = 33;
-pub const DF_SOUND_FIZZ: u32 = 34;
-pub const DF_SOUND_FURNACE_CRACKLE: u32 = 35;
-pub const DF_SOUND_GHAST_SHOOT: u32 = 36;
-pub const DF_SOUND_GHAST_WARNING: u32 = 37;
-pub const DF_SOUND_GLASS_BREAK: u32 = 38;
-pub const DF_SOUND_IGNITE: u32 = 39;
-pub const DF_SOUND_ITEM_ADD: u32 = 40;
-pub const DF_SOUND_ITEM_BREAK: u32 = 41;
-pub const DF_SOUND_ITEM_FRAME_REMOVE: u32 = 42;
-pub const DF_SOUND_ITEM_FRAME_ROTATE: u32 = 43;
-pub const DF_SOUND_ITEM_THROW: u32 = 44;
-pub const DF_SOUND_LECTERN_BOOK_PLACE: u32 = 45;
-pub const DF_SOUND_LEVEL_UP: u32 = 46;
-pub const DF_SOUND_LIGHTNING_EXPLODE: u32 = 47;
-pub const DF_SOUND_LIGHTNING_THUNDER: u32 = 48;
-pub const DF_SOUND_MUSIC_DISC_END: u32 = 49;
-pub const DF_SOUND_POP: u32 = 50;
-pub const DF_SOUND_POTION_BREWED: u32 = 51;
-pub const DF_SOUND_POWER_OFF: u32 = 52;
-pub const DF_SOUND_POWER_ON: u32 = 53;
-pub const DF_SOUND_SIGN_WAXED: u32 = 54;
-pub const DF_SOUND_SMOKER_CRACKLE: u32 = 55;
-pub const DF_SOUND_STOP_USING_SPYGLASS: u32 = 56;
-pub const DF_SOUND_TNT: u32 = 57;
-pub const DF_SOUND_TELEPORT: u32 = 58;
-pub const DF_SOUND_THUNDER: u32 = 59;
-pub const DF_SOUND_TOTEM: u32 = 60;
-pub const DF_SOUND_USE_SPYGLASS: u32 = 61;
-pub const DF_SOUND_WAX_REMOVED: u32 = 62;
-pub const DF_SOUND_WAXED_SIGN_FAILED_INTERACTION: u32 = 63;
+pub const DF_SOUND_KIND_ANVIL_BREAK: u32 = 0;
+pub const DF_SOUND_KIND_ANVIL_LAND: u32 = 1;
+pub const DF_SOUND_KIND_ANVIL_USE: u32 = 2;
+pub const DF_SOUND_KIND_ARROW_HIT: u32 = 3;
+pub const DF_SOUND_KIND_BARREL_CLOSE: u32 = 4;
+pub const DF_SOUND_KIND_BARREL_OPEN: u32 = 5;
+pub const DF_SOUND_KIND_BLAST_FURNACE_CRACKLE: u32 = 6;
+pub const DF_SOUND_KIND_BOW_SHOOT: u32 = 7;
+pub const DF_SOUND_KIND_BURNING: u32 = 8;
+pub const DF_SOUND_KIND_BURP: u32 = 9;
+pub const DF_SOUND_KIND_CAMPFIRE_CRACKLE: u32 = 10;
+pub const DF_SOUND_KIND_CHEST_CLOSE: u32 = 11;
+pub const DF_SOUND_KIND_CHEST_OPEN: u32 = 12;
+pub const DF_SOUND_KIND_CLICK: u32 = 13;
+pub const DF_SOUND_KIND_COMPOSTER_EMPTY: u32 = 14;
+pub const DF_SOUND_KIND_COMPOSTER_FILL: u32 = 15;
+pub const DF_SOUND_KIND_COMPOSTER_FILL_LAYER: u32 = 16;
+pub const DF_SOUND_KIND_COMPOSTER_READY: u32 = 17;
+pub const DF_SOUND_KIND_COPPER_SCRAPED: u32 = 18;
+pub const DF_SOUND_KIND_CROSSBOW_SHOOT: u32 = 19;
+pub const DF_SOUND_KIND_DECORATED_POT_INSERT_FAILED: u32 = 20;
+pub const DF_SOUND_KIND_DENY: u32 = 21;
+pub const DF_SOUND_KIND_DOOR_CRASH: u32 = 22;
+pub const DF_SOUND_KIND_DROWNING: u32 = 23;
+pub const DF_SOUND_KIND_ENDER_CHEST_CLOSE: u32 = 24;
+pub const DF_SOUND_KIND_ENDER_CHEST_OPEN: u32 = 25;
+pub const DF_SOUND_KIND_EXPERIENCE: u32 = 26;
+pub const DF_SOUND_KIND_EXPLOSION: u32 = 27;
+pub const DF_SOUND_KIND_FIRE_CHARGE: u32 = 28;
+pub const DF_SOUND_KIND_FIRE_EXTINGUISH: u32 = 29;
+pub const DF_SOUND_KIND_FIREWORK_BLAST: u32 = 30;
+pub const DF_SOUND_KIND_FIREWORK_HUGE_BLAST: u32 = 31;
+pub const DF_SOUND_KIND_FIREWORK_LAUNCH: u32 = 32;
+pub const DF_SOUND_KIND_FIREWORK_TWINKLE: u32 = 33;
+pub const DF_SOUND_KIND_FIZZ: u32 = 34;
+pub const DF_SOUND_KIND_FURNACE_CRACKLE: u32 = 35;
+pub const DF_SOUND_KIND_GHAST_SHOOT: u32 = 36;
+pub const DF_SOUND_KIND_GHAST_WARNING: u32 = 37;
+pub const DF_SOUND_KIND_GLASS_BREAK: u32 = 38;
+pub const DF_SOUND_KIND_IGNITE: u32 = 39;
+pub const DF_SOUND_KIND_ITEM_ADD: u32 = 40;
+pub const DF_SOUND_KIND_ITEM_BREAK: u32 = 41;
+pub const DF_SOUND_KIND_ITEM_FRAME_REMOVE: u32 = 42;
+pub const DF_SOUND_KIND_ITEM_FRAME_ROTATE: u32 = 43;
+pub const DF_SOUND_KIND_ITEM_THROW: u32 = 44;
+pub const DF_SOUND_KIND_LECTERN_BOOK_PLACE: u32 = 45;
+pub const DF_SOUND_KIND_LEVEL_UP: u32 = 46;
+pub const DF_SOUND_KIND_LIGHTNING_EXPLODE: u32 = 47;
+pub const DF_SOUND_KIND_LIGHTNING_THUNDER: u32 = 48;
+pub const DF_SOUND_KIND_MUSIC_DISC_END: u32 = 49;
+pub const DF_SOUND_KIND_POP: u32 = 50;
+pub const DF_SOUND_KIND_POTION_BREWED: u32 = 51;
+pub const DF_SOUND_KIND_POWER_OFF: u32 = 52;
+pub const DF_SOUND_KIND_POWER_ON: u32 = 53;
+pub const DF_SOUND_KIND_SIGN_WAXED: u32 = 54;
+pub const DF_SOUND_KIND_SMOKER_CRACKLE: u32 = 55;
+pub const DF_SOUND_KIND_STOP_USING_SPYGLASS: u32 = 56;
+pub const DF_SOUND_KIND_TNT: u32 = 57;
+pub const DF_SOUND_KIND_TELEPORT: u32 = 58;
+pub const DF_SOUND_KIND_THUNDER: u32 = 59;
+pub const DF_SOUND_KIND_TOTEM: u32 = 60;
+pub const DF_SOUND_KIND_USE_SPYGLASS: u32 = 61;
+pub const DF_SOUND_KIND_WAX_REMOVED: u32 = 62;
+pub const DF_SOUND_KIND_WAXED_SIGN_FAILED_INTERACTION: u32 = 63;
+pub const DF_SOUND_KIND_SHULKER_BOX_OPEN: u32 = 64;
+pub const DF_SOUND_KIND_SHULKER_BOX_CLOSE: u32 = 65;
+pub const DF_SOUND_KIND_ENDER_EYE_PLACED: u32 = 66;
+pub const DF_SOUND_KIND_END_PORTAL_CREATED: u32 = 67;
+pub const DF_SOUND_KIND_ATTACK: u32 = 68;
+pub const DF_SOUND_KIND_FALL: u32 = 69;
+pub const DF_SOUND_KIND_BLOCK_PLACE: u32 = 70;
+pub const DF_SOUND_KIND_BLOCK_BREAKING: u32 = 71;
+pub const DF_SOUND_KIND_DOOR_OPEN: u32 = 72;
+pub const DF_SOUND_KIND_DOOR_CLOSE: u32 = 73;
+pub const DF_SOUND_KIND_TRAPDOOR_OPEN: u32 = 74;
+pub const DF_SOUND_KIND_TRAPDOOR_CLOSE: u32 = 75;
+pub const DF_SOUND_KIND_FENCE_GATE_OPEN: u32 = 76;
+pub const DF_SOUND_KIND_FENCE_GATE_CLOSE: u32 = 77;
+pub const DF_SOUND_KIND_NOTE: u32 = 78;
+pub const DF_SOUND_KIND_MUSIC_DISC_PLAY: u32 = 79;
+pub const DF_SOUND_KIND_DECORATED_POT_INSERTED: u32 = 80;
+pub const DF_SOUND_KIND_ITEM_USE_ON: u32 = 81;
+pub const DF_SOUND_KIND_EQUIP_ITEM: u32 = 82;
+pub const DF_SOUND_KIND_BUCKET_FILL: u32 = 83;
+pub const DF_SOUND_KIND_BUCKET_EMPTY: u32 = 84;
+pub const DF_SOUND_KIND_CROSSBOW_LOAD: u32 = 85;
+pub const DF_SOUND_KIND_GOAT_HORN: u32 = 86;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -344,9 +369,11 @@ pub type DfHostEntityVelocitySetFn = unsafe extern "C" fn(context: u64, invocati
 pub type DfHostEntityNameTagSetFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, entity: DfEntityId, name_tag: DfStringView) -> DfStatus;
 pub type DfHostEntityDespawnFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, entity: DfEntityId) -> DfStatus;
 pub type DfHostWorldParticleAddFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, world: DfWorldId, position: DfVec3, particle: *const DfParticleViewV1) -> DfStatus;
+pub type DfHostWorldSoundPlayFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, world: DfWorldId, position: DfVec3, sound: *const DfSoundViewV1) -> DfStatus;
+pub type DfHostPlayerSoundPlayFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, player: DfPlayerId, sound: *const DfSoundViewV1) -> DfStatus;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfHostApiV9 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn>, pub inventory_size: Option<DfHostInventorySizeFn>, pub inventory_item_open: Option<DfHostInventoryItemOpenFn>, pub player_held_item_open: Option<DfHostPlayerHeldItemOpenFn>, pub item_stack_read: Option<DfHostItemStackReadFn>, pub item_stack_close: Option<DfHostItemStackCloseFn>, pub inventory_item_set: Option<DfHostInventoryItemSetFn>, pub inventory_item_add: Option<DfHostInventoryItemAddFn>, pub inventory_clear_slot: Option<DfHostInventoryClearSlotFn>, pub inventory_clear: Option<DfHostInventoryClearFn>, pub player_held_items_set: Option<DfHostPlayerHeldItemsSetFn>, pub player_held_slot_set: Option<DfHostPlayerHeldSlotSetFn>, pub player_scoreboard: Option<DfHostPlayerScoreboardFn>, pub player_scoreboard_remove: Option<DfHostPlayerScoreboardRemoveFn>, pub player_form_send: Option<DfHostPlayerFormSendFn>, pub player_form_close: Option<DfHostPlayerFormCloseFn>, pub world_lookup: Option<DfHostWorldLookupFn>, pub world_open: Option<DfHostWorldOpenFn>, pub world_name: Option<DfHostWorldNameFn>, pub world_unload: Option<DfHostWorldUnloadFn>, pub world_save: Option<DfHostWorldSaveFn>, pub world_block_get: Option<DfHostWorldBlockGetFn>, pub world_block_set: Option<DfHostWorldBlockSetFn>, pub world_time_get: Option<DfHostWorldTimeGetFn>, pub world_time_set: Option<DfHostWorldTimeSetFn>, pub world_spawn_get: Option<DfHostWorldSpawnGetFn>, pub world_spawn_set: Option<DfHostWorldSpawnSetFn>, pub world_entity_spawn: Option<DfHostWorldEntitySpawnFn>, pub world_entities: Option<DfHostWorldEntitiesFn>, pub world_players: Option<DfHostWorldPlayersFn>, pub entity_state: Option<DfHostEntityStateFn>, pub entity_teleport: Option<DfHostEntityTeleportFn>, pub entity_velocity_set: Option<DfHostEntityVelocitySetFn>, pub entity_name_tag_set: Option<DfHostEntityNameTagSetFn>, pub entity_despawn: Option<DfHostEntityDespawnFn>, pub world_particle_add: Option<DfHostWorldParticleAddFn> }
+pub struct DfHostApiV10 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn>, pub inventory_size: Option<DfHostInventorySizeFn>, pub inventory_item_open: Option<DfHostInventoryItemOpenFn>, pub player_held_item_open: Option<DfHostPlayerHeldItemOpenFn>, pub item_stack_read: Option<DfHostItemStackReadFn>, pub item_stack_close: Option<DfHostItemStackCloseFn>, pub inventory_item_set: Option<DfHostInventoryItemSetFn>, pub inventory_item_add: Option<DfHostInventoryItemAddFn>, pub inventory_clear_slot: Option<DfHostInventoryClearSlotFn>, pub inventory_clear: Option<DfHostInventoryClearFn>, pub player_held_items_set: Option<DfHostPlayerHeldItemsSetFn>, pub player_held_slot_set: Option<DfHostPlayerHeldSlotSetFn>, pub player_scoreboard: Option<DfHostPlayerScoreboardFn>, pub player_scoreboard_remove: Option<DfHostPlayerScoreboardRemoveFn>, pub player_form_send: Option<DfHostPlayerFormSendFn>, pub player_form_close: Option<DfHostPlayerFormCloseFn>, pub world_lookup: Option<DfHostWorldLookupFn>, pub world_open: Option<DfHostWorldOpenFn>, pub world_name: Option<DfHostWorldNameFn>, pub world_unload: Option<DfHostWorldUnloadFn>, pub world_save: Option<DfHostWorldSaveFn>, pub world_block_get: Option<DfHostWorldBlockGetFn>, pub world_block_set: Option<DfHostWorldBlockSetFn>, pub world_time_get: Option<DfHostWorldTimeGetFn>, pub world_time_set: Option<DfHostWorldTimeSetFn>, pub world_spawn_get: Option<DfHostWorldSpawnGetFn>, pub world_spawn_set: Option<DfHostWorldSpawnSetFn>, pub world_entity_spawn: Option<DfHostWorldEntitySpawnFn>, pub world_entities: Option<DfHostWorldEntitiesFn>, pub world_players: Option<DfHostWorldPlayersFn>, pub entity_state: Option<DfHostEntityStateFn>, pub entity_teleport: Option<DfHostEntityTeleportFn>, pub entity_velocity_set: Option<DfHostEntityVelocitySetFn>, pub entity_name_tag_set: Option<DfHostEntityNameTagSetFn>, pub entity_despawn: Option<DfHostEntityDespawnFn>, pub world_particle_add: Option<DfHostWorldParticleAddFn>, pub world_sound_play: Option<DfHostWorldSoundPlayFn>, pub player_sound_play: Option<DfHostPlayerSoundPlayFn> }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandParameter { pub kind: u32, pub optional: u8, pub name: DfStringView, pub values: *const DfStringView, pub value_count: u64 }
@@ -862,7 +889,7 @@ pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> Df
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
 pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
 pub type DfCommandEnumOptionsFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, overload: u64, parameter: u64, context: *const DfCommandEnumContext, output: *mut DfStringBuffer) -> DfStatus;
-pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV9) -> DfStatus;
+pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV10) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 

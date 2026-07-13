@@ -1,6 +1,6 @@
 use dragonfly::{
     CommandEnum, CommandSource, Context, Dynamic, DynamicCommandEnum, Effect, EffectType, GameMode,
-    Player, Plugin, Rotation, Sound, Varargs, Vec3, plugin,
+    Player, Plugin, Rotation, Varargs, Vec3, plugin, sound,
 };
 
 struct GreetingTargets;
@@ -213,7 +213,7 @@ impl Plugin for HelloCommand {
 
     #[subcommand("sound")]
     fn sound(&self, context: &mut Context<'_, Player>) {
-        context.source().play_sound(Sound::LevelUp);
+        context.source().play_sound(sound::LevelUp);
         context.reply("Played level-up sound.");
     }
 

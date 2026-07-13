@@ -207,8 +207,8 @@ func readPlayer(path string) (playerSchema, error) {
 		return playerSchema{}, fmt.Errorf("decode %s: %w", path, err)
 	}
 	ids, names := map[uint32]bool{}, map[string]bool{}
-	validTypes := map[string]bool{"f64": true, "i32": true, "bool": true, "game_mode": true, "sound": true}
-	validAdapters := map[string]bool{"": true, "game_mode": true, "healing_source": true, "damage_source": true, "toggle": true, "sound": true}
+	validTypes := map[string]bool{"f64": true, "i32": true, "bool": true, "game_mode": true}
+	validAdapters := map[string]bool{"": true, "game_mode": true, "healing_source": true, "damage_source": true, "toggle": true}
 	validValidation := map[string]bool{"": true, "non_negative": true, "positive": true, "unit_interval": true}
 	for _, state := range schema.States {
 		if state.Name == "" || names[state.Name] || ids[state.ID] || !validTypes[state.Type] || !validAdapters[state.Adapter] || !validValidation[state.Validate] {
@@ -322,7 +322,7 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 1u
-#define DF_HOST_ABI_VERSION 9u
+#define DF_HOST_ABI_VERSION 10u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -407,6 +407,7 @@ typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; uint32_t
 #define DF_PARTICLE_ENTITY_FLAME 19u
 typedef struct { uint8_t r; uint8_t g; uint8_t b; uint8_t a; } DfRgba;
 typedef struct { uint32_t kind; uint32_t data; int32_t pitch; DfRgba colour; DfBlockPos diff; const DfBlockView *block; } DfParticleViewV1;
+typedef struct { uint32_t kind; uint32_t data; int32_t integer; uint32_t flags; double scalar; const DfBlockView *block; const DfItemStackViewV3 *item; } DfSoundViewV1;
 #define DF_PLAYER_TRANSFORM_TELEPORT 0u
 #define DF_PLAYER_TRANSFORM_MOVE 1u
 #define DF_PLAYER_TRANSFORM_VELOCITY 2u
@@ -421,7 +422,7 @@ typedef struct { uint32_t kind; uint32_t data; int32_t pitch; DfRgba colour; DfB
 		fmt.Fprintf(&b, "#define DF_EFFECT_%s %du\n", strings.ToUpper(effect.Name), effect.ID)
 	}
 	for _, sound := range player.Sounds {
-		fmt.Fprintf(&b, "#define DF_SOUND_%s %du\n", strings.ToUpper(sound.Name), sound.ID)
+		fmt.Fprintf(&b, "#define DF_SOUND_KIND_%s %du\n", strings.ToUpper(sound.Name), sound.ID)
 	}
 	b.WriteString(`
 typedef struct { DfStringView text; DfStringView subtitle; DfStringView action_text; uint64_t fade_in_milliseconds; uint64_t duration_milliseconds; uint64_t fade_out_milliseconds; } DfTitleView;
@@ -490,6 +491,8 @@ typedef DfStatus (*DfHostEntityVelocitySetFn)(uint64_t context, DfInvocationId i
 typedef DfStatus (*DfHostEntityNameTagSetFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag);
 typedef DfStatus (*DfHostEntityDespawnFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity);
 typedef DfStatus (*DfHostWorldParticleAddFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfParticleViewV1 *particle);
+typedef DfStatus (*DfHostWorldSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfSoundViewV1 *sound);
+typedef DfStatus (*DfHostPlayerSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV1 *sound);
 typedef struct {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -542,7 +545,9 @@ typedef struct {
     DfHostEntityNameTagSetFn entity_name_tag_set;
     DfHostEntityDespawnFn entity_despawn;
     DfHostWorldParticleAddFn world_particle_add;
-} DfHostApiV9;
+    DfHostWorldSoundPlayFn world_sound_play;
+    DfHostPlayerSoundPlayFn player_sound_play;
+} DfHostApiV10;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -598,7 +603,7 @@ typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV9 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV10 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -618,7 +623,7 @@ typedef struct {
 typedef const DfPluginApiV1 *(*DfPluginEntryV1Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV9 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV10 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);
@@ -648,7 +653,7 @@ func generateRust(events []event, player playerSchema) []byte {
 	b.WriteString(`use core::ffi::c_void;
 
 pub const DF_ABI_VERSION: u32 = 1;
-pub const DF_HOST_ABI_VERSION: u32 = 9;
+pub const DF_HOST_ABI_VERSION: u32 = 10;
 pub const DF_STATUS_OK: DfStatus = 0;
 pub const DF_STATUS_ERROR: DfStatus = 1;
 pub type DfStatus = i32;
@@ -790,6 +795,9 @@ pub struct DfRgba { pub r: u8, pub g: u8, pub b: u8, pub a: u8 }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfParticleViewV1 { pub kind: u32, pub data: u32, pub pitch: i32, pub colour: DfRgba, pub diff: DfBlockPos, pub block: *const DfBlockView }
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DfSoundViewV1 { pub kind: u32, pub data: u32, pub integer: i32, pub flags: u32, pub scalar: f64, pub block: *const DfBlockView, pub item: *const DfItemStackViewV3 }
 pub const DF_PLAYER_TRANSFORM_TELEPORT: u32 = 0;
 pub const DF_PLAYER_TRANSFORM_MOVE: u32 = 1;
 pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
@@ -804,7 +812,7 @@ pub const DF_PLAYER_TRANSFORM_VELOCITY: u32 = 2;
 		fmt.Fprintf(&b, "pub const DF_EFFECT_%s: u32 = %d;\n", strings.ToUpper(effect.Name), effect.ID)
 	}
 	for _, sound := range player.Sounds {
-		fmt.Fprintf(&b, "pub const DF_SOUND_%s: u32 = %d;\n", strings.ToUpper(sound.Name), sound.ID)
+		fmt.Fprintf(&b, "pub const DF_SOUND_KIND_%s: u32 = %d;\n", strings.ToUpper(sound.Name), sound.ID)
 	}
 	b.WriteString(`
 #[repr(C)]
@@ -891,9 +899,11 @@ pub type DfHostEntityVelocitySetFn = unsafe extern "C" fn(context: u64, invocati
 pub type DfHostEntityNameTagSetFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, entity: DfEntityId, name_tag: DfStringView) -> DfStatus;
 pub type DfHostEntityDespawnFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, entity: DfEntityId) -> DfStatus;
 pub type DfHostWorldParticleAddFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, world: DfWorldId, position: DfVec3, particle: *const DfParticleViewV1) -> DfStatus;
+pub type DfHostWorldSoundPlayFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, world: DfWorldId, position: DfVec3, sound: *const DfSoundViewV1) -> DfStatus;
+pub type DfHostPlayerSoundPlayFn = unsafe extern "C" fn(context: u64, invocation: DfInvocationId, player: DfPlayerId, sound: *const DfSoundViewV1) -> DfStatus;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct DfHostApiV9 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn>, pub inventory_size: Option<DfHostInventorySizeFn>, pub inventory_item_open: Option<DfHostInventoryItemOpenFn>, pub player_held_item_open: Option<DfHostPlayerHeldItemOpenFn>, pub item_stack_read: Option<DfHostItemStackReadFn>, pub item_stack_close: Option<DfHostItemStackCloseFn>, pub inventory_item_set: Option<DfHostInventoryItemSetFn>, pub inventory_item_add: Option<DfHostInventoryItemAddFn>, pub inventory_clear_slot: Option<DfHostInventoryClearSlotFn>, pub inventory_clear: Option<DfHostInventoryClearFn>, pub player_held_items_set: Option<DfHostPlayerHeldItemsSetFn>, pub player_held_slot_set: Option<DfHostPlayerHeldSlotSetFn>, pub player_scoreboard: Option<DfHostPlayerScoreboardFn>, pub player_scoreboard_remove: Option<DfHostPlayerScoreboardRemoveFn>, pub player_form_send: Option<DfHostPlayerFormSendFn>, pub player_form_close: Option<DfHostPlayerFormCloseFn>, pub world_lookup: Option<DfHostWorldLookupFn>, pub world_open: Option<DfHostWorldOpenFn>, pub world_name: Option<DfHostWorldNameFn>, pub world_unload: Option<DfHostWorldUnloadFn>, pub world_save: Option<DfHostWorldSaveFn>, pub world_block_get: Option<DfHostWorldBlockGetFn>, pub world_block_set: Option<DfHostWorldBlockSetFn>, pub world_time_get: Option<DfHostWorldTimeGetFn>, pub world_time_set: Option<DfHostWorldTimeSetFn>, pub world_spawn_get: Option<DfHostWorldSpawnGetFn>, pub world_spawn_set: Option<DfHostWorldSpawnSetFn>, pub world_entity_spawn: Option<DfHostWorldEntitySpawnFn>, pub world_entities: Option<DfHostWorldEntitiesFn>, pub world_players: Option<DfHostWorldPlayersFn>, pub entity_state: Option<DfHostEntityStateFn>, pub entity_teleport: Option<DfHostEntityTeleportFn>, pub entity_velocity_set: Option<DfHostEntityVelocitySetFn>, pub entity_name_tag_set: Option<DfHostEntityNameTagSetFn>, pub entity_despawn: Option<DfHostEntityDespawnFn>, pub world_particle_add: Option<DfHostWorldParticleAddFn> }
+pub struct DfHostApiV10 { pub abi_version: u32, pub struct_size: u32, pub context: u64, pub player_text: Option<DfHostPlayerTextFn>, pub player_title: Option<DfHostPlayerTitleFn>, pub player_transform: Option<DfHostPlayerTransformFn>, pub player_rotation: Option<DfHostPlayerRotationFn>, pub player_state_set: Option<DfHostPlayerStateSetFn>, pub player_state_get: Option<DfHostPlayerStateGetFn>, pub player_effect: Option<DfHostPlayerEffectFn>, pub player_entity_visibility: Option<DfHostPlayerEntityVisibilityFn>, pub player_skin_open: Option<DfHostPlayerSkinOpenFn>, pub player_skin_animation_info: Option<DfHostPlayerSkinAnimationInfoFn>, pub player_skin_read: Option<DfHostPlayerSkinReadFn>, pub player_skin_close: Option<DfHostPlayerSkinCloseFn>, pub player_skin_set: Option<DfHostPlayerSkinSetFn>, pub inventory_size: Option<DfHostInventorySizeFn>, pub inventory_item_open: Option<DfHostInventoryItemOpenFn>, pub player_held_item_open: Option<DfHostPlayerHeldItemOpenFn>, pub item_stack_read: Option<DfHostItemStackReadFn>, pub item_stack_close: Option<DfHostItemStackCloseFn>, pub inventory_item_set: Option<DfHostInventoryItemSetFn>, pub inventory_item_add: Option<DfHostInventoryItemAddFn>, pub inventory_clear_slot: Option<DfHostInventoryClearSlotFn>, pub inventory_clear: Option<DfHostInventoryClearFn>, pub player_held_items_set: Option<DfHostPlayerHeldItemsSetFn>, pub player_held_slot_set: Option<DfHostPlayerHeldSlotSetFn>, pub player_scoreboard: Option<DfHostPlayerScoreboardFn>, pub player_scoreboard_remove: Option<DfHostPlayerScoreboardRemoveFn>, pub player_form_send: Option<DfHostPlayerFormSendFn>, pub player_form_close: Option<DfHostPlayerFormCloseFn>, pub world_lookup: Option<DfHostWorldLookupFn>, pub world_open: Option<DfHostWorldOpenFn>, pub world_name: Option<DfHostWorldNameFn>, pub world_unload: Option<DfHostWorldUnloadFn>, pub world_save: Option<DfHostWorldSaveFn>, pub world_block_get: Option<DfHostWorldBlockGetFn>, pub world_block_set: Option<DfHostWorldBlockSetFn>, pub world_time_get: Option<DfHostWorldTimeGetFn>, pub world_time_set: Option<DfHostWorldTimeSetFn>, pub world_spawn_get: Option<DfHostWorldSpawnGetFn>, pub world_spawn_set: Option<DfHostWorldSpawnSetFn>, pub world_entity_spawn: Option<DfHostWorldEntitySpawnFn>, pub world_entities: Option<DfHostWorldEntitiesFn>, pub world_players: Option<DfHostWorldPlayersFn>, pub entity_state: Option<DfHostEntityStateFn>, pub entity_teleport: Option<DfHostEntityTeleportFn>, pub entity_velocity_set: Option<DfHostEntityVelocitySetFn>, pub entity_name_tag_set: Option<DfHostEntityNameTagSetFn>, pub entity_despawn: Option<DfHostEntityDespawnFn>, pub world_particle_add: Option<DfHostWorldParticleAddFn>, pub world_sound_play: Option<DfHostWorldSoundPlayFn>, pub player_sound_play: Option<DfHostPlayerSoundPlayFn> }
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DfCommandParameter { pub kind: u32, pub optional: u8, pub name: DfStringView, pub values: *const DfStringView, pub value_count: u64 }
@@ -962,7 +972,7 @@ pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> Df
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
 pub type DfHandleCommandFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, input: *const DfCommandInput, state: *mut DfCommandState) -> DfStatus;
 pub type DfCommandEnumOptionsFn = unsafe extern "C" fn(instance: *mut c_void, command: u64, overload: u64, parameter: u64, context: *const DfCommandEnumContext, output: *mut DfStringBuffer) -> DfStatus;
-pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV9) -> DfStatus;
+pub type DfPluginSetHostFn = unsafe extern "C" fn(instance: *mut c_void, host: *const DfHostApiV10) -> DfStatus;
 pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 
@@ -991,17 +1001,12 @@ unsafe impl Sync for DfPluginApiV1 {}
 func generateGoPlayerStates(playerSchema playerSchema) []byte {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "// Code generated by abi-gen v%s. DO NOT EDIT.\n\n", generatorVersion)
-	b.WriteString("package host\n\nimport (\n\t\"math\"\n\n\t\"github.com/bedrock-gophers/plugins/internal/native\"\n\t\"github.com/df-mc/dragonfly/server/player\"\n\t\"github.com/df-mc/dragonfly/server/world\"\n\tdfsound \"github.com/df-mc/dragonfly/server/world/sound\"\n)\n\n")
+	b.WriteString("package host\n\nimport (\n\t\"math\"\n\n\t\"github.com/bedrock-gophers/plugins/internal/native\"\n\t\"github.com/df-mc/dragonfly/server/player\"\n\t\"github.com/df-mc/dragonfly/server/world\"\n)\n\n")
 	b.WriteString("func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, message string) bool {\n\tswitch kind {\n")
 	for _, text := range playerSchema.Texts {
 		fmt.Fprintf(&b, "\tcase native.PlayerText%s:\n\t\tconnected.%s(message)\n", title(text.Name), text.Set)
 	}
 	b.WriteString("\tdefault:\n\t\treturn false\n\t}\n\treturn true\n}\n\n")
-	b.WriteString("func playerSound(kind native.SoundType) (world.Sound, bool) {\n\tswitch kind {\n")
-	for _, sound := range playerSchema.Sounds {
-		fmt.Fprintf(&b, "\tcase native.Sound%s:\n\t\treturn dfsound.%s{}, true\n", title(sound.Name), sound.Go)
-	}
-	b.WriteString("\tdefault:\n\t\treturn nil, false\n\t}\n}\n\n")
 	b.WriteString("func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value native.PlayerStateValue) bool {\n\tswitch kind {\n")
 	for _, state := range playerSchema.States {
 		if state.Set == "" {
@@ -1019,9 +1024,6 @@ func generateGoPlayerStates(playerSchema playerSchema) []byte {
 			fmt.Fprintf(&b, "\t\tconnected.%s(value.Number, pluginDamageSource{})\n", state.Set)
 		case "toggle":
 			fmt.Fprintf(&b, "\t\tif value.Integer != 0 { connected.%s() } else { connected.%s() }\n", state.Set, state.Unset)
-		case "sound":
-			b.WriteString("\t\tsound, ok := playerSound(native.SoundType(value.Integer))\n\t\tif !ok { return false }\n")
-			fmt.Fprintf(&b, "\t\tconnected.%s(sound)\n", state.Set)
 		default:
 			if state.Type == "f64" {
 				fmt.Fprintf(&b, "\t\tconnected.%s(value.Number)\n", state.Set)
@@ -1067,9 +1069,9 @@ func generateGoNativePlayerStates(player playerSchema) []byte {
 	for _, text := range player.Texts {
 		fmt.Fprintf(&b, "\tPlayerText%s PlayerTextKind = %d\n", title(text.Name), text.ID)
 	}
-	b.WriteString(")\n\ntype SoundType uint32\n\nconst (\n")
+	b.WriteString(")\n\ntype SoundKind uint32\n\nconst (\n")
 	for _, sound := range player.Sounds {
-		fmt.Fprintf(&b, "\tSound%s SoundType = %d\n", title(sound.Name), sound.ID)
+		fmt.Fprintf(&b, "\tSound%s SoundKind = %d\n", title(sound.Name), sound.ID)
 	}
 	b.WriteString(")\n")
 	return b.Bytes()
@@ -1108,10 +1110,6 @@ func generateRustPlayerStates(player playerSchema) []byte {
 	for _, effect := range player.Effects {
 		fmt.Fprintf(&b, "    %s = dragonfly_plugin_sys::DF_EFFECT_%s,\n", title(effect.Name), strings.ToUpper(effect.Name))
 	}
-	b.WriteString("}\n\n#[repr(u32)]\n#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\npub enum Sound {\n")
-	for _, sound := range player.Sounds {
-		fmt.Fprintf(&b, "    %s = dragonfly_plugin_sys::DF_SOUND_%s,\n", title(sound.Name), strings.ToUpper(sound.Name))
-	}
 	b.WriteString("}\n\n")
 	b.WriteString("impl Player {\n")
 	for _, text := range player.Texts {
@@ -1129,8 +1127,6 @@ func generateRustPlayerStates(player playerSchema) []byte {
 				fmt.Fprintf(&b, "    pub fn %s(&self, value: i32) { self.set_state(%s, 0.0, i64::from(value)); }\n", state.RustSet, constant)
 			case "bool":
 				fmt.Fprintf(&b, "    pub fn %s(&self, value: bool) { self.set_state(%s, 0.0, value as i64); }\n", state.RustSet, constant)
-			case "sound":
-				fmt.Fprintf(&b, "    pub fn %s(&self, value: Sound) { self.set_state(%s, 0.0, value as i64); }\n", state.RustSet, constant)
 			}
 		}
 		if state.Get != "" {

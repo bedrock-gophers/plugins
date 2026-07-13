@@ -33,75 +33,6 @@ pub enum EffectType {
     Darkness = dragonfly_plugin_sys::DF_EFFECT_DARKNESS,
 }
 
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum Sound {
-    AnvilBreak = dragonfly_plugin_sys::DF_SOUND_ANVIL_BREAK,
-    AnvilLand = dragonfly_plugin_sys::DF_SOUND_ANVIL_LAND,
-    AnvilUse = dragonfly_plugin_sys::DF_SOUND_ANVIL_USE,
-    ArrowHit = dragonfly_plugin_sys::DF_SOUND_ARROW_HIT,
-    BarrelClose = dragonfly_plugin_sys::DF_SOUND_BARREL_CLOSE,
-    BarrelOpen = dragonfly_plugin_sys::DF_SOUND_BARREL_OPEN,
-    BlastFurnaceCrackle = dragonfly_plugin_sys::DF_SOUND_BLAST_FURNACE_CRACKLE,
-    BowShoot = dragonfly_plugin_sys::DF_SOUND_BOW_SHOOT,
-    Burning = dragonfly_plugin_sys::DF_SOUND_BURNING,
-    Burp = dragonfly_plugin_sys::DF_SOUND_BURP,
-    CampfireCrackle = dragonfly_plugin_sys::DF_SOUND_CAMPFIRE_CRACKLE,
-    ChestClose = dragonfly_plugin_sys::DF_SOUND_CHEST_CLOSE,
-    ChestOpen = dragonfly_plugin_sys::DF_SOUND_CHEST_OPEN,
-    Click = dragonfly_plugin_sys::DF_SOUND_CLICK,
-    ComposterEmpty = dragonfly_plugin_sys::DF_SOUND_COMPOSTER_EMPTY,
-    ComposterFill = dragonfly_plugin_sys::DF_SOUND_COMPOSTER_FILL,
-    ComposterFillLayer = dragonfly_plugin_sys::DF_SOUND_COMPOSTER_FILL_LAYER,
-    ComposterReady = dragonfly_plugin_sys::DF_SOUND_COMPOSTER_READY,
-    CopperScraped = dragonfly_plugin_sys::DF_SOUND_COPPER_SCRAPED,
-    CrossbowShoot = dragonfly_plugin_sys::DF_SOUND_CROSSBOW_SHOOT,
-    DecoratedPotInsertFailed = dragonfly_plugin_sys::DF_SOUND_DECORATED_POT_INSERT_FAILED,
-    Deny = dragonfly_plugin_sys::DF_SOUND_DENY,
-    DoorCrash = dragonfly_plugin_sys::DF_SOUND_DOOR_CRASH,
-    Drowning = dragonfly_plugin_sys::DF_SOUND_DROWNING,
-    EnderChestClose = dragonfly_plugin_sys::DF_SOUND_ENDER_CHEST_CLOSE,
-    EnderChestOpen = dragonfly_plugin_sys::DF_SOUND_ENDER_CHEST_OPEN,
-    Experience = dragonfly_plugin_sys::DF_SOUND_EXPERIENCE,
-    Explosion = dragonfly_plugin_sys::DF_SOUND_EXPLOSION,
-    FireCharge = dragonfly_plugin_sys::DF_SOUND_FIRE_CHARGE,
-    FireExtinguish = dragonfly_plugin_sys::DF_SOUND_FIRE_EXTINGUISH,
-    FireworkBlast = dragonfly_plugin_sys::DF_SOUND_FIREWORK_BLAST,
-    FireworkHugeBlast = dragonfly_plugin_sys::DF_SOUND_FIREWORK_HUGE_BLAST,
-    FireworkLaunch = dragonfly_plugin_sys::DF_SOUND_FIREWORK_LAUNCH,
-    FireworkTwinkle = dragonfly_plugin_sys::DF_SOUND_FIREWORK_TWINKLE,
-    Fizz = dragonfly_plugin_sys::DF_SOUND_FIZZ,
-    FurnaceCrackle = dragonfly_plugin_sys::DF_SOUND_FURNACE_CRACKLE,
-    GhastShoot = dragonfly_plugin_sys::DF_SOUND_GHAST_SHOOT,
-    GhastWarning = dragonfly_plugin_sys::DF_SOUND_GHAST_WARNING,
-    GlassBreak = dragonfly_plugin_sys::DF_SOUND_GLASS_BREAK,
-    Ignite = dragonfly_plugin_sys::DF_SOUND_IGNITE,
-    ItemAdd = dragonfly_plugin_sys::DF_SOUND_ITEM_ADD,
-    ItemBreak = dragonfly_plugin_sys::DF_SOUND_ITEM_BREAK,
-    ItemFrameRemove = dragonfly_plugin_sys::DF_SOUND_ITEM_FRAME_REMOVE,
-    ItemFrameRotate = dragonfly_plugin_sys::DF_SOUND_ITEM_FRAME_ROTATE,
-    ItemThrow = dragonfly_plugin_sys::DF_SOUND_ITEM_THROW,
-    LecternBookPlace = dragonfly_plugin_sys::DF_SOUND_LECTERN_BOOK_PLACE,
-    LevelUp = dragonfly_plugin_sys::DF_SOUND_LEVEL_UP,
-    LightningExplode = dragonfly_plugin_sys::DF_SOUND_LIGHTNING_EXPLODE,
-    LightningThunder = dragonfly_plugin_sys::DF_SOUND_LIGHTNING_THUNDER,
-    MusicDiscEnd = dragonfly_plugin_sys::DF_SOUND_MUSIC_DISC_END,
-    Pop = dragonfly_plugin_sys::DF_SOUND_POP,
-    PotionBrewed = dragonfly_plugin_sys::DF_SOUND_POTION_BREWED,
-    PowerOff = dragonfly_plugin_sys::DF_SOUND_POWER_OFF,
-    PowerOn = dragonfly_plugin_sys::DF_SOUND_POWER_ON,
-    SignWaxed = dragonfly_plugin_sys::DF_SOUND_SIGN_WAXED,
-    SmokerCrackle = dragonfly_plugin_sys::DF_SOUND_SMOKER_CRACKLE,
-    StopUsingSpyglass = dragonfly_plugin_sys::DF_SOUND_STOP_USING_SPYGLASS,
-    Tnt = dragonfly_plugin_sys::DF_SOUND_TNT,
-    Teleport = dragonfly_plugin_sys::DF_SOUND_TELEPORT,
-    Thunder = dragonfly_plugin_sys::DF_SOUND_THUNDER,
-    Totem = dragonfly_plugin_sys::DF_SOUND_TOTEM,
-    UseSpyglass = dragonfly_plugin_sys::DF_SOUND_USE_SPYGLASS,
-    WaxRemoved = dragonfly_plugin_sys::DF_SOUND_WAX_REMOVED,
-    WaxedSignFailedInteraction = dragonfly_plugin_sys::DF_SOUND_WAXED_SIGN_FAILED_INTERACTION,
-}
-
 impl Player {
     pub fn message(&self, value: &str) { self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_MESSAGE, value); }
     pub fn send_tip(&self, value: &str) { self.send_text(dragonfly_plugin_sys::DF_PLAYER_TEXT_TIP, value); }
@@ -129,5 +60,4 @@ impl Player {
     pub fn invisible(&self) -> bool { self.state(dragonfly_plugin_sys::DF_PLAYER_STATE_INVISIBLE).integer != 0 }
     pub fn set_immobile(&self, value: bool) { self.set_state(dragonfly_plugin_sys::DF_PLAYER_STATE_IMMOBILE, 0.0, value as i64); }
     pub fn immobile(&self) -> bool { self.state(dragonfly_plugin_sys::DF_PLAYER_STATE_IMMOBILE).integer != 0 }
-    pub fn play_sound(&self, value: Sound) { self.set_state(dragonfly_plugin_sys::DF_PLAYER_STATE_SOUND, 0.0, value as i64); }
 }

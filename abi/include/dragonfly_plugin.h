@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 1u
-#define DF_HOST_ABI_VERSION 9u
+#define DF_HOST_ABI_VERSION 10u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -94,6 +94,7 @@ typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; uint32_t
 #define DF_PARTICLE_ENTITY_FLAME 19u
 typedef struct { uint8_t r; uint8_t g; uint8_t b; uint8_t a; } DfRgba;
 typedef struct { uint32_t kind; uint32_t data; int32_t pitch; DfRgba colour; DfBlockPos diff; const DfBlockView *block; } DfParticleViewV1;
+typedef struct { uint32_t kind; uint32_t data; int32_t integer; uint32_t flags; double scalar; const DfBlockView *block; const DfItemStackViewV3 *item; } DfSoundViewV1;
 #define DF_PLAYER_TRANSFORM_TELEPORT 0u
 #define DF_PLAYER_TRANSFORM_MOVE 1u
 #define DF_PLAYER_TRANSFORM_VELOCITY 2u
@@ -115,7 +116,6 @@ typedef struct { uint32_t kind; uint32_t data; int32_t pitch; DfRgba colour; DfB
 #define DF_PLAYER_STATE_SCALE 8u
 #define DF_PLAYER_STATE_INVISIBLE 9u
 #define DF_PLAYER_STATE_IMMOBILE 10u
-#define DF_PLAYER_STATE_SOUND 11u
 #define DF_EFFECT_SPEED 1u
 #define DF_EFFECT_SLOWNESS 2u
 #define DF_EFFECT_HASTE 3u
@@ -144,70 +144,93 @@ typedef struct { uint32_t kind; uint32_t data; int32_t pitch; DfRgba colour; DfB
 #define DF_EFFECT_CONDUIT_POWER 26u
 #define DF_EFFECT_SLOW_FALLING 27u
 #define DF_EFFECT_DARKNESS 30u
-#define DF_SOUND_ANVIL_BREAK 0u
-#define DF_SOUND_ANVIL_LAND 1u
-#define DF_SOUND_ANVIL_USE 2u
-#define DF_SOUND_ARROW_HIT 3u
-#define DF_SOUND_BARREL_CLOSE 4u
-#define DF_SOUND_BARREL_OPEN 5u
-#define DF_SOUND_BLAST_FURNACE_CRACKLE 6u
-#define DF_SOUND_BOW_SHOOT 7u
-#define DF_SOUND_BURNING 8u
-#define DF_SOUND_BURP 9u
-#define DF_SOUND_CAMPFIRE_CRACKLE 10u
-#define DF_SOUND_CHEST_CLOSE 11u
-#define DF_SOUND_CHEST_OPEN 12u
-#define DF_SOUND_CLICK 13u
-#define DF_SOUND_COMPOSTER_EMPTY 14u
-#define DF_SOUND_COMPOSTER_FILL 15u
-#define DF_SOUND_COMPOSTER_FILL_LAYER 16u
-#define DF_SOUND_COMPOSTER_READY 17u
-#define DF_SOUND_COPPER_SCRAPED 18u
-#define DF_SOUND_CROSSBOW_SHOOT 19u
-#define DF_SOUND_DECORATED_POT_INSERT_FAILED 20u
-#define DF_SOUND_DENY 21u
-#define DF_SOUND_DOOR_CRASH 22u
-#define DF_SOUND_DROWNING 23u
-#define DF_SOUND_ENDER_CHEST_CLOSE 24u
-#define DF_SOUND_ENDER_CHEST_OPEN 25u
-#define DF_SOUND_EXPERIENCE 26u
-#define DF_SOUND_EXPLOSION 27u
-#define DF_SOUND_FIRE_CHARGE 28u
-#define DF_SOUND_FIRE_EXTINGUISH 29u
-#define DF_SOUND_FIREWORK_BLAST 30u
-#define DF_SOUND_FIREWORK_HUGE_BLAST 31u
-#define DF_SOUND_FIREWORK_LAUNCH 32u
-#define DF_SOUND_FIREWORK_TWINKLE 33u
-#define DF_SOUND_FIZZ 34u
-#define DF_SOUND_FURNACE_CRACKLE 35u
-#define DF_SOUND_GHAST_SHOOT 36u
-#define DF_SOUND_GHAST_WARNING 37u
-#define DF_SOUND_GLASS_BREAK 38u
-#define DF_SOUND_IGNITE 39u
-#define DF_SOUND_ITEM_ADD 40u
-#define DF_SOUND_ITEM_BREAK 41u
-#define DF_SOUND_ITEM_FRAME_REMOVE 42u
-#define DF_SOUND_ITEM_FRAME_ROTATE 43u
-#define DF_SOUND_ITEM_THROW 44u
-#define DF_SOUND_LECTERN_BOOK_PLACE 45u
-#define DF_SOUND_LEVEL_UP 46u
-#define DF_SOUND_LIGHTNING_EXPLODE 47u
-#define DF_SOUND_LIGHTNING_THUNDER 48u
-#define DF_SOUND_MUSIC_DISC_END 49u
-#define DF_SOUND_POP 50u
-#define DF_SOUND_POTION_BREWED 51u
-#define DF_SOUND_POWER_OFF 52u
-#define DF_SOUND_POWER_ON 53u
-#define DF_SOUND_SIGN_WAXED 54u
-#define DF_SOUND_SMOKER_CRACKLE 55u
-#define DF_SOUND_STOP_USING_SPYGLASS 56u
-#define DF_SOUND_TNT 57u
-#define DF_SOUND_TELEPORT 58u
-#define DF_SOUND_THUNDER 59u
-#define DF_SOUND_TOTEM 60u
-#define DF_SOUND_USE_SPYGLASS 61u
-#define DF_SOUND_WAX_REMOVED 62u
-#define DF_SOUND_WAXED_SIGN_FAILED_INTERACTION 63u
+#define DF_SOUND_KIND_ANVIL_BREAK 0u
+#define DF_SOUND_KIND_ANVIL_LAND 1u
+#define DF_SOUND_KIND_ANVIL_USE 2u
+#define DF_SOUND_KIND_ARROW_HIT 3u
+#define DF_SOUND_KIND_BARREL_CLOSE 4u
+#define DF_SOUND_KIND_BARREL_OPEN 5u
+#define DF_SOUND_KIND_BLAST_FURNACE_CRACKLE 6u
+#define DF_SOUND_KIND_BOW_SHOOT 7u
+#define DF_SOUND_KIND_BURNING 8u
+#define DF_SOUND_KIND_BURP 9u
+#define DF_SOUND_KIND_CAMPFIRE_CRACKLE 10u
+#define DF_SOUND_KIND_CHEST_CLOSE 11u
+#define DF_SOUND_KIND_CHEST_OPEN 12u
+#define DF_SOUND_KIND_CLICK 13u
+#define DF_SOUND_KIND_COMPOSTER_EMPTY 14u
+#define DF_SOUND_KIND_COMPOSTER_FILL 15u
+#define DF_SOUND_KIND_COMPOSTER_FILL_LAYER 16u
+#define DF_SOUND_KIND_COMPOSTER_READY 17u
+#define DF_SOUND_KIND_COPPER_SCRAPED 18u
+#define DF_SOUND_KIND_CROSSBOW_SHOOT 19u
+#define DF_SOUND_KIND_DECORATED_POT_INSERT_FAILED 20u
+#define DF_SOUND_KIND_DENY 21u
+#define DF_SOUND_KIND_DOOR_CRASH 22u
+#define DF_SOUND_KIND_DROWNING 23u
+#define DF_SOUND_KIND_ENDER_CHEST_CLOSE 24u
+#define DF_SOUND_KIND_ENDER_CHEST_OPEN 25u
+#define DF_SOUND_KIND_EXPERIENCE 26u
+#define DF_SOUND_KIND_EXPLOSION 27u
+#define DF_SOUND_KIND_FIRE_CHARGE 28u
+#define DF_SOUND_KIND_FIRE_EXTINGUISH 29u
+#define DF_SOUND_KIND_FIREWORK_BLAST 30u
+#define DF_SOUND_KIND_FIREWORK_HUGE_BLAST 31u
+#define DF_SOUND_KIND_FIREWORK_LAUNCH 32u
+#define DF_SOUND_KIND_FIREWORK_TWINKLE 33u
+#define DF_SOUND_KIND_FIZZ 34u
+#define DF_SOUND_KIND_FURNACE_CRACKLE 35u
+#define DF_SOUND_KIND_GHAST_SHOOT 36u
+#define DF_SOUND_KIND_GHAST_WARNING 37u
+#define DF_SOUND_KIND_GLASS_BREAK 38u
+#define DF_SOUND_KIND_IGNITE 39u
+#define DF_SOUND_KIND_ITEM_ADD 40u
+#define DF_SOUND_KIND_ITEM_BREAK 41u
+#define DF_SOUND_KIND_ITEM_FRAME_REMOVE 42u
+#define DF_SOUND_KIND_ITEM_FRAME_ROTATE 43u
+#define DF_SOUND_KIND_ITEM_THROW 44u
+#define DF_SOUND_KIND_LECTERN_BOOK_PLACE 45u
+#define DF_SOUND_KIND_LEVEL_UP 46u
+#define DF_SOUND_KIND_LIGHTNING_EXPLODE 47u
+#define DF_SOUND_KIND_LIGHTNING_THUNDER 48u
+#define DF_SOUND_KIND_MUSIC_DISC_END 49u
+#define DF_SOUND_KIND_POP 50u
+#define DF_SOUND_KIND_POTION_BREWED 51u
+#define DF_SOUND_KIND_POWER_OFF 52u
+#define DF_SOUND_KIND_POWER_ON 53u
+#define DF_SOUND_KIND_SIGN_WAXED 54u
+#define DF_SOUND_KIND_SMOKER_CRACKLE 55u
+#define DF_SOUND_KIND_STOP_USING_SPYGLASS 56u
+#define DF_SOUND_KIND_TNT 57u
+#define DF_SOUND_KIND_TELEPORT 58u
+#define DF_SOUND_KIND_THUNDER 59u
+#define DF_SOUND_KIND_TOTEM 60u
+#define DF_SOUND_KIND_USE_SPYGLASS 61u
+#define DF_SOUND_KIND_WAX_REMOVED 62u
+#define DF_SOUND_KIND_WAXED_SIGN_FAILED_INTERACTION 63u
+#define DF_SOUND_KIND_SHULKER_BOX_OPEN 64u
+#define DF_SOUND_KIND_SHULKER_BOX_CLOSE 65u
+#define DF_SOUND_KIND_ENDER_EYE_PLACED 66u
+#define DF_SOUND_KIND_END_PORTAL_CREATED 67u
+#define DF_SOUND_KIND_ATTACK 68u
+#define DF_SOUND_KIND_FALL 69u
+#define DF_SOUND_KIND_BLOCK_PLACE 70u
+#define DF_SOUND_KIND_BLOCK_BREAKING 71u
+#define DF_SOUND_KIND_DOOR_OPEN 72u
+#define DF_SOUND_KIND_DOOR_CLOSE 73u
+#define DF_SOUND_KIND_TRAPDOOR_OPEN 74u
+#define DF_SOUND_KIND_TRAPDOOR_CLOSE 75u
+#define DF_SOUND_KIND_FENCE_GATE_OPEN 76u
+#define DF_SOUND_KIND_FENCE_GATE_CLOSE 77u
+#define DF_SOUND_KIND_NOTE 78u
+#define DF_SOUND_KIND_MUSIC_DISC_PLAY 79u
+#define DF_SOUND_KIND_DECORATED_POT_INSERTED 80u
+#define DF_SOUND_KIND_ITEM_USE_ON 81u
+#define DF_SOUND_KIND_EQUIP_ITEM 82u
+#define DF_SOUND_KIND_BUCKET_FILL 83u
+#define DF_SOUND_KIND_BUCKET_EMPTY 84u
+#define DF_SOUND_KIND_CROSSBOW_LOAD 85u
+#define DF_SOUND_KIND_GOAT_HORN 86u
 
 typedef struct { DfStringView text; DfStringView subtitle; DfStringView action_text; uint64_t fade_in_milliseconds; uint64_t duration_milliseconds; uint64_t fade_out_milliseconds; } DfTitleView;
 typedef struct { DfStringView name; const DfStringView *lines; uint64_t line_count; uint8_t padding; uint8_t descending; } DfScoreboardView;
@@ -275,6 +298,8 @@ typedef DfStatus (*DfHostEntityVelocitySetFn)(uint64_t context, DfInvocationId i
 typedef DfStatus (*DfHostEntityNameTagSetFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag);
 typedef DfStatus (*DfHostEntityDespawnFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity);
 typedef DfStatus (*DfHostWorldParticleAddFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfParticleViewV1 *particle);
+typedef DfStatus (*DfHostWorldSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfSoundViewV1 *sound);
+typedef DfStatus (*DfHostPlayerSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV1 *sound);
 typedef struct {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -327,7 +352,9 @@ typedef struct {
     DfHostEntityNameTagSetFn entity_name_tag_set;
     DfHostEntityDespawnFn entity_despawn;
     DfHostWorldParticleAddFn world_particle_add;
-} DfHostApiV9;
+    DfHostWorldSoundPlayFn world_sound_play;
+    DfHostPlayerSoundPlayFn player_sound_play;
+} DfHostApiV10;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -743,7 +770,7 @@ typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV9 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV10 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -763,7 +790,7 @@ typedef struct {
 typedef const DfPluginApiV1 *(*DfPluginEntryV1Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV9 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV10 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);

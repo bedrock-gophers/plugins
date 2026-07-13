@@ -8,7 +8,6 @@ import (
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"
-	dfsound "github.com/df-mc/dragonfly/server/world/sound"
 )
 
 func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, message string) bool {
@@ -31,141 +30,6 @@ func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, messag
 		return false
 	}
 	return true
-}
-
-func playerSound(kind native.SoundType) (world.Sound, bool) {
-	switch kind {
-	case native.SoundAnvilBreak:
-		return dfsound.AnvilBreak{}, true
-	case native.SoundAnvilLand:
-		return dfsound.AnvilLand{}, true
-	case native.SoundAnvilUse:
-		return dfsound.AnvilUse{}, true
-	case native.SoundArrowHit:
-		return dfsound.ArrowHit{}, true
-	case native.SoundBarrelClose:
-		return dfsound.BarrelClose{}, true
-	case native.SoundBarrelOpen:
-		return dfsound.BarrelOpen{}, true
-	case native.SoundBlastFurnaceCrackle:
-		return dfsound.BlastFurnaceCrackle{}, true
-	case native.SoundBowShoot:
-		return dfsound.BowShoot{}, true
-	case native.SoundBurning:
-		return dfsound.Burning{}, true
-	case native.SoundBurp:
-		return dfsound.Burp{}, true
-	case native.SoundCampfireCrackle:
-		return dfsound.CampfireCrackle{}, true
-	case native.SoundChestClose:
-		return dfsound.ChestClose{}, true
-	case native.SoundChestOpen:
-		return dfsound.ChestOpen{}, true
-	case native.SoundClick:
-		return dfsound.Click{}, true
-	case native.SoundComposterEmpty:
-		return dfsound.ComposterEmpty{}, true
-	case native.SoundComposterFill:
-		return dfsound.ComposterFill{}, true
-	case native.SoundComposterFillLayer:
-		return dfsound.ComposterFillLayer{}, true
-	case native.SoundComposterReady:
-		return dfsound.ComposterReady{}, true
-	case native.SoundCopperScraped:
-		return dfsound.CopperScraped{}, true
-	case native.SoundCrossbowShoot:
-		return dfsound.CrossbowShoot{}, true
-	case native.SoundDecoratedPotInsertFailed:
-		return dfsound.DecoratedPotInsertFailed{}, true
-	case native.SoundDeny:
-		return dfsound.Deny{}, true
-	case native.SoundDoorCrash:
-		return dfsound.DoorCrash{}, true
-	case native.SoundDrowning:
-		return dfsound.Drowning{}, true
-	case native.SoundEnderChestClose:
-		return dfsound.EnderChestClose{}, true
-	case native.SoundEnderChestOpen:
-		return dfsound.EnderChestOpen{}, true
-	case native.SoundExperience:
-		return dfsound.Experience{}, true
-	case native.SoundExplosion:
-		return dfsound.Explosion{}, true
-	case native.SoundFireCharge:
-		return dfsound.FireCharge{}, true
-	case native.SoundFireExtinguish:
-		return dfsound.FireExtinguish{}, true
-	case native.SoundFireworkBlast:
-		return dfsound.FireworkBlast{}, true
-	case native.SoundFireworkHugeBlast:
-		return dfsound.FireworkHugeBlast{}, true
-	case native.SoundFireworkLaunch:
-		return dfsound.FireworkLaunch{}, true
-	case native.SoundFireworkTwinkle:
-		return dfsound.FireworkTwinkle{}, true
-	case native.SoundFizz:
-		return dfsound.Fizz{}, true
-	case native.SoundFurnaceCrackle:
-		return dfsound.FurnaceCrackle{}, true
-	case native.SoundGhastShoot:
-		return dfsound.GhastShoot{}, true
-	case native.SoundGhastWarning:
-		return dfsound.GhastWarning{}, true
-	case native.SoundGlassBreak:
-		return dfsound.GlassBreak{}, true
-	case native.SoundIgnite:
-		return dfsound.Ignite{}, true
-	case native.SoundItemAdd:
-		return dfsound.ItemAdd{}, true
-	case native.SoundItemBreak:
-		return dfsound.ItemBreak{}, true
-	case native.SoundItemFrameRemove:
-		return dfsound.ItemFrameRemove{}, true
-	case native.SoundItemFrameRotate:
-		return dfsound.ItemFrameRotate{}, true
-	case native.SoundItemThrow:
-		return dfsound.ItemThrow{}, true
-	case native.SoundLecternBookPlace:
-		return dfsound.LecternBookPlace{}, true
-	case native.SoundLevelUp:
-		return dfsound.LevelUp{}, true
-	case native.SoundLightningExplode:
-		return dfsound.LightningExplode{}, true
-	case native.SoundLightningThunder:
-		return dfsound.LightningThunder{}, true
-	case native.SoundMusicDiscEnd:
-		return dfsound.MusicDiscEnd{}, true
-	case native.SoundPop:
-		return dfsound.Pop{}, true
-	case native.SoundPotionBrewed:
-		return dfsound.PotionBrewed{}, true
-	case native.SoundPowerOff:
-		return dfsound.PowerOff{}, true
-	case native.SoundPowerOn:
-		return dfsound.PowerOn{}, true
-	case native.SoundSignWaxed:
-		return dfsound.SignWaxed{}, true
-	case native.SoundSmokerCrackle:
-		return dfsound.SmokerCrackle{}, true
-	case native.SoundStopUsingSpyglass:
-		return dfsound.StopUsingSpyglass{}, true
-	case native.SoundTnt:
-		return dfsound.TNT{}, true
-	case native.SoundTeleport:
-		return dfsound.Teleport{}, true
-	case native.SoundThunder:
-		return dfsound.Thunder{}, true
-	case native.SoundTotem:
-		return dfsound.Totem{}, true
-	case native.SoundUseSpyglass:
-		return dfsound.UseSpyglass{}, true
-	case native.SoundWaxRemoved:
-		return dfsound.WaxRemoved{}, true
-	case native.SoundWaxedSignFailedInteraction:
-		return dfsound.WaxedSignFailedInteraction{}, true
-	default:
-		return nil, false
-	}
 }
 
 func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value native.PlayerStateValue) bool {
@@ -229,12 +93,6 @@ func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value
 		} else {
 			connected.SetMobile()
 		}
-	case native.PlayerStateSound:
-		sound, ok := playerSound(native.SoundType(value.Integer))
-		if !ok {
-			return false
-		}
-		connected.PlaySound(sound)
 	default:
 		return false
 	}

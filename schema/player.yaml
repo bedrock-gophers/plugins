@@ -82,13 +82,6 @@ states:
     rust_set: set_immobile
     rust_get: immobile
     adapter: toggle
-  - name: sound
-    id: 11
-    type: sound
-    set: PlaySound
-    rust_set: play_sound
-    adapter: sound
-
 texts:
   - { name: message, id: 0, set: Message, rust: message }
   - { name: tip, id: 1, set: SendTip, rust: send_tip }
@@ -163,6 +156,29 @@ sounds:
   - { name: use_spyglass, id: 61, go: UseSpyglass }
   - { name: wax_removed, id: 62, go: WaxRemoved }
   - { name: waxed_sign_failed_interaction, id: 63, go: WaxedSignFailedInteraction }
+  - { name: shulker_box_open, id: 64, go: ShulkerBoxOpen }
+  - { name: shulker_box_close, id: 65, go: ShulkerBoxClose }
+  - { name: ender_eye_placed, id: 66, go: EnderEyePlaced }
+  - { name: end_portal_created, id: 67, go: EndPortalCreated }
+  - { name: attack, id: 68, go: Attack }
+  - { name: fall, id: 69, go: Fall }
+  - { name: block_place, id: 70, go: BlockPlace }
+  - { name: block_breaking, id: 71, go: BlockBreaking }
+  - { name: door_open, id: 72, go: DoorOpen }
+  - { name: door_close, id: 73, go: DoorClose }
+  - { name: trapdoor_open, id: 74, go: TrapdoorOpen }
+  - { name: trapdoor_close, id: 75, go: TrapdoorClose }
+  - { name: fence_gate_open, id: 76, go: FenceGateOpen }
+  - { name: fence_gate_close, id: 77, go: FenceGateClose }
+  - { name: note, id: 78, go: Note }
+  - { name: music_disc_play, id: 79, go: MusicDiscPlay }
+  - { name: decorated_pot_inserted, id: 80, go: DecoratedPotInserted }
+  - { name: item_use_on, id: 81, go: ItemUseOn }
+  - { name: equip_item, id: 82, go: EquipItem }
+  - { name: bucket_fill, id: 83, go: BucketFill }
+  - { name: bucket_empty, id: 84, go: BucketEmpty }
+  - { name: crossbow_load, id: 85, go: CrossbowLoad }
+  - { name: goat_horn, id: 86, go: GoatHorn }
 
 effects:
   - { name: speed, id: 1, kind: lasting }

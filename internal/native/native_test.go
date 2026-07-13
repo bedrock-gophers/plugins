@@ -104,6 +104,10 @@ type recordingHost struct {
 	particleWorldID   WorldID
 	particlePositions []Vec3
 	particles         []WorldParticle
+	worldSoundID      WorldID
+	worldSoundPos     []Vec3
+	worldSounds       []WorldSound
+	playerSounds      []WorldSound
 }
 
 func (h *recordingHost) SendPlayerText(_ InvocationID, player PlayerID, kind PlayerTextKind, message string) bool {
@@ -258,6 +262,17 @@ func (h *recordingHost) AddWorldParticle(_ InvocationID, id WorldID, position Ve
 	h.particlePositions = append(h.particlePositions, position)
 	h.particles = append(h.particles, value)
 	return id == h.worldID
+}
+func (h *recordingHost) PlayWorldSound(_ InvocationID, id WorldID, position Vec3, value WorldSound) bool {
+	h.worldSoundID = id
+	h.worldSoundPos = append(h.worldSoundPos, position)
+	h.worldSounds = append(h.worldSounds, value)
+	return id == h.worldID
+}
+func (h *recordingHost) PlayPlayerSound(_ InvocationID, player PlayerID, value WorldSound) bool {
+	h.player = player
+	h.playerSounds = append(h.playerSounds, value)
+	return true
 }
 
 func TestPluginCanMessagePlayer(t *testing.T) {
@@ -422,8 +437,8 @@ func TestFormRejectsWrongPlayerAndOversizedResponse(t *testing.T) {
 
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 11 {
-		t.Fatalf("plugin count = %d, want 11", runtime.PluginCount())
+	if runtime.PluginCount() != 12 {
+		t.Fatalf("plugin count = %d, want 12", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")
@@ -621,8 +636,8 @@ func TestPlayerSoundAndDisconnectHostCalls(t *testing.T) {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
 		}
 	}
-	if !slices.Equal(host.states, []PlayerStateKind{PlayerStateSound}) || host.values[0].Integer != int64(SoundLevelUp) {
-		t.Fatalf("states=%v values=%+v", host.states, host.values)
+	if len(host.playerSounds) != 1 || host.playerSounds[0].Kind != SoundLevelUp {
+		t.Fatalf("sounds=%+v", host.playerSounds)
 	}
 	wantKinds := []PlayerTextKind{PlayerTextDisconnect, PlayerTextKick}
 	wantTexts := []string{"Disconnected by Rust plugin.", "Kicked by Rust plugin."}
@@ -761,8 +776,8 @@ func TestCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 6 {
-		t.Fatalf("commands = %#v, want entity, hello, items, particle, ping, and world", commands)
+	if len(commands) != 7 {
+		t.Fatalf("commands = %#v, want entity, hello, items, particle, ping, sound, and world", commands)
 	}
 	hello := commandNamed(t, commands, "hello")
 	_ = commandNamed(t, commands, "items")
@@ -770,6 +785,7 @@ func TestCommand(t *testing.T) {
 	_ = commandNamed(t, commands, "world")
 	_ = commandNamed(t, commands, "entity")
 	_ = commandNamed(t, commands, "particle")
+	_ = commandNamed(t, commands, "sound")
 	optionalFound := false
 	for _, overload := range hello.Overloads {
 		for _, parameter := range overload.Parameters {
@@ -951,6 +967,80 @@ func TestParticleCommandHostCalls(t *testing.T) {
 		if position != (Vec3{X: 2, Y: 65.5, Z: 3}) {
 			t.Fatalf("particle position = %#v", position)
 		}
+	}
+}
+
+func TestSoundCommandHostCalls(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{
+		worldID: 42, worldLookupOK: true,
+		entityState: EntityState{World: 42, Type: "minecraft:player", Position: Vec3{X: 2, Y: 64, Z: 3}, CanTeleport: true},
+	}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := commandNamed(t, commands, "sound")
+	player := PlayerID{UUID: [16]byte{1, 2}, Generation: 17}
+	arguments := []string{"player", "explosion", "door", "note", "equip", "bucket", "disc", "horn", "attack", "crossbow"}
+	for _, argument := range arguments {
+		output, err := runtime.HandleCommand(command.Index, CommandInput{
+			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: argument,
+			OnlinePlayers: []CommandPlayer{{Player: player, Name: "Spawner"}},
+		})
+		if err != nil || output.Failed {
+			t.Fatalf("%s: output=%+v error=%v", argument, output, err)
+		}
+	}
+	if len(host.playerSounds) != 1 || host.playerSounds[0].Kind != SoundLevelUp {
+		t.Fatalf("player sounds = %#v", host.playerSounds)
+	}
+	wantKinds := []SoundKind{
+		SoundExplosion, SoundDoorOpen, SoundNote, SoundEquipItem, SoundBucketEmpty,
+		SoundMusicDiscPlay, SoundGoatHorn, SoundAttack, SoundCrossbowLoad,
+	}
+	if host.worldSoundID != 42 || len(host.worldSounds) != len(wantKinds) {
+		t.Fatalf("world sounds = world %d, values %#v", host.worldSoundID, host.worldSounds)
+	}
+	for index, want := range wantKinds {
+		if host.worldSounds[index].Kind != want {
+			t.Fatalf("sound %d = %#v, want kind %d", index, host.worldSounds[index], want)
+		}
+		if host.worldSoundPos[index] != (Vec3{X: 2, Y: 64, Z: 3}) {
+			t.Fatalf("sound position %d = %#v", index, host.worldSoundPos[index])
+		}
+	}
+	if value := host.worldSounds[1].Block; value == nil || value.Identifier != "minecraft:wooden_door" || len(value.PropertiesNBT) == 0 {
+		t.Fatalf("door sound = %#v", host.worldSounds[1])
+	}
+	if value := host.worldSounds[2]; value.Data != 6 || value.Integer != 12 {
+		t.Fatalf("note sound = %#v", value)
+	}
+	if value := host.worldSounds[3].Item; value == nil || value.Identifier != "minecraft:diamond_sword" || value.Count != 1 {
+		t.Fatalf("equip sound = %#v", host.worldSounds[3])
+	}
+	if value := host.worldSounds[4]; value.Data != 0 {
+		t.Fatalf("bucket sound = %#v", value)
+	}
+	if value := host.worldSounds[5]; value.Data != 13 {
+		t.Fatalf("disc sound = %#v", value)
+	}
+	if value := host.worldSounds[6]; value.Data != 7 {
+		t.Fatalf("horn sound = %#v", value)
+	}
+	if value := host.worldSounds[7]; value.Flags != 1 {
+		t.Fatalf("attack sound = %#v", value)
+	}
+	if value := host.worldSounds[8]; value.Integer != 2 || value.Flags != 1 {
+		t.Fatalf("crossbow sound = %#v", value)
 	}
 }
 

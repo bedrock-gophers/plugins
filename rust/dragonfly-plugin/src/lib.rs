@@ -10,6 +10,7 @@ pub mod entity;
 pub mod form;
 mod item_nbt;
 pub mod particle;
+pub mod sound;
 pub mod world;
 
 pub use entity::{Entity, EntityId};
@@ -57,7 +58,7 @@ pub mod Event {
     pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV9> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV10> =
     AtomicPtr::new(core::ptr::null_mut());
 
 std::thread_local! {
@@ -106,7 +107,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV9) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV10) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -1032,6 +1033,17 @@ impl Player {
             fade_out_milliseconds: duration_milliseconds(title.fade_out),
         };
         let _ = unsafe { send(host.context, current_invocation(), self.raw_id(), view) };
+    }
+
+    pub fn play_sound(&self, value: impl sound::Sound) {
+        let Some(host) = host_api() else { return };
+        let Some(play) = host.player_sound_play else {
+            return;
+        };
+        let encoded = value.encode();
+        let _ = encoded.with_raw(|view| unsafe {
+            play(host.context, current_invocation(), self.raw_id(), view)
+        });
     }
 
     pub fn send_scoreboard(&self, scoreboard: &Scoreboard) {
@@ -2133,13 +2145,13 @@ fn slice_pointer<T>(value: &[T]) -> *const T {
     }
 }
 
-fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV9> {
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV10> {
     unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
 }
 
 fn read_item_stack(
     open: impl FnOnce(
-        &dragonfly_plugin_sys::DfHostApiV9,
+        &dragonfly_plugin_sys::DfHostApiV10,
         *mut u64,
         *mut dragonfly_plugin_sys::DfItemStackInfo,
     ) -> Option<dragonfly_plugin_sys::DfStatus>,
@@ -2161,7 +2173,7 @@ fn read_item_stack(
 }
 
 fn read_item_stack_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV9,
+    host: &dragonfly_plugin_sys::DfHostApiV10,
     invocation: dragonfly_plugin_sys::DfInvocationId,
     snapshot_id: u64,
     info: dragonfly_plugin_sys::DfItemStackInfo,

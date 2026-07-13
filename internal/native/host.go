@@ -190,6 +190,16 @@ type WorldParticle struct {
 	Block  *WorldBlock
 }
 
+type WorldSound struct {
+	Kind    SoundKind
+	Data    uint32
+	Integer int32
+	Flags   uint32
+	Scalar  float64
+	Block   *WorldBlock
+	Item    *ItemStack
+}
+
 // Host executes synchronous actions requested by native plugins.
 type Host interface {
 	SendPlayerText(InvocationID, PlayerID, PlayerTextKind, string) bool
@@ -234,6 +244,8 @@ type Host interface {
 	SetEntityNameTag(InvocationID, EntityID, string) bool
 	DespawnEntity(InvocationID, EntityID) bool
 	AddWorldParticle(InvocationID, WorldID, Vec3, WorldParticle) bool
+	PlayWorldSound(InvocationID, WorldID, Vec3, WorldSound) bool
+	PlayPlayerSound(InvocationID, PlayerID, WorldSound) bool
 }
 
 type noopHost struct{}
@@ -300,6 +312,8 @@ func (noopHost) DespawnEntity(InvocationID, EntityID) bool            { return f
 func (noopHost) AddWorldParticle(InvocationID, WorldID, Vec3, WorldParticle) bool {
 	return false
 }
+func (noopHost) PlayWorldSound(InvocationID, WorldID, Vec3, WorldSound) bool { return false }
+func (noopHost) PlayPlayerSound(InvocationID, PlayerID, WorldSound) bool     { return false }
 
 var (
 	hostSequence         atomic.Uint64

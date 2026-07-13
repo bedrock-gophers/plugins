@@ -571,85 +571,12 @@ func blockPosition(value native.BlockPos) cube.Pos {
 	return cube.Pos{int(value.X), int(value.Y), int(value.Z)}
 }
 
-const (
-	blockPropertyBool int32 = iota
-	blockPropertyUint8
-	blockPropertyInt32
-	blockPropertyString
-)
-
 func encodeBlockProperties(properties map[string]any) ([]byte, bool) {
-	encoded := make(map[string]any, len(properties))
-	for key, value := range properties {
-		if key == "" {
-			return nil, false
-		}
-		var kind int32
-		switch value := value.(type) {
-		case bool:
-			kind = blockPropertyBool
-			if value {
-				value = true
-			}
-			encoded[key] = map[string]any{"kind": kind, "value": value}
-		case uint8:
-			encoded[key] = map[string]any{"kind": blockPropertyUint8, "value": value}
-		case int32:
-			encoded[key] = map[string]any{"kind": blockPropertyInt32, "value": value}
-		case string:
-			encoded[key] = map[string]any{"kind": blockPropertyString, "value": value}
-		default:
-			return nil, false
-		}
-	}
-	return host.MarshalNBT(encoded)
+	return host.EncodeBlockProperties(properties)
 }
 
 func decodeBlockProperties(data []byte) (map[string]any, bool) {
-	encoded, ok := host.UnmarshalNBT(data)
-	if !ok {
-		return nil, false
-	}
-	properties := make(map[string]any, len(encoded))
-	for key, raw := range encoded {
-		entry, ok := raw.(map[string]any)
-		if !ok || key == "" || len(entry) != 2 {
-			return nil, false
-		}
-		kind, ok := entry["kind"].(int32)
-		if !ok {
-			return nil, false
-		}
-		switch kind {
-		case blockPropertyBool:
-			value, ok := entry["value"].(uint8)
-			if !ok || value > 1 {
-				return nil, false
-			}
-			properties[key] = value == 1
-		case blockPropertyUint8:
-			value, ok := entry["value"].(uint8)
-			if !ok {
-				return nil, false
-			}
-			properties[key] = value
-		case blockPropertyInt32:
-			value, ok := entry["value"].(int32)
-			if !ok {
-				return nil, false
-			}
-			properties[key] = value
-		case blockPropertyString:
-			value, ok := entry["value"].(string)
-			if !ok {
-				return nil, false
-			}
-			properties[key] = value
-		default:
-			return nil, false
-		}
-	}
-	return properties, true
+	return host.DecodeBlockProperties(data)
 }
 
 func validateCustomWorldID(id WorldID) error {

@@ -1,4 +1,4 @@
-use crate::{BlockFace, BlockPos, block};
+use crate::{BlockFace, BlockPos, block, sound::Instrument};
 
 /// An RGBA colour used by coloured particles.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
@@ -22,28 +22,6 @@ impl Colour {
     pub const fn rgb(red: u8, green: u8, blue: u8) -> Self {
         Self::new(red, green, blue, u8::MAX)
     }
-}
-
-/// A note-block instrument.
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum Instrument {
-    Piano = 0,
-    BassDrum = 1,
-    Snare = 2,
-    ClicksAndSticks = 3,
-    Bass = 4,
-    Flute = 5,
-    Bell = 6,
-    Guitar = 7,
-    Chimes = 8,
-    Xylophone = 9,
-    IronXylophone = 10,
-    CowBell = 11,
-    Didgeridoo = 12,
-    Bit = 13,
-    Banjo = 14,
-    Pling = 15,
 }
 
 /// A particle that Dragonfly can add to a world.

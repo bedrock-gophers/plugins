@@ -1,4 +1,4 @@
-use crate::{BlockPos, Entity, Player, Vec3, block, entity, particle};
+use crate::{BlockPos, Entity, Player, Vec3, block, entity, particle, sound};
 
 const MAX_WORLD_NAME_BYTES: usize = 256;
 const MAX_BLOCK_IDENTIFIER_BYTES: usize = 256;
@@ -291,6 +291,25 @@ impl World {
         let encoded = value.encode();
         let _ = encoded.with_raw(|view| unsafe {
             add(
+                host.context,
+                crate::current_invocation(),
+                self.raw_id(),
+                position.into(),
+                view,
+            )
+        });
+    }
+
+    pub fn play_sound(&self, position: Vec3, value: impl sound::Sound) {
+        let Some(host) = crate::host_api() else {
+            return;
+        };
+        let Some(play) = host.world_sound_play else {
+            return;
+        };
+        let encoded = value.encode();
+        let _ = encoded.with_raw(|view| unsafe {
+            play(
                 host.context,
                 crate::current_invocation(),
                 self.raw_id(),

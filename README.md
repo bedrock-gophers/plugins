@@ -2,7 +2,7 @@
 
 Native multi-language plugin runtime for [df-mc/dragonfly](https://github.com/df-mc/dragonfly). Rust is the first supported plugin language.
 
-Current status: native runtime foundation plus player actions, typed items, inventories, scoreboards, asynchronous forms, managed worlds, stable entity handles, built-in entity/projectile spawning, typed world particles, and attack-entity events. Generated events, lifecycle hooks, Dragonfly commands, bounded snapshots, and host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
+Current status: native runtime foundation plus player actions, typed items, inventories, scoreboards, asynchronous forms, managed worlds, stable entity handles, built-in entity/projectile spawning, typed world particles and sounds, and attack-entity events. Generated events, lifecycle hooks, Dragonfly commands, bounded snapshots, and host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
 
 ## Build and test
 
@@ -74,6 +74,30 @@ if let Some(world) = World::overworld() {
     world.add_particle(
         Vec3 { x: 0.0, y: 65.0, z: 0.0 },
         particle::BlockBreak::new(block::new("minecraft:diamond_block")),
+    );
+}
+```
+
+Sounds use the same typed model for private player playback and transaction-aware world playback:
+
+```rust
+use dragonfly::{Vec3, World, block, item, sound};
+
+player.play_sound(sound::LevelUp);
+if let Some(world) = World::overworld() {
+    world.play_sound(
+        Vec3 { x: 0.0, y: 65.0, z: 0.0 },
+        sound::DoorOpen::new(
+            block::new("minecraft:wooden_door")
+                .with_property("minecraft:cardinal_direction", "north")
+                .with_property("door_hinge_bit", false)
+                .with_property("open_bit", false)
+                .with_property("upper_block_bit", false),
+        ),
+    );
+    world.play_sound(
+        Vec3 { x: 0.0, y: 65.0, z: 0.0 },
+        sound::EquipItem::new(item::Sword::new(item::ToolTier::Diamond)),
     );
 }
 ```
@@ -175,5 +199,6 @@ See [native plugin architecture](docs/plans/rust-plugin-architecture.md).
 - [World command](examples/plugins/world-command): demonstrates world lookup/open, blocks, time, and spawn.
 - [Entity command](examples/plugins/entity-command): demonstrates typed entity/projectile spawning, handles, and world lists.
 - [Particle command](examples/plugins/particle-command): demonstrates every typed built-in particle family.
+- [Sound command](examples/plugins/sound-command): demonstrates private player playback and typed world sounds.
 
 The examples compile as native plugin libraries through `make stage-examples`. Precompiled `.so`, `.dylib`, or `.dll` plugins may also be placed directly in `examples/plugins`.

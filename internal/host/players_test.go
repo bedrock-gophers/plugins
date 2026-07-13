@@ -192,7 +192,7 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		if !players.SendPlayerText(invocation, id, native.PlayerTextNameTag, "Rust Player") || player.NameTag() != "Rust Player" {
 			t.Fatalf("name tag = %q", player.NameTag())
 		}
-		if !players.SetPlayerState(invocation, id, native.PlayerStateSound, native.PlayerStateValue{Integer: int64(native.SoundLevelUp)}) {
+		if !players.PlayPlayerSound(invocation, id, native.WorldSound{Kind: native.SoundLevelUp}) {
 			t.Fatal("play sound failed")
 		}
 		entityID := native.EntityID{UUID: id.UUID, Generation: id.Generation}

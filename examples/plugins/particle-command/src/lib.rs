@@ -1,5 +1,5 @@
 use dragonfly::{
-    BlockFace, BlockPos, Context, Player, Plugin, Vec3, World, block, particle, plugin,
+    BlockFace, BlockPos, Context, Player, Plugin, Vec3, World, block, particle, plugin, sound,
 };
 
 #[derive(Default)]
@@ -59,7 +59,7 @@ impl Plugin for ParticleCommand {
 
     #[subcommand("note")]
     fn note(&self, context: &mut Context<'_, Player>) {
-        self.add(context, particle::Note::new(particle::Instrument::Bell, 12));
+        self.add(context, particle::Note::new(sound::Instrument::Bell, 12));
     }
 
     #[subcommand("dragon-egg")]
