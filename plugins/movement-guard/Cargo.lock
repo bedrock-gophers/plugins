@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=a83c8b57432022e46c2d673cad8fa2462bad770b#a83c8b57432022e46c2d673cad8fa2462bad770b"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=691183dab97c7033ee5e45b48210f746733bbd94#691183dab97c7033ee5e45b48210f746733bbd94"
 dependencies = [
  "dragonfly-plugin-macros",
  "dragonfly-plugin-sys",
@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-macros"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=a83c8b57432022e46c2d673cad8fa2462bad770b#a83c8b57432022e46c2d673cad8fa2462bad770b"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=691183dab97c7033ee5e45b48210f746733bbd94#691183dab97c7033ee5e45b48210f746733bbd94"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=a83c8b57432022e46c2d673cad8fa2462bad770b#a83c8b57432022e46c2d673cad8fa2462bad770b"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=691183dab97c7033ee5e45b48210f746733bbd94#691183dab97c7033ee5e45b48210f746733bbd94"
 
 [[package]]
 name = "movement-guard"
