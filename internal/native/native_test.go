@@ -172,36 +172,40 @@ type recordingHost struct {
 		Slot      uint32
 		Item      ItemStack
 	}
-	inventoryAdds     []ItemStack
-	forms             []PlayerForm
-	formClosed        bool
-	worldOpened       string
-	worldDimension    WorldDimension
-	worldID           WorldID
-	worldLookup       string
-	worldLookupOK     bool
-	worldName         string
-	worldBlock        WorldBlock
-	worldBlockOK      bool
-	worldBlockPos     BlockPos
-	worldBlockSet     WorldBlock
-	worldSaved        bool
-	worldUnloaded     bool
-	worldTime         int64
-	worldSpawn        BlockPos
-	entityStateID     EntityID
-	entityState       EntityState
-	entitySpawns      []EntitySpawn
-	spawnedEntity     EntityID
-	worldEntityIDs    []EntityID
-	worldPlayerIDs    []PlayerID
-	particleWorldID   WorldID
-	particlePositions []Vec3
-	particles         []WorldParticle
-	worldSoundID      WorldID
-	worldSoundPos     []Vec3
-	worldSounds       []WorldSound
-	playerSounds      []WorldSound
+	inventoryAdds      []ItemStack
+	forms              []PlayerForm
+	formClosed         bool
+	worldOpened        string
+	worldDimension     WorldDimension
+	worldID            WorldID
+	worldLookup        string
+	worldLookupOK      bool
+	worldName          string
+	worldBlock         WorldBlock
+	worldBlockOK       bool
+	worldBlockPos      BlockPos
+	worldBlockSet      WorldBlock
+	worldSaved         bool
+	worldUnloaded      bool
+	worldTime          int64
+	worldSpawn         BlockPos
+	entityStateID      EntityID
+	entityState        EntityState
+	entitySpawns       []EntitySpawn
+	spawnedEntity      EntityID
+	worldEntityIDs     []EntityID
+	worldPlayerIDs     []PlayerID
+	particleWorldID    WorldID
+	particlePositions  []Vec3
+	particles          []WorldParticle
+	worldSoundID       WorldID
+	worldSoundPos      []Vec3
+	worldSounds        []WorldSound
+	playerSounds       []WorldSound
+	transferInvocation InvocationID
+	transferPlayer     PlayerID
+	transferWorld      WorldID
+	transferPosition   Vec3
 }
 
 func (h *recordingHost) SendPlayerText(_ InvocationID, player PlayerID, kind PlayerTextKind, message string) bool {
@@ -240,6 +244,14 @@ func (h *recordingHost) TransformPlayer(_ InvocationID, _ PlayerID, kind PlayerT
 	h.vectors = append(h.vectors, vector)
 	h.yaws = append(h.yaws, yaw)
 	h.pitches = append(h.pitches, pitch)
+	return true
+}
+
+func (h *recordingHost) TransferPlayer(invocation InvocationID, player PlayerID, world WorldID, position Vec3) bool {
+	h.transferInvocation = invocation
+	h.transferPlayer = player
+	h.transferWorld = world
+	h.transferPosition = position
 	return true
 }
 
