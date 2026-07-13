@@ -680,7 +680,7 @@ unsafe fn handle_advanced<A: AdvancedAdapter>(
             let Ok(capacity) = usize::try_from(output.data.capacity) else {
                 return sys::DF_STATUS_ERROR;
             };
-            if bytes.len() > capacity || (bytes.len() != 0 && output.data.data.is_null()) {
+            if bytes.len() > capacity || (!bytes.is_empty() && output.data.data.is_null()) {
                 return sys::DF_STATUS_ERROR;
             }
             if !bytes.is_empty() {
@@ -1149,6 +1149,7 @@ impl RegisteredType {
     }
 
     #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
     pub const fn advanced(
         definition: Definition,
         family: u32,

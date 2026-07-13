@@ -139,9 +139,7 @@ impl Block {
             let Some(Value::Int(kind)) = tagged.remove("kind") else {
                 return None;
             };
-            let Some(value) = tagged.remove("value") else {
-                return None;
-            };
+            let value = tagged.remove("value")?;
             if !tagged.is_empty() {
                 return None;
             }
