@@ -3,13 +3,6 @@
 version = 4
 
 [[package]]
-name = "chat-filter"
-version = "0.1.0"
-dependencies = [
- "dragonfly-plugin",
-]
-
-[[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=d24ce791f58a3c999fc6f6cb254457beb96c9840#d24ce791f58a3c999fc6f6cb254457beb96c9840"
@@ -33,6 +26,13 @@ dependencies = [
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=d24ce791f58a3c999fc6f6cb254457beb96c9840#d24ce791f58a3c999fc6f6cb254457beb96c9840"
+
+[[package]]
+name = "forms"
+version = "0.1.0"
+dependencies = [
+ "dragonfly-plugin",
+]
 
 [[package]]
 name = "itoa"
