@@ -173,6 +173,32 @@ impl Plugin for PlayerCommand {
         context.source().message("Speed effect added.");
     }
 
+    #[subcommand("effects")]
+    fn effects(&self, context: &mut Context<'_, Player>) {
+        let effects = context.source().effects();
+        if effects.is_empty() {
+            context.source().message("No active effects.");
+            return;
+        }
+        for effect in effects {
+            context.source().message(&format!(
+                "Effect {} level={} duration_ms={} ambient={} infinite={} particles_hidden={}",
+                effect.type_id(),
+                effect.level(),
+                effect.duration().as_millis(),
+                effect.ambient(),
+                effect.infinite(),
+                effect.particles_hidden(),
+            ));
+        }
+    }
+
+    #[subcommand("clear-effects")]
+    fn clear_effects(&self, context: &mut Context<'_, Player>) {
+        context.source().clear_effects();
+        context.source().message("Effects cleared.");
+    }
+
     #[subcommand("clear-speed")]
     fn clear_speed(&self, context: &mut Context<'_, Player>) {
         context.source().remove_effect(effect::Speed);

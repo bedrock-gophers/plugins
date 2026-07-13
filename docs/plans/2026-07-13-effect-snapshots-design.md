@@ -5,7 +5,7 @@ Status: Implementation-ready
 ## Goal
 
 Expose Dragonfly's current lasting player effects to Rust plugins and add one
-atomic host operation for clearing them. The public API is deliberately small:
+owner-transaction host operation for clearing them. The public API is deliberately small:
 
 ```rust
 let effects = player.effects();

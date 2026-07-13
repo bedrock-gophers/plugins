@@ -205,7 +205,7 @@ Every ABI structure must:
 - Avoid platform-sized `long`, `size_t` in persisted layouts, and C bitfields.
 - Have generated size, alignment, and offset tests.
 
-The ABI is intentionally strict while the project is WIP. Host ABI v17 retains the complete v16 world-specification prefix (`world_open_spec` at offset 448) and appends the stable player-transfer call at offset 456; plugin ABI remains v3. A breaking layout or callback change increments the host ABI version, and mismatched runtimes/plugins fail to load. Compatibility shims are deferred until the API is stable enough to justify them. Independent ABI branches must never publish different layouts under one version; v18 is reserved, so the transferable-entity prototype must rebase and append as v19 if integrated.
+The ABI is intentionally strict while the project is WIP. Host ABI v18 retains the complete v17 prefix (`world_open_spec` at offset 448 and stable player transfer at offset 456), then appends player effect snapshot and clear-all calls at offsets 464 and 472; plugin ABI remains v3. A breaking layout or callback change increments the host ABI version, and mismatched runtimes/plugins fail to load. Compatibility shims are deferred until the API is stable enough to justify them. Independent ABI branches must never publish different layouts under one version; the transferable-entity prototype must rebase and append as v19 if integrated.
 
 ## Runtime
 
@@ -570,6 +570,8 @@ Dragonfly v0.11 does not expose `Player.StopSound`: the packet writer and player
 
 Player effects mirror Dragonfly's type split. Rust uses `effect::new(effect::Speed, level, duration)`, `effect::ambient`, `effect::infinite`, and `effect::instant_with_potency(effect::InstantHealth, level, potency)`. Generated zero-sized built-ins implement either `effect::LastingType` or `effect::InstantType`, so invalid combinations do not compile. `RegisteredLasting` and `RegisteredInstant` carry custom effect IDs already registered in Dragonfly and the Go host verifies the declared kind before applying them. The ABI preserves signed protocol IDs, exact instant potency, and particle visibility. Invalid levels are rejected before Dragonfly's `EffectManager` can panic. Saturation is correctly classified as lasting in Dragonfly v0.11.
 
+`Player::effects()` returns a bounded, transaction-coherent snapshot of active registered lasting effects. Each owned `effect::Effect` exposes its signed type ID, level, remaining millisecond duration, ambient/infinite classification, and particle visibility. Initial instant effects are filtered, negative between-tick duration residue clamps to zero, and malformed or rejected host snapshots fail closed to an empty vector. `Player::clear_effects()` removes registered lasting effects in one player-owner pass and exposes no host status. Snapshot tick age is intentionally omitted, so snapshots inspect current status rather than promise byte-for-byte reapplication state.
+
 ## Items and inventories
 
 `ItemStack` is an owned Rust value. It carries identifier, metadata, count, damage, unbreakable state, anvil cost, custom name, lore, item NBT, Dragonfly `WithValue` data, and registered enchantments. Item identity follows Dragonfly: typed values such as `item::Sword::new(item::ToolTier::Diamond)` encode identifier and Dragonfly's signed 16-bit metadata, while `item::new(item, count)` creates the stack. Generated simple items are zero-sized values such as `item::Diamond`. `item::Custom` is the explicit identifier/metadata escape hatch for plugin-registered items. Registered custom enchantment and potion IDs remain representable across the ABI. The ABI keeps metadata widened to `i32` for stable transport, converting at the typed API boundary.
@@ -624,6 +626,7 @@ Initial ABI foundation includes:
 - Declarative server bootstrap plan.
 - Core-world configuration.
 - Plugin-world creation, lookup, save, unload, and player transfer.
+- Typed player effect application, bounded snapshots, and clear-all.
 - Built-in world provider and generator presets.
 - Player join and quit.
 - Player movement.
