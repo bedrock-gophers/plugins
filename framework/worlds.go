@@ -49,8 +49,9 @@ type WorldManager struct {
 	root            string
 	log             *slog.Logger
 	players         *host.Players
+	entityHandles   *host.Entities
 	blocks          world.BlockRegistry
-	entities        world.EntityRegistry
+	entityTypes     world.EntityRegistry
 	registriesReady bool
 }
 
@@ -78,9 +79,13 @@ func newWorldManager(root string, log *slog.Logger, players *host.Players) *Worl
 	if log == nil {
 		log = slog.Default()
 	}
+	entityHandles := host.NewEntities()
+	if players != nil {
+		entityHandles = players.EntityRegistry()
+	}
 	return &WorldManager{
 		worlds: make(map[WorldID]*managedWorld), handles: make(map[native.WorldID]*managedWorld),
-		root: root, log: log, players: players,
+		root: root, log: log, players: players, entityHandles: entityHandles,
 	}
 }
 
@@ -129,7 +134,7 @@ func (m *WorldManager) Open(name WorldID, dimension native.WorldDimension) (nati
 		return 0, err
 	}
 	m.mu.RLock()
-	blocks, entities, ready := m.blocks, m.entities, m.registriesReady
+	blocks, entities, ready := m.blocks, m.entityTypes, m.registriesReady
 	m.mu.RUnlock()
 	if !ready {
 		return 0, errors.New("core world registries are not ready")
@@ -167,9 +172,9 @@ func (m *WorldManager) register(name WorldID, w *world.World, core bool) (native
 	}
 	m.next++
 	if core && !m.registriesReady {
-		m.blocks, m.entities, m.registriesReady = w.BlockRegistry(), w.EntityRegistry(), true
+		m.blocks, m.entityTypes, m.registriesReady = w.BlockRegistry(), w.EntityRegistry(), true
 	}
-	w.Handle(host.NewWorldHandler())
+	w.Handle(host.NewWorldHandler(m.entityHandles))
 	entry := &managedWorld{id: m.next, name: name, world: w, core: core}
 	m.worlds[name], m.handles[entry.id] = entry, entry
 	return entry.id, nil

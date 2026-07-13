@@ -153,4 +153,13 @@ impl Plugin for LifecycleLogger {
             event.item().count()
         );
     }
+    fn on_attack_entity(&self, event: &mut Event::PlayerAttackEntity<'_>) {
+        eprintln!(
+            "attacking {:?}, critical={}, knockback=({}, {})",
+            event.target().id(),
+            event.critical(),
+            event.knockback_force(),
+            event.knockback_height()
+        );
+    }
 }

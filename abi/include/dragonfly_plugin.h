@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 1u
-#define DF_HOST_ABI_VERSION 7u
+#define DF_HOST_ABI_VERSION 8u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -46,6 +46,32 @@ typedef struct { DfStringView identifier; int32_t metadata; uint32_t count; uint
 #define DF_WORLD_DIMENSION_END 2u
 typedef struct { DfStringBuffer identifier; DfStringBuffer properties_nbt; } DfBlockData;
 typedef struct { DfStringView identifier; DfStringView properties_nbt; } DfBlockView;
+#define DF_ENTITY_TEXT 0u
+#define DF_ENTITY_LIGHTNING 1u
+#define DF_ENTITY_TNT 2u
+#define DF_ENTITY_EXPERIENCE_ORB 3u
+#define DF_ENTITY_ITEM 4u
+#define DF_ENTITY_FALLING_BLOCK 5u
+#define DF_ENTITY_ARROW 6u
+#define DF_ENTITY_EGG 7u
+#define DF_ENTITY_SNOWBALL 8u
+#define DF_ENTITY_ENDER_PEARL 9u
+#define DF_ENTITY_BOTTLE_OF_ENCHANTING 10u
+#define DF_ENTITY_SPLASH_POTION 11u
+#define DF_ENTITY_LINGERING_POTION 12u
+#define DF_ENTITY_ARROW_CRITICAL 1u
+#define DF_ENTITY_ARROW_DISABLE_PICKUP 2u
+#define DF_ENTITY_ARROW_OBTAIN_ON_PICKUP 4u
+#define DF_ENTITY_LIGHTNING_BLOCK_FIRE 1u
+#define DF_ENTITY_ITEM_HAS_PICKUP_DELAY 1u
+#define DF_ENTITY_HAS_VELOCITY 1u
+#define DF_ENTITY_HAS_NAME_TAG 2u
+#define DF_ENTITY_CAN_TELEPORT 4u
+typedef struct { DfEntityId *data; uint64_t len; uint64_t capacity; } DfEntityIdBuffer;
+typedef struct { DfPlayerId *data; uint64_t len; uint64_t capacity; } DfPlayerIdBuffer;
+typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; DfStringView name_tag; } DfEntitySpawnOptions;
+typedef struct { uint32_t kind; uint32_t flags; DfEntitySpawnOptions options; DfEntityId owner; double damage; uint64_t fuse_milliseconds; int32_t experience; uint32_t potion; int32_t punch_level; int32_t piercing_level; DfStringView text; const DfItemStackViewV3 *item; const DfBlockView *block; } DfEntitySpawnViewV1;
+typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; uint32_t capabilities; DfStringBuffer entity_type; DfStringBuffer name_tag; } DfEntityState;
 #define DF_PLAYER_TRANSFORM_TELEPORT 0u
 #define DF_PLAYER_TRANSFORM_MOVE 1u
 #define DF_PLAYER_TRANSFORM_VELOCITY 2u
@@ -218,6 +244,14 @@ typedef DfStatus (*DfHostWorldTimeGetFn)(uint64_t context, DfInvocationId invoca
 typedef DfStatus (*DfHostWorldTimeSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time);
 typedef DfStatus (*DfHostWorldSpawnGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
 typedef DfStatus (*DfHostWorldSpawnSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position);
+typedef DfStatus (*DfHostWorldEntitySpawnFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV1 *entity, DfEntityId *output);
+typedef DfStatus (*DfHostWorldEntitiesFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfEntityIdBuffer *output);
+typedef DfStatus (*DfHostWorldPlayersFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfPlayerIdBuffer *output);
+typedef DfStatus (*DfHostEntityStateFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state);
+typedef DfStatus (*DfHostEntityTeleportFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 position);
+typedef DfStatus (*DfHostEntityVelocitySetFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 velocity);
+typedef DfStatus (*DfHostEntityNameTagSetFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag);
+typedef DfStatus (*DfHostEntityDespawnFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity);
 typedef struct {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -261,7 +295,15 @@ typedef struct {
     DfHostWorldTimeSetFn world_time_set;
     DfHostWorldSpawnGetFn world_spawn_get;
     DfHostWorldSpawnSetFn world_spawn_set;
-} DfHostApiV7;
+    DfHostWorldEntitySpawnFn world_entity_spawn;
+    DfHostWorldEntitiesFn world_entities;
+    DfHostWorldPlayersFn world_players;
+    DfHostEntityStateFn entity_state;
+    DfHostEntityTeleportFn entity_teleport;
+    DfHostEntityVelocitySetFn entity_velocity_set;
+    DfHostEntityNameTagSetFn entity_name_tag_set;
+    DfHostEntityDespawnFn entity_despawn;
+} DfHostApiV8;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -656,13 +698,28 @@ typedef struct {
     uint8_t cancelled;
 } DfPlayerItemDropState;
 
+#define DF_EVENT_PLAYER_ATTACK_ENTITY 30u
+
+typedef struct {
+    DfInvocationId invocation;
+    DfPlayerId player;
+    DfEntityId target;
+} DfPlayerAttackEntityInput;
+
+typedef struct {
+    uint8_t cancelled;
+    double knockback_force;
+    double knockback_height;
+    uint8_t critical;
+} DfPlayerAttackEntityState;
+
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV7 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV8 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -682,7 +739,7 @@ typedef struct {
 typedef const DfPluginApiV1 *(*DfPluginEntryV1Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV7 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV8 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);

@@ -6,10 +6,12 @@ use core::sync::atomic::{AtomicPtr, Ordering};
 use std::cell::Cell;
 
 pub mod block;
+pub mod entity;
 pub mod form;
 mod item_nbt;
 pub mod world;
 
+pub use entity::{Entity, EntityId};
 pub use world::{Dimension, World};
 
 pub use dragonfly_plugin_macros::{Command, CommandEnum, plugin};
@@ -22,6 +24,7 @@ pub mod __private {
 
 #[allow(non_snake_case)]
 pub mod Event {
+    pub use super::PlayerAttackEntityEventData as PlayerAttackEntity;
     pub use super::PlayerBlockBreakEventData as PlayerBlockBreak;
     pub use super::PlayerBlockPickEventData as PlayerBlockPick;
     pub use super::PlayerBlockPlaceEventData as PlayerBlockPlace;
@@ -53,7 +56,7 @@ pub mod Event {
     pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV7> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV8> =
     AtomicPtr::new(core::ptr::null_mut());
 
 std::thread_local! {
@@ -102,7 +105,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV7) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV8) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -455,7 +458,7 @@ impl ItemStack {
         self
     }
 
-    fn with_raw<R>(
+    pub(crate) fn with_raw<R>(
         &self,
         function: impl FnOnce(&dragonfly_plugin_sys::DfItemStackViewV3) -> R,
     ) -> Option<R> {
@@ -765,40 +768,6 @@ impl From<dragonfly_plugin_sys::DfPlayerId> for PlayerId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct EntityId {
-    uuid: [u8; 16],
-    generation: u64,
-}
-
-impl EntityId {
-    pub const fn uuid_bytes(self) -> [u8; 16] {
-        self.uuid
-    }
-
-    pub const fn generation(self) -> u64 {
-        self.generation
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct Entity {
-    id: EntityId,
-}
-
-impl Entity {
-    pub const fn id(self) -> EntityId {
-        self.id
-    }
-
-    fn raw_id(self) -> dragonfly_plugin_sys::DfEntityId {
-        dragonfly_plugin_sys::DfEntityId {
-            bytes: self.id.uuid,
-            generation: self.id.generation,
-        }
-    }
-}
-
 impl From<Player> for Entity {
     fn from(player: Player) -> Self {
         player.entity()
@@ -1030,12 +999,7 @@ impl Player {
     }
 
     pub const fn entity(self) -> Entity {
-        Entity {
-            id: EntityId {
-                uuid: self.id.uuid,
-                generation: self.id.generation,
-            },
-        }
+        Entity::from_id(EntityId::from_parts(self.id.uuid, self.id.generation))
     }
 
     pub fn latency(&self) -> Option<std::time::Duration> {
@@ -1468,7 +1432,7 @@ impl Player {
         }
     }
 
-    fn from_id(id: dragonfly_plugin_sys::DfPlayerId) -> Self {
+    pub(crate) fn from_id(id: dragonfly_plugin_sys::DfPlayerId) -> Self {
         Self {
             id: id.into(),
             latency_milliseconds: None,
@@ -2168,13 +2132,13 @@ fn slice_pointer<T>(value: &[T]) -> *const T {
     }
 }
 
-fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV7> {
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV8> {
     unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
 }
 
 fn read_item_stack(
     open: impl FnOnce(
-        &dragonfly_plugin_sys::DfHostApiV7,
+        &dragonfly_plugin_sys::DfHostApiV8,
         *mut u64,
         *mut dragonfly_plugin_sys::DfItemStackInfo,
     ) -> Option<dragonfly_plugin_sys::DfStatus>,
@@ -2196,7 +2160,7 @@ fn read_item_stack(
 }
 
 fn read_item_stack_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV7,
+    host: &dragonfly_plugin_sys::DfHostApiV8,
     invocation: dragonfly_plugin_sys::DfInvocationId,
     snapshot_id: u64,
     info: dragonfly_plugin_sys::DfItemStackInfo,
@@ -3222,6 +3186,58 @@ impl<'a> PlayerLecternPageTurnEventData<'a> {
     }
 }
 
+pub struct PlayerAttackEntityEventData<'a> {
+    input: &'a dragonfly_plugin_sys::DfPlayerAttackEntityInput,
+    state: &'a mut dragonfly_plugin_sys::DfPlayerAttackEntityState,
+}
+
+impl<'a> PlayerAttackEntityEventData<'a> {
+    /// # Safety
+    /// Both references must belong to the same active attack callback.
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfPlayerAttackEntityInput,
+        state: &'a mut dragonfly_plugin_sys::DfPlayerAttackEntityState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn player(&self) -> Player {
+        Player::from_id(self.input.player)
+    }
+    pub fn target(&self) -> Entity {
+        self.input.target.into()
+    }
+    pub fn knockback_force(&self) -> f64 {
+        self.state.knockback_force
+    }
+    pub fn set_knockback_force(&mut self, force: f64) {
+        if force.is_finite() {
+            self.state.knockback_force = force;
+        }
+    }
+    pub fn knockback_height(&self) -> f64 {
+        self.state.knockback_height
+    }
+    pub fn set_knockback_height(&mut self, height: f64) {
+        if height.is_finite() {
+            self.state.knockback_height = height;
+        }
+    }
+    pub fn critical(&self) -> bool {
+        self.state.critical != 0
+    }
+    pub fn set_critical(&mut self, critical: bool) {
+        self.state.critical = u8::from(critical);
+    }
+    pub fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
 pub trait Plugin: Default + Send + Sync + 'static {
     fn on_enable(&self) {}
     fn on_disable(&self) {}
@@ -3254,6 +3270,7 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_item_release(&self, _event: &mut Event::PlayerItemRelease<'_>) {}
     fn on_item_damage(&self, _event: &mut Event::PlayerItemDamage<'_>) {}
     fn on_item_drop(&self, _event: &mut Event::PlayerItemDrop<'_>) {}
+    fn on_attack_entity(&self, _event: &mut Event::PlayerAttackEntity<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }

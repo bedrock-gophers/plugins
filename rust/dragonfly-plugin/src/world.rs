@@ -1,4 +1,4 @@
-use crate::{BlockPos, block};
+use crate::{BlockPos, Entity, Player, block, entity};
 
 const MAX_WORLD_NAME_BYTES: usize = 256;
 const MAX_BLOCK_IDENTIFIER_BYTES: usize = 256;
@@ -253,6 +253,112 @@ impl World {
                 position.into(),
             )
         };
+    }
+
+    pub fn spawn_entity<E: entity::Spawnable>(
+        &self,
+        descriptor: E,
+        options: entity::SpawnOptions,
+    ) -> Option<Entity> {
+        let host = crate::host_api()?;
+        let spawn = host.world_entity_spawn?;
+        let encoded = descriptor.encode();
+        let mut output = dragonfly_plugin_sys::DfEntityId::default();
+        let status = encoded.with_raw(&options, |view| unsafe {
+            spawn(
+                host.context,
+                crate::current_invocation(),
+                self.raw_id(),
+                view,
+                &mut output,
+            )
+        })?;
+        (status == dragonfly_plugin_sys::DF_STATUS_OK && output.generation != 0)
+            .then(|| output.into())
+    }
+
+    pub fn entities(&self) -> Option<Vec<Entity>> {
+        let host = crate::host_api()?;
+        let list = host.world_entities?;
+        let mut capacity = 0;
+        for _ in 0..3 {
+            let mut values = vec![dragonfly_plugin_sys::DfEntityId::default(); capacity];
+            let mut raw = dragonfly_plugin_sys::DfEntityIdBuffer {
+                data: if values.is_empty() {
+                    core::ptr::null_mut()
+                } else {
+                    values.as_mut_ptr()
+                },
+                len: 0,
+                capacity: values.len() as u64,
+            };
+            let status = unsafe {
+                list(
+                    host.context,
+                    crate::current_invocation(),
+                    self.raw_id(),
+                    &mut raw,
+                )
+            };
+            let length = usize::try_from(raw.len).ok()?;
+            if length > 1 << 20 {
+                return None;
+            }
+            if status == dragonfly_plugin_sys::DF_STATUS_OK {
+                if length > values.len() {
+                    return None;
+                }
+                values.truncate(length);
+                return Some(values.into_iter().map(Into::into).collect());
+            }
+            if length <= values.len() {
+                return None;
+            }
+            capacity = length;
+        }
+        None
+    }
+
+    pub fn players(&self) -> Option<Vec<Player>> {
+        let host = crate::host_api()?;
+        let list = host.world_players?;
+        let mut capacity = 0;
+        for _ in 0..3 {
+            let mut values = vec![dragonfly_plugin_sys::DfPlayerId::default(); capacity];
+            let mut raw = dragonfly_plugin_sys::DfPlayerIdBuffer {
+                data: if values.is_empty() {
+                    core::ptr::null_mut()
+                } else {
+                    values.as_mut_ptr()
+                },
+                len: 0,
+                capacity: values.len() as u64,
+            };
+            let status = unsafe {
+                list(
+                    host.context,
+                    crate::current_invocation(),
+                    self.raw_id(),
+                    &mut raw,
+                )
+            };
+            let length = usize::try_from(raw.len).ok()?;
+            if length > 1 << 20 {
+                return None;
+            }
+            if status == dragonfly_plugin_sys::DF_STATUS_OK {
+                if length > values.len() {
+                    return None;
+                }
+                values.truncate(length);
+                return Some(values.into_iter().map(Player::from_id).collect());
+            }
+            if length <= values.len() {
+                return None;
+            }
+            capacity = length;
+        }
+        None
     }
 
     pub(crate) const fn raw_id(self) -> dragonfly_plugin_sys::DfWorldId {

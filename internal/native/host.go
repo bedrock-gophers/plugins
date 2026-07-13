@@ -100,6 +100,59 @@ type WorldBlock struct {
 	PropertiesNBT []byte
 }
 
+type EntityKind uint32
+
+const (
+	EntityText EntityKind = iota
+	EntityLightning
+	EntityTNT
+	EntityExperienceOrb
+	EntityItem
+	EntityFallingBlock
+	EntityArrow
+	EntityEgg
+	EntitySnowball
+	EntityEnderPearl
+	EntityBottleOfEnchanting
+	EntitySplashPotion
+	EntityLingeringPotion
+)
+
+const (
+	EntityArrowCritical uint32 = 1 << iota
+	EntityArrowDisablePickup
+	EntityArrowObtainOnPickup
+)
+
+const (
+	EntityLightningBlockFire uint32 = 1
+	EntityItemHasPickupDelay uint32 = 1
+)
+
+type EntitySpawn struct {
+	Kind                        EntityKind
+	Flags                       uint32
+	Position, Velocity          Vec3
+	Rotation                    Rotation
+	NameTag, Text               string
+	Owner                       EntityID
+	Damage                      float64
+	FuseMilliseconds            uint64
+	Experience, Punch, Piercing int32
+	Potion                      uint32
+	Item                        *ItemStack
+	Block                       *WorldBlock
+}
+
+type EntityState struct {
+	Position, Velocity Vec3
+	Rotation           Rotation
+	Type, NameTag      string
+	HasVelocity        bool
+	HasNameTag         bool
+	CanTeleport        bool
+}
+
 // Host executes synchronous actions requested by native plugins.
 type Host interface {
 	SendPlayerText(InvocationID, PlayerID, PlayerTextKind, string) bool
@@ -135,6 +188,14 @@ type Host interface {
 	WorldSpawn(InvocationID, WorldID) (BlockPos, bool)
 	SetWorldSpawn(InvocationID, WorldID, BlockPos) bool
 	SaveWorld(InvocationID, WorldID) bool
+	SpawnWorldEntity(InvocationID, WorldID, EntitySpawn) (EntityID, bool)
+	WorldEntities(InvocationID, WorldID) ([]EntityID, bool)
+	WorldPlayers(InvocationID, WorldID) ([]PlayerID, bool)
+	EntityState(InvocationID, EntityID) (EntityState, bool)
+	TeleportEntity(InvocationID, EntityID, Vec3) bool
+	SetEntityVelocity(InvocationID, EntityID, Vec3) bool
+	SetEntityNameTag(InvocationID, EntityID, string) bool
+	DespawnEntity(InvocationID, EntityID) bool
 }
 
 type noopHost struct{}
@@ -186,6 +247,18 @@ func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool                 
 func (noopHost) WorldSpawn(InvocationID, WorldID) (BlockPos, bool)              { return BlockPos{}, false }
 func (noopHost) SetWorldSpawn(InvocationID, WorldID, BlockPos) bool             { return false }
 func (noopHost) SaveWorld(InvocationID, WorldID) bool                           { return false }
+func (noopHost) SpawnWorldEntity(InvocationID, WorldID, EntitySpawn) (EntityID, bool) {
+	return EntityID{}, false
+}
+func (noopHost) WorldEntities(InvocationID, WorldID) ([]EntityID, bool) { return nil, false }
+func (noopHost) WorldPlayers(InvocationID, WorldID) ([]PlayerID, bool)  { return nil, false }
+func (noopHost) EntityState(InvocationID, EntityID) (EntityState, bool) {
+	return EntityState{}, false
+}
+func (noopHost) TeleportEntity(InvocationID, EntityID, Vec3) bool     { return false }
+func (noopHost) SetEntityVelocity(InvocationID, EntityID, Vec3) bool  { return false }
+func (noopHost) SetEntityNameTag(InvocationID, EntityID, string) bool { return false }
+func (noopHost) DespawnEntity(InvocationID, EntityID) bool            { return false }
 
 var (
 	hostSequence         atomic.Uint64

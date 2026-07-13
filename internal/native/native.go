@@ -48,6 +48,7 @@ const (
 	PlayerItemReleaseSubscription     uint64 = 67108864
 	PlayerItemDamageSubscription      uint64 = 134217728
 	PlayerItemDropSubscription        uint64 = 268435456
+	PlayerAttackEntitySubscription    uint64 = 536870912
 	MaxChatReplacementBytes                  = 4096
 	MaxCommandOutputBytes                    = 4096
 	MaxCommandEnumBytes                      = 4096
@@ -231,6 +232,16 @@ type PlayerItemUseOnBlockInput struct {
 type PlayerItemDamageOutput struct {
 	Cancelled bool
 	Damage    int
+}
+type PlayerAttackEntityInput struct {
+	Player PlayerID
+	Target EntityID
+}
+type PlayerAttackEntityOutput struct {
+	Cancelled       bool
+	KnockbackForce  float64
+	KnockbackHeight float64
+	Critical        bool
 }
 
 type Command struct {
@@ -1145,6 +1156,28 @@ func (r *Runtime) HandlePlayerItemDrop(invocation InvocationID, player PlayerID,
 	return state.cancelled != 0, nil
 }
 
+func (r *Runtime) HandlePlayerAttackEntity(invocation InvocationID, input PlayerAttackEntityInput, force, height float64, critical, cancelled bool) (PlayerAttackEntityOutput, error) {
+	output := PlayerAttackEntityOutput{Cancelled: cancelled, KnockbackForce: force, KnockbackHeight: height, Critical: critical}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	var nativeInput C.DfPlayerAttackEntityInput
+	nativeInput.invocation = C.DfInvocationId(invocation)
+	fillPlayerID(&nativeInput.player, input.Player)
+	fillEntityID(&nativeInput.target, input.Target)
+	state := C.DfPlayerAttackEntityState{
+		knockback_force: C.double(force), knockback_height: C.double(height),
+		critical: C.uint8_t(boolByte(critical)), cancelled: C.uint8_t(boolByte(cancelled)),
+	}
+	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_ATTACK_ENTITY, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("native attack-entity handler failed with status %d", int32(status))
+	}
+	return PlayerAttackEntityOutput{
+		Cancelled: state.cancelled != 0, KnockbackForce: float64(state.knockback_force),
+		KnockbackHeight: float64(state.knockback_height), Critical: state.critical != 0,
+	}, nil
+}
+
 func (r *Runtime) openEventItemSnapshot(item ItemStack) (C.DfItemStackSnapshot, bool) {
 	if r == nil || r.ptr == nil || !validNativeItem(item) {
 		return C.DfItemStackSnapshot{}, false
@@ -1190,6 +1223,13 @@ func nativeDamageSource(source DamageSource, name unsafe.Pointer) C.DfDamageSour
 }
 
 func fillPlayerID(destination *C.DfPlayerId, source PlayerID) {
+	for i, value := range source.UUID {
+		destination.bytes[i] = C.uint8_t(value)
+	}
+	destination.generation = C.uint64_t(source.Generation)
+}
+
+func fillEntityID(destination *C.DfEntityId, source EntityID) {
 	for i, value := range source.UUID {
 		destination.bytes[i] = C.uint8_t(value)
 	}

@@ -2,17 +2,18 @@ use dragonfly_plugin_sys::{
     DF_ABI_VERSION, DF_COMMAND_PARAMETER_BOOL, DF_COMMAND_PARAMETER_DYNAMIC_ENUM,
     DF_COMMAND_PARAMETER_ENUM, DF_COMMAND_PARAMETER_FLOAT, DF_COMMAND_PARAMETER_INTEGER,
     DF_COMMAND_PARAMETER_PLAYER, DF_COMMAND_PARAMETER_RAW_TEXT, DF_COMMAND_PARAMETER_STRING,
-    DF_COMMAND_PARAMETER_SUBCOMMAND, DF_EVENT_PLAYER_BLOCK_BREAK, DF_EVENT_PLAYER_BLOCK_PICK,
-    DF_EVENT_PLAYER_BLOCK_PLACE, DF_EVENT_PLAYER_CHAT, DF_EVENT_PLAYER_DEATH,
-    DF_EVENT_PLAYER_EXPERIENCE_GAIN, DF_EVENT_PLAYER_FIRE_EXTINGUISH, DF_EVENT_PLAYER_FOOD_LOSS,
-    DF_EVENT_PLAYER_HEAL, DF_EVENT_PLAYER_HELD_SLOT_CHANGE, DF_EVENT_PLAYER_HURT,
-    DF_EVENT_PLAYER_ITEM_CONSUME, DF_EVENT_PLAYER_ITEM_DAMAGE, DF_EVENT_PLAYER_ITEM_DROP,
-    DF_EVENT_PLAYER_ITEM_RELEASE, DF_EVENT_PLAYER_ITEM_USE, DF_EVENT_PLAYER_ITEM_USE_ON_BLOCK,
-    DF_EVENT_PLAYER_JOIN, DF_EVENT_PLAYER_JUMP, DF_EVENT_PLAYER_LECTERN_PAGE_TURN,
-    DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_PUNCH_AIR, DF_EVENT_PLAYER_QUIT,
-    DF_EVENT_PLAYER_SIGN_EDIT, DF_EVENT_PLAYER_SLEEP, DF_EVENT_PLAYER_START_BREAK,
-    DF_EVENT_PLAYER_TELEPORT, DF_EVENT_PLAYER_TOGGLE_SNEAK, DF_EVENT_PLAYER_TOGGLE_SPRINT,
-    DF_HOST_ABI_VERSION, DF_STATUS_ERROR, DF_STATUS_OK, DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK,
+    DF_COMMAND_PARAMETER_SUBCOMMAND, DF_EVENT_PLAYER_ATTACK_ENTITY, DF_EVENT_PLAYER_BLOCK_BREAK,
+    DF_EVENT_PLAYER_BLOCK_PICK, DF_EVENT_PLAYER_BLOCK_PLACE, DF_EVENT_PLAYER_CHAT,
+    DF_EVENT_PLAYER_DEATH, DF_EVENT_PLAYER_EXPERIENCE_GAIN, DF_EVENT_PLAYER_FIRE_EXTINGUISH,
+    DF_EVENT_PLAYER_FOOD_LOSS, DF_EVENT_PLAYER_HEAL, DF_EVENT_PLAYER_HELD_SLOT_CHANGE,
+    DF_EVENT_PLAYER_HURT, DF_EVENT_PLAYER_ITEM_CONSUME, DF_EVENT_PLAYER_ITEM_DAMAGE,
+    DF_EVENT_PLAYER_ITEM_DROP, DF_EVENT_PLAYER_ITEM_RELEASE, DF_EVENT_PLAYER_ITEM_USE,
+    DF_EVENT_PLAYER_ITEM_USE_ON_BLOCK, DF_EVENT_PLAYER_JOIN, DF_EVENT_PLAYER_JUMP,
+    DF_EVENT_PLAYER_LECTERN_PAGE_TURN, DF_EVENT_PLAYER_MOVE, DF_EVENT_PLAYER_PUNCH_AIR,
+    DF_EVENT_PLAYER_QUIT, DF_EVENT_PLAYER_SIGN_EDIT, DF_EVENT_PLAYER_SLEEP,
+    DF_EVENT_PLAYER_START_BREAK, DF_EVENT_PLAYER_TELEPORT, DF_EVENT_PLAYER_TOGGLE_SNEAK,
+    DF_EVENT_PLAYER_TOGGLE_SPRINT, DF_HOST_ABI_VERSION, DF_STATUS_ERROR, DF_STATUS_OK,
+    DF_SUBSCRIPTION_PLAYER_ATTACK_ENTITY, DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK,
     DF_SUBSCRIPTION_PLAYER_BLOCK_PICK, DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE,
     DF_SUBSCRIPTION_PLAYER_CHAT, DF_SUBSCRIPTION_PLAYER_DEATH,
     DF_SUBSCRIPTION_PLAYER_EXPERIENCE_GAIN, DF_SUBSCRIPTION_PLAYER_FIRE_EXTINGUISH,
@@ -27,25 +28,25 @@ use dragonfly_plugin_sys::{
     DF_SUBSCRIPTION_PLAYER_SIGN_EDIT, DF_SUBSCRIPTION_PLAYER_SLEEP,
     DF_SUBSCRIPTION_PLAYER_START_BREAK, DF_SUBSCRIPTION_PLAYER_TELEPORT,
     DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK, DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT, DfCommandDescriptor,
-    DfCommandInput, DfCommandState, DfHostApiV7, DfItemStackSnapshot, DfPlayerBlockBreakInput,
-    DfPlayerBlockBreakState, DfPlayerBlockPickInput, DfPlayerBlockPickState,
-    DfPlayerBlockPlaceInput, DfPlayerBlockPlaceState, DfPlayerChatInput, DfPlayerChatState,
-    DfPlayerDeathInput, DfPlayerDeathState, DfPlayerExperienceGainInput,
-    DfPlayerExperienceGainState, DfPlayerFireExtinguishInput, DfPlayerFireExtinguishState,
-    DfPlayerFoodLossInput, DfPlayerFoodLossState, DfPlayerHealInput, DfPlayerHealState,
-    DfPlayerHeldSlotChangeInput, DfPlayerHeldSlotChangeState, DfPlayerHurtInput, DfPlayerHurtState,
-    DfPlayerItemConsumeInput, DfPlayerItemConsumeState, DfPlayerItemDamageInput,
-    DfPlayerItemDamageState, DfPlayerItemDropInput, DfPlayerItemDropState,
-    DfPlayerItemReleaseInput, DfPlayerItemReleaseState, DfPlayerItemUseInput,
-    DfPlayerItemUseOnBlockInput, DfPlayerItemUseOnBlockState, DfPlayerItemUseState,
-    DfPlayerJoinInput, DfPlayerJoinState, DfPlayerJumpInput, DfPlayerJumpState,
-    DfPlayerLecternPageTurnInput, DfPlayerLecternPageTurnState, DfPlayerMoveInput,
-    DfPlayerMoveState, DfPlayerPunchAirInput, DfPlayerPunchAirState, DfPlayerQuitInput,
-    DfPlayerQuitState, DfPlayerSignEditInput, DfPlayerSignEditState, DfPlayerSleepInput,
-    DfPlayerSleepState, DfPlayerStartBreakInput, DfPlayerStartBreakState, DfPlayerTeleportInput,
-    DfPlayerTeleportState, DfPlayerToggleSneakInput, DfPlayerToggleSneakState,
-    DfPlayerToggleSprintInput, DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn,
-    DfStatus, DfStringView,
+    DfCommandInput, DfCommandState, DfHostApiV8, DfItemStackSnapshot, DfPlayerAttackEntityInput,
+    DfPlayerAttackEntityState, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
+    DfPlayerBlockPickInput, DfPlayerBlockPickState, DfPlayerBlockPlaceInput,
+    DfPlayerBlockPlaceState, DfPlayerChatInput, DfPlayerChatState, DfPlayerDeathInput,
+    DfPlayerDeathState, DfPlayerExperienceGainInput, DfPlayerExperienceGainState,
+    DfPlayerFireExtinguishInput, DfPlayerFireExtinguishState, DfPlayerFoodLossInput,
+    DfPlayerFoodLossState, DfPlayerHealInput, DfPlayerHealState, DfPlayerHeldSlotChangeInput,
+    DfPlayerHeldSlotChangeState, DfPlayerHurtInput, DfPlayerHurtState, DfPlayerItemConsumeInput,
+    DfPlayerItemConsumeState, DfPlayerItemDamageInput, DfPlayerItemDamageState,
+    DfPlayerItemDropInput, DfPlayerItemDropState, DfPlayerItemReleaseInput,
+    DfPlayerItemReleaseState, DfPlayerItemUseInput, DfPlayerItemUseOnBlockInput,
+    DfPlayerItemUseOnBlockState, DfPlayerItemUseState, DfPlayerJoinInput, DfPlayerJoinState,
+    DfPlayerJumpInput, DfPlayerJumpState, DfPlayerLecternPageTurnInput,
+    DfPlayerLecternPageTurnState, DfPlayerMoveInput, DfPlayerMoveState, DfPlayerPunchAirInput,
+    DfPlayerPunchAirState, DfPlayerQuitInput, DfPlayerQuitState, DfPlayerSignEditInput,
+    DfPlayerSignEditState, DfPlayerSleepInput, DfPlayerSleepState, DfPlayerStartBreakInput,
+    DfPlayerStartBreakState, DfPlayerTeleportInput, DfPlayerTeleportState,
+    DfPlayerToggleSneakInput, DfPlayerToggleSneakState, DfPlayerToggleSprintInput,
+    DfPlayerToggleSprintState, DfPluginApiV1, DfPluginEntryV1Fn, DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::ffi::{OsStr, c_void};
@@ -58,7 +59,7 @@ use std::slice;
 #[repr(C)]
 pub struct DfRuntimeConfig {
     pub plugin_directory: DfStringView,
-    pub host: *const DfHostApiV7,
+    pub host: *const DfHostApiV8,
 }
 
 pub struct DfRuntime {
@@ -95,7 +96,7 @@ impl Drop for LoadedPlugin {
 }
 
 impl DfRuntime {
-    fn load(plugin_directory: &Path, host: *const DfHostApiV7) -> Result<Self, String> {
+    fn load(plugin_directory: &Path, host: *const DfHostApiV8) -> Result<Self, String> {
         let mut paths = native_libraries(plugin_directory)?;
         paths.sort();
 
@@ -1171,6 +1172,50 @@ impl DfRuntime {
         }
         DF_STATUS_OK
     }
+
+    fn handle_attack_entity(
+        &self,
+        input: &DfPlayerAttackEntityInput,
+        state: &mut DfPlayerAttackEntityState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ATTACK_ENTITY == 0
+            {
+                continue;
+            }
+            let was_cancelled = state.cancelled != 0;
+            let previous_force = state.knockback_force;
+            let previous_height = state.knockback_height;
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    DF_EVENT_PLAYER_ATTACK_ENTITY,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if !state.knockback_force.is_finite() {
+                state.knockback_force = previous_force;
+                return DF_STATUS_ERROR;
+            }
+            if !state.knockback_height.is_finite() {
+                state.knockback_height = previous_height;
+                return DF_STATUS_ERROR;
+            }
+            state.critical = u8::from(state.critical != 0);
+            if status != DF_STATUS_OK {
+                return status;
+            }
+        }
+        DF_STATUS_OK
+    }
 }
 
 impl Drop for DfRuntime {
@@ -1230,7 +1275,7 @@ impl LoadedPlugin {
         self.enabled = false;
     }
 
-    unsafe fn open(path: &Path, host: *const DfHostApiV7) -> Result<Self, String> {
+    unsafe fn open(path: &Path, host: *const DfHostApiV8) -> Result<Self, String> {
         // SAFETY: loading native plugins is the purpose of this trusted plugin runtime.
         let library = unsafe { Library::new(path) }
             .map_err(|err| format!("load {}: {err}", path.display()))?;
@@ -1439,7 +1484,7 @@ pub unsafe extern "C" fn df_runtime_create(
             return Err("null host API".to_owned());
         };
         if host_api.abi_version != DF_HOST_ABI_VERSION
-            || host_api.struct_size < size_of::<DfHostApiV7>() as u32
+            || host_api.struct_size < size_of::<DfHostApiV8>() as u32
         {
             return Err("incompatible host API".to_owned());
         }
@@ -1874,6 +1919,22 @@ pub unsafe extern "C" fn df_runtime_handle_event(
             }
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 runtime.handle_item_drop(input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR)
+        }
+        DF_EVENT_PLAYER_ATTACK_ENTITY => {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.cast::<DfPlayerAttackEntityInput>().as_ref() },
+                unsafe { state.cast::<DfPlayerAttackEntityState>().as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            if !state.knockback_force.is_finite() || !state.knockback_height.is_finite() {
+                return DF_STATUS_ERROR;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime.handle_attack_entity(input, state)
             }))
             .unwrap_or(DF_STATUS_ERROR)
         }
@@ -2327,9 +2388,9 @@ mod tests {
             std::env::temp_dir().join(format!("dragonfly-runtime-{}", std::process::id()));
         let _ = fs::remove_dir_all(&directory);
         fs::create_dir_all(&directory).unwrap();
-        let host = DfHostApiV7 {
+        let host = DfHostApiV8 {
             abi_version: DF_HOST_ABI_VERSION,
-            struct_size: size_of::<DfHostApiV7>() as u32,
+            struct_size: size_of::<DfHostApiV8>() as u32,
             context: 0,
             player_text: None,
             player_title: None,
@@ -2370,6 +2431,14 @@ mod tests {
             world_time_set: None,
             world_spawn_get: None,
             world_spawn_set: None,
+            world_entity_spawn: None,
+            world_entities: None,
+            world_players: None,
+            entity_state: None,
+            entity_teleport: None,
+            entity_velocity_set: None,
+            entity_name_tag_set: None,
+            entity_despawn: None,
         };
         let runtime = DfRuntime::load(&directory, ptr::from_ref(&host)).unwrap();
         assert!(runtime.plugins.is_empty());

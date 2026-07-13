@@ -31,12 +31,15 @@ _Static_assert(sizeof(DfFormView) == 40, "DfFormView ABI layout changed");
 _Static_assert(sizeof(DfWorldId) == 8, "DfWorldId ABI layout changed");
 _Static_assert(sizeof(DfBlockData) == 48, "DfBlockData ABI layout changed");
 _Static_assert(sizeof(DfBlockView) == 32, "DfBlockView ABI layout changed");
-_Static_assert(sizeof(DfHostApiV7) == 328, "DfHostApiV7 ABI layout changed");
-_Static_assert(offsetof(DfHostApiV7, player_skin_open) == 80, "DfHostApiV7.player_skin_open ABI offset changed");
-_Static_assert(offsetof(DfHostApiV7, player_skin_set) == 112, "DfHostApiV7.player_skin_set ABI offset changed");
-_Static_assert(offsetof(DfHostApiV7, inventory_size) == 120, "DfHostApiV7.inventory_size ABI offset changed");
-_Static_assert(offsetof(DfHostApiV7, player_held_slot_set) == 200, "DfHostApiV7.player_held_slot_set ABI offset changed");
-_Static_assert(offsetof(DfHostApiV7, player_scoreboard) == 208, "DfHostApiV7.player_scoreboard ABI offset changed");
+_Static_assert(sizeof(DfEntitySpawnOptions) == 80, "DfEntitySpawnOptions ABI layout changed");
+_Static_assert(sizeof(DfEntitySpawnViewV1) == 176, "DfEntitySpawnViewV1 ABI layout changed");
+_Static_assert(sizeof(DfEntityState) == 120, "DfEntityState ABI layout changed");
+_Static_assert(sizeof(DfHostApiV8) == 392, "DfHostApiV8 ABI layout changed");
+_Static_assert(offsetof(DfHostApiV8, player_skin_open) == 80, "DfHostApiV8.player_skin_open ABI offset changed");
+_Static_assert(offsetof(DfHostApiV8, player_skin_set) == 112, "DfHostApiV8.player_skin_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV8, inventory_size) == 120, "DfHostApiV8.inventory_size ABI offset changed");
+_Static_assert(offsetof(DfHostApiV8, player_held_slot_set) == 200, "DfHostApiV8.player_held_slot_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV8, player_scoreboard) == 208, "DfHostApiV8.player_scoreboard ABI offset changed");
 #endif
 
 extern DfStatus bg_go_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message);
@@ -81,6 +84,14 @@ extern DfStatus bg_go_world_time_get(uint64_t context, DfInvocationId invocation
 extern DfStatus bg_go_world_time_set(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time);
 extern DfStatus bg_go_world_spawn_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
 extern DfStatus bg_go_world_spawn_set(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position);
+extern DfStatus bg_go_world_entity_spawn(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV1 *entity, DfEntityId *output);
+extern DfStatus bg_go_world_entities(uint64_t context, DfInvocationId invocation, DfWorldId world, DfEntityIdBuffer *output);
+extern DfStatus bg_go_world_players(uint64_t context, DfInvocationId invocation, DfWorldId world, DfPlayerIdBuffer *output);
+extern DfStatus bg_go_entity_state(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state);
+extern DfStatus bg_go_entity_teleport(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 position);
+extern DfStatus bg_go_entity_velocity_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 velocity);
+extern DfStatus bg_go_entity_name_tag_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag);
+extern DfStatus bg_go_entity_despawn(uint64_t context, DfInvocationId invocation, DfEntityId entity);
 
 static DfStatus host_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message) {
     return bg_go_player_text(context, invocation, player, kind, message);
@@ -166,6 +177,14 @@ static DfStatus host_world_time_get(uint64_t context, DfInvocationId invocation,
 static DfStatus host_world_time_set(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time) { return bg_go_world_time_set(context, invocation, world, time); }
 static DfStatus host_world_spawn_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position) { return bg_go_world_spawn_get(context, invocation, world, position); }
 static DfStatus host_world_spawn_set(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position) { return bg_go_world_spawn_set(context, invocation, world, position); }
+static DfStatus host_world_entity_spawn(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV1 *entity, DfEntityId *output) { return bg_go_world_entity_spawn(context, invocation, world, entity, output); }
+static DfStatus host_world_entities(uint64_t context, DfInvocationId invocation, DfWorldId world, DfEntityIdBuffer *output) { return bg_go_world_entities(context, invocation, world, output); }
+static DfStatus host_world_players(uint64_t context, DfInvocationId invocation, DfWorldId world, DfPlayerIdBuffer *output) { return bg_go_world_players(context, invocation, world, output); }
+static DfStatus host_entity_state(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state) { return bg_go_entity_state(context, invocation, entity, state); }
+static DfStatus host_entity_teleport(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 position) { return bg_go_entity_teleport(context, invocation, entity, position); }
+static DfStatus host_entity_velocity_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfVec3 velocity) { return bg_go_entity_velocity_set(context, invocation, entity, velocity); }
+static DfStatus host_entity_name_tag_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag) { return bg_go_entity_name_tag_set(context, invocation, entity, name_tag); }
+static DfStatus host_entity_despawn(uint64_t context, DfInvocationId invocation, DfEntityId entity) { return bg_go_entity_despawn(context, invocation, entity); }
 
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
 typedef void (*RuntimeDestroyFn)(DfRuntime *);
@@ -180,7 +199,7 @@ typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *)
 struct BgRuntimeLibrary {
     void *handle;
     DfRuntime *runtime;
-    DfHostApiV7 host_api;
+    DfHostApiV8 host_api;
     RuntimeDestroyFn destroy;
     RuntimeEnableFn enable;
     RuntimeDisableFn disable;
@@ -253,9 +272,9 @@ DfStatus bg_runtime_open(
         return DF_STATUS_ERROR;
     }
 
-    library->host_api = (DfHostApiV7) {
+    library->host_api = (DfHostApiV8) {
         .abi_version = DF_HOST_ABI_VERSION,
-        .struct_size = sizeof(DfHostApiV7),
+        .struct_size = sizeof(DfHostApiV8),
         .context = host_context,
         .player_text = host_player_text,
         .player_title = host_player_title,
@@ -296,6 +315,14 @@ DfStatus bg_runtime_open(
         .world_time_set = host_world_time_set,
         .world_spawn_get = host_world_spawn_get,
         .world_spawn_set = host_world_spawn_set,
+        .world_entity_spawn = host_world_entity_spawn,
+        .world_entities = host_world_entities,
+        .world_players = host_world_players,
+        .entity_state = host_entity_state,
+        .entity_teleport = host_entity_teleport,
+        .entity_velocity_set = host_entity_velocity_set,
+        .entity_name_tag_set = host_entity_name_tag_set,
+        .entity_despawn = host_entity_despawn,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

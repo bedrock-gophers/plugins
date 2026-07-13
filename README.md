@@ -2,7 +2,7 @@
 
 Native multi-language plugin runtime for [df-mc/dragonfly](https://github.com/df-mc/dragonfly). Rust is the first supported plugin language.
 
-Current status: native runtime foundation plus player actions, typed items, inventories, scoreboards, asynchronous forms, and managed worlds. Generated events, lifecycle hooks, Dragonfly commands, bounded snapshots, and host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
+Current status: native runtime foundation plus player actions, typed items, inventories, scoreboards, asynchronous forms, managed worlds, stable entity handles, built-in entity/projectile spawning, and attack-entity events. Generated events, lifecycle hooks, Dragonfly commands, bounded snapshots, and host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
 
 ## Build and test
 
@@ -43,6 +43,26 @@ if let Some(world) = world {
 ```
 
 World handles are opaque and never reused. The world API derives custom-world paths from namespaced IDs below `worlds.directory`; this is path organization, not a security sandbox—native plugins already run with the server process's filesystem access. Every callback carries an opaque invocation ID, so same-world operations reuse exactly that callback's Dragonfly `world.Tx`, never another concurrent callback's transaction. Off-owner writes use `World.Do`. Synchronous cross-world block reads are unavailable inside callbacks until the task API lands, preventing reciprocal world-owner deadlocks.
+
+Entities use generation-tagged `world.EntityHandle` identities. Typed descriptors keep Go adapter code shared:
+
+```rust
+use dragonfly::{Vec3, World, entity, item};
+
+if let Some(world) = World::overworld() {
+    let options = entity::SpawnOptions::new(Vec3 { x: 0.0, y: 65.0, z: 0.0 });
+    let text = world.spawn_entity(entity::Text::new("Hello"), options.clone());
+    let sword = item::new(item::Sword::new(item::ToolTier::Diamond), 1);
+    let dropped = world.spawn_entity(entity::DroppedItem::new(sword), options);
+    if let Some(text) = text {
+        text.set_name_tag("Updated");
+    }
+}
+```
+
+`World::entities()` and `World::players()` resolve within the current transaction. `Entity` exposes type, position, rotation, optional velocity/name tag, teleport, velocity/name-tag mutation, and despawn. Dragonfly v0.11 has no exported generic rotation setter, so rotation mutation is deliberately absent rather than implemented with reflection. Projectiles use typed owner handles (`Arrow`, `Snowball`, `Egg`, `EnderPearl`, bottles, and potions). Dragonfly has no global pre-impact projectile hook; a correct cancellable projectile-hit event needs an upstream hook and is not faked by rebuilding private projectile behaviour.
+
+Synchronous entity spawning inside a callback must target that callback's current world. Cross-world spawning will return an asynchronous handle task when the task API lands; off-callback code may already spawn in any managed world.
 
 Regenerate ABI files after changing `schema/`:
 
@@ -139,5 +159,6 @@ See [native plugin architecture](docs/plans/rust-plugin-architecture.md).
 - [Scoreboard](examples/plugins/scoreboard): sends and removes a sidebar scoreboard.
 - [Forms](examples/plugins/forms): demonstrates menu, modal, and typed custom-form responses.
 - [World command](examples/plugins/world-command): demonstrates world lookup/open, blocks, time, and spawn.
+- [Entity command](examples/plugins/entity-command): demonstrates typed entity/projectile spawning, handles, and world lists.
 
 The examples compile as native plugin libraries through `make stage-examples`. Precompiled `.so`, `.dylib`, or `.dll` plugins may also be placed directly in `examples/plugins`.

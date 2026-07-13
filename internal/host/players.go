@@ -23,6 +23,7 @@ type Players struct {
 	mu             sync.RWMutex
 	entries        map[*world.EntityHandle]*playerEntry
 	byID           map[native.PlayerID]*playerEntry
+	entities       *Entities
 	invocations    map[native.InvocationID]*world.Tx
 	nextInvocation native.InvocationID
 }
@@ -36,15 +37,16 @@ type playerEntry struct {
 
 func NewPlayers() *Players {
 	return &Players{
-		entries: map[*world.EntityHandle]*playerEntry{},
-		byID:    map[native.PlayerID]*playerEntry{}, invocations: map[native.InvocationID]*world.Tx{},
+		entries:     map[*world.EntityHandle]*playerEntry{},
+		byID:        map[native.PlayerID]*playerEntry{},
+		entities:    NewEntities(),
+		invocations: map[native.InvocationID]*world.Tx{},
 	}
 }
 
 func (p *Players) Register(player *player.Player, generation uint64) native.PlayerID {
-	id := native.PlayerID{Generation: generation}
-	uuid := player.UUID()
-	copy(id.UUID[:], uuid[:])
+	entityID := p.entities.registerHandle(player.H(), generation)
+	id := native.PlayerID{UUID: entityID.UUID, Generation: entityID.Generation}
 	entry := &playerEntry{
 		id: id, handle: player.H(), name: player.Name(),
 		latency: uint64(max(player.Latency().Milliseconds(), 0)),
@@ -67,9 +69,13 @@ func (p *Players) Unregister(player *player.Player) {
 	}
 	p.mu.Unlock()
 	if registered {
+		p.entities.unregisterHandle(player.H())
 		native.CancelPlayerForms(id)
 	}
 }
+
+// EntityRegistry returns the generic entity registry shared by player IDs.
+func (p *Players) EntityRegistry() *Entities { return p.entities }
 
 func (p *Players) SendPlayerForm(invocation native.InvocationID, id native.PlayerID, value native.PlayerForm) bool {
 	f := &nativePlayerForm{id: value.ID, request: append([]byte(nil), value.RequestJSON...), players: p}
@@ -163,8 +169,12 @@ func (p *Players) ResolveID(id native.PlayerID, invocation native.InvocationID) 
 	return playerInTransaction(entry.handle, tx)
 }
 
-func (p *Players) ResolveEntityID(id native.EntityID, invocation native.InvocationID) (*player.Player, bool) {
-	return p.ResolveID(native.PlayerID{UUID: id.UUID, Generation: id.Generation}, invocation)
+func (p *Players) ResolveEntityID(id native.EntityID, invocation native.InvocationID) (world.Entity, bool) {
+	tx, ok := p.InvocationTx(invocation)
+	if !ok {
+		return nil, false
+	}
+	return p.entities.Resolve(id, tx)
 }
 
 // BeginInvocation registers tx for one synchronous native invocation. The returned end function is idempotent.
@@ -425,12 +435,12 @@ func (p *Players) SetPlayerEntityVisible(invocation native.InvocationID, viewerI
 	if !ok {
 		return false
 	}
-	entityEntry, ok := p.playerEntry(native.PlayerID{UUID: entityID.UUID, Generation: entityID.Generation})
+	entityHandle, ok := p.entities.Handle(entityID)
 	if !ok {
 		return false
 	}
 	task := world.NewEntityRef[*player.Player](viewerEntry.handle).Do(func(tx *world.Tx, connected *player.Player) {
-		entity, ok := playerInTransaction(entityEntry.handle, tx)
+		entity, ok := entityHandle.Entity(tx)
 		if ok {
 			setPlayerEntityVisible(connected, entity, visible)
 		}
@@ -438,7 +448,7 @@ func (p *Players) SetPlayerEntityVisible(invocation native.InvocationID, viewerI
 	return task.Err() == nil
 }
 
-func setPlayerEntityVisible(viewer, entity *player.Player, visible bool) {
+func setPlayerEntityVisible(viewer *player.Player, entity world.Entity, visible bool) {
 	if visible {
 		viewer.ShowEntity(entity)
 	} else {

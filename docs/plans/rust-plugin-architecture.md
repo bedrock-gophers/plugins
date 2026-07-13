@@ -466,10 +466,28 @@ Current host actions include:
 - Read/set managed-world blocks.
 - Read/set world time and spawn.
 - Open, save, and unload managed worlds.
+- Spawn/list built-in entities and projectiles.
+- Read and mutate common entity capabilities through stable handles.
 
 Every synchronous player callback registers one invocation ID for its exact transaction. Same-world block operations use that `world.Tx` directly. Calls with no invocation are off-owner: writes enqueue through `World.Do` and reads use `world.Call`. Cross-world writes from callbacks enqueue, while cross-world synchronous block reads are rejected because reciprocal owner calls can deadlock. Save/unload are rejected from callbacks and run only off-owner. Transaction values never cross or survive the ABI; the asynchronous task API will provide callback-safe cross-world reads and lifecycle operations.
 
-The host ABI is currently v7. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+The host ABI is currently v8. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+
+## Entities
+
+Go stores `*world.EntityHandle`, never transaction-scoped `world.Entity` values. IDs contain Dragonfly UUID plus monotonic generation; player and entity views of the same player share one identity. World handlers lazily track provider-loaded entities and expire closed handles without invalidating portal transfers.
+
+Rust spawn descriptors are sealed and typed: `Text`, `Lightning`, `TNT`, `ExperienceOrb`, `DroppedItem`, `FallingBlock`, `Arrow`, `Egg`, `Snowball`, `EnderPearl`, `BottleOfEnchanting`, `SplashPotion`, and `LingeringPotion`. One flat ABI descriptor feeds Dragonfly constructors and registry factories, so adding language SDKs does not require one adapter per concrete type.
+
+Common entity state is capability-based. Position and rotation exist on every `world.Entity`; velocity, teleport, and name tag are optional capabilities. Rust getters return `Option`, while unsupported/stale setters silently no-op and never expose host transport errors. Dragonfly v0.11 has no exported generic rotation setter, so only spawn-time rotation and rotation reads are supported. Reflection or unsafe access to private `entity.Ent` state is forbidden.
+
+Entity spawn returns a handle synchronously, so it currently requires the target world to own the active callback transaction. Unlike fire-and-forget block writes, a cross-world spawn cannot be queued without changing its return type to an asynchronous task. The planned task API will carry the resulting handle; current callbacks must spawn in their own world, while off-callback code may spawn in any managed world.
+
+`World::entities()` mirrors `Tx.Entities()`. `World::players()` provides stable player identities. `Tx.Viewers(position)` cannot honestly map to players: `world.Viewer` is an opaque output interface with no identity. Viewer identity support therefore needs an upstream Dragonfly capability API; returning fake player handles would be incorrect.
+
+Projectile factories preserve Dragonfly owner resolution and built-in behavior. Current Dragonfly has no global projectile-impact callback: its per-config `Hit` callback is post-effect, non-cancellable, and misses surviving arrow/block collisions. A global cancellable projectile-hit event requires an upstream pre-impact hook. Reimplementing private potion, pearl, bottle, and arrow behavior in this project is rejected because it would drift from raw Dragonfly.
+
+`Event::PlayerAttackEntity` is bridged at Dragonfly's native pre-damage handler. It exposes attacker, stable target entity, cancellable default-allowed state, knockback force/height, and critical flag. Cancellation remains monotonic across plugins.
 
 ## Items and inventories
 
@@ -536,6 +554,8 @@ Initial ABI foundation includes:
 - Player/world opaque IDs.
 - Owned item stacks with names, lore, typed NBT values, enchantments, and potions.
 - Main, armour, and offhand inventory handles with item snapshots and mutation.
+- Stable entity handles, typed built-in/projectile spawning, state capabilities, and despawn.
+- Cancellable attack-entity event with stable target attribution.
 
 Temporarily deferred from the first implementation milestone:
 

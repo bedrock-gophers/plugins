@@ -869,6 +869,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_item_drop = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_item_drop"),
     );
+    let handles_attack_entity = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_attack_entity"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -897,7 +900,8 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_item_consume) << 25)
         | (u64::from(handles_item_release) << 26)
         | (u64::from(handles_item_damage) << 27)
-        | (u64::from(handles_item_drop) << 28);
+        | (u64::from(handles_item_drop) << 28)
+        | (u64::from(handles_attack_entity) << 29);
 
     quote! {
         #[doc(hidden)]
@@ -943,14 +947,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
 
             unsafe extern "C" fn set_host(
                 instance: *mut ::dragonfly_plugin::__private::c_void,
-                host: *const ::dragonfly_plugin::__private::sys::DfHostApiV7,
+                host: *const ::dragonfly_plugin::__private::sys::DfHostApiV8,
             ) -> ::dragonfly_plugin::__private::sys::DfStatus {
                 if instance.is_null() || host.is_null() {
                     return ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR;
                 }
                 let host_header = unsafe { &*host };
                 if host_header.abi_version != ::dragonfly_plugin::__private::sys::DF_HOST_ABI_VERSION
-                    || host_header.struct_size < ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfHostApiV7>() as u32
+                    || host_header.struct_size < ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfHostApiV8>() as u32
                 {
                     return ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR;
                 }
@@ -1301,6 +1305,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemDropState>() };
                         let mut event = unsafe { ::dragonfly_plugin::PlayerItemDropEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_drop(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_PLAYER_ATTACK_ENTITY => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfPlayerAttackEntityInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfPlayerAttackEntityState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerAttackEntityEventData::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_attack_entity(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     _ => sys::DF_STATUS_ERROR,

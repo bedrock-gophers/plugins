@@ -95,6 +95,12 @@ type recordingHost struct {
 	worldUnloaded  bool
 	worldTime      int64
 	worldSpawn     BlockPos
+	entityStateID  EntityID
+	entityState    EntityState
+	entitySpawns   []EntitySpawn
+	spawnedEntity  EntityID
+	worldEntityIDs []EntityID
+	worldPlayerIDs []PlayerID
 }
 
 func (h *recordingHost) SendPlayerText(_ InvocationID, player PlayerID, kind PlayerTextKind, message string) bool {
@@ -229,6 +235,20 @@ func (h *recordingHost) SetWorldTime(_ InvocationID, _ WorldID, value int64) boo
 func (h *recordingHost) SetWorldSpawn(_ InvocationID, _ WorldID, position BlockPos) bool {
 	h.worldSpawn = position
 	return true
+}
+func (h *recordingHost) EntityState(_ InvocationID, id EntityID) (EntityState, bool) {
+	h.entityStateID = id
+	return h.entityState, h.entityState.Type != ""
+}
+func (h *recordingHost) SpawnWorldEntity(_ InvocationID, id WorldID, value EntitySpawn) (EntityID, bool) {
+	h.entitySpawns = append(h.entitySpawns, value)
+	return h.spawnedEntity, id == h.worldID && h.spawnedEntity.Generation != 0
+}
+func (h *recordingHost) WorldEntities(_ InvocationID, id WorldID) ([]EntityID, bool) {
+	return append([]EntityID(nil), h.worldEntityIDs...), id == h.worldID
+}
+func (h *recordingHost) WorldPlayers(_ InvocationID, id WorldID) ([]PlayerID, bool) {
+	return append([]PlayerID(nil), h.worldPlayerIDs...), id == h.worldID
 }
 
 func TestPluginCanMessagePlayer(t *testing.T) {
@@ -393,8 +413,8 @@ func TestFormRejectsWrongPlayerAndOversizedResponse(t *testing.T) {
 
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 9 {
-		t.Fatalf("plugin count = %d, want 9", runtime.PluginCount())
+	if runtime.PluginCount() != 10 {
+		t.Fatalf("plugin count = %d, want 10", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")
@@ -436,7 +456,7 @@ func TestPlayerTransformHostCalls(t *testing.T) {
 	}
 	id := PlayerID{Generation: 7}
 	for _, arguments := range []string{"velocity 1 2 3", "face 90 20", "teleport 10 64 20", "move 1 0 -1"} {
-		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+		output, err := runtime.HandleCommand(commandNamed(t, commands, "hello").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
 			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
 		})
@@ -473,7 +493,7 @@ func TestPlayerStateHostCalls(t *testing.T) {
 	}
 	id := PlayerID{Generation: 8}
 	for _, arguments := range []string{"gamemode creative", "heal 4", "hurt 3", "food 15", "max-health 40", "experience-level 12", "experience-progress 0.5"} {
-		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+		output, err := runtime.HandleCommand(commandNamed(t, commands, "hello").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
 			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
 		})
@@ -514,7 +534,7 @@ func TestPlayerEffectHostCalls(t *testing.T) {
 	}
 	id := PlayerID{Generation: 9}
 	for _, arguments := range []string{"speed 2 30", "clear-speed"} {
-		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+		output, err := runtime.HandleCommand(commandNamed(t, commands, "hello").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
 			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
 		})
@@ -547,7 +567,7 @@ func TestPlayerIdentityHostCalls(t *testing.T) {
 	}
 	id := PlayerID{Generation: 10}
 	for _, arguments := range []string{"name-tag Rust Player", "scale 1.5", "invisible true", "immobile true"} {
-		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+		output, err := runtime.HandleCommand(commandNamed(t, commands, "hello").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
 			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
 		})
@@ -584,7 +604,7 @@ func TestPlayerSoundAndDisconnectHostCalls(t *testing.T) {
 	}
 	id := PlayerID{Generation: 11}
 	for _, arguments := range []string{"sound", "disconnect", "kick"} {
-		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+		output, err := runtime.HandleCommand(commandNamed(t, commands, "hello").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
 			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
 		})
@@ -621,7 +641,7 @@ func TestPlayerEntityVisibilityHostCalls(t *testing.T) {
 	target := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 13}
 	encoded := "01020300000000000000000000000000:13:0:Target"
 	for _, arguments := range []string{"hide " + encoded, "show " + encoded} {
-		output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+		output, err := runtime.HandleCommand(commandNamed(t, commands, "hello").Index, CommandInput{
 			Source: "Viewer", SourceKind: CommandSourcePlayer, SourcePlayer: &viewer,
 			OnlinePlayers: []CommandPlayer{{Player: viewer, Name: "Viewer"}, {Player: target, Name: "Target"}}, Arguments: arguments,
 		})
@@ -663,7 +683,7 @@ func TestPlayerSkinRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := PlayerID{Generation: 14}
-	output, err := runtime.HandleCommand(commands[0].Index, CommandInput{
+	output, err := runtime.HandleCommand(commandNamed(t, commands, "hello").Index, CommandInput{
 		Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
 		OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: "skin-copy",
 	})
@@ -732,13 +752,14 @@ func TestCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 4 {
-		t.Fatalf("commands = %#v, want hello, items, ping, and world", commands)
+	if len(commands) != 5 {
+		t.Fatalf("commands = %#v, want entity, hello, items, ping, and world", commands)
 	}
 	hello := commandNamed(t, commands, "hello")
 	_ = commandNamed(t, commands, "items")
 	_ = commandNamed(t, commands, "ping")
 	_ = commandNamed(t, commands, "world")
+	_ = commandNamed(t, commands, "entity")
 	optionalFound := false
 	for _, overload := range hello.Overloads {
 		for _, parameter := range overload.Parameters {
@@ -825,6 +846,53 @@ func TestWorldCommandHostCalls(t *testing.T) {
 	}
 	if host.worldBlockPos != (BlockPos{X: -2, Y: 70, Z: 9}) || host.worldBlockSet.Identifier != "minecraft:stone" || len(host.worldBlockSet.PropertiesNBT) == 0 {
 		t.Fatalf("set call = position %+v block %+v", host.worldBlockPos, host.worldBlockSet)
+	}
+}
+
+func TestEntityCommandHostCalls(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{
+		worldID: 42, worldLookupOK: true,
+		entityState:    EntityState{Type: "minecraft:player", Position: Vec3{X: 2, Y: 64, Z: 3}, CanTeleport: true},
+		spawnedEntity:  EntityID{UUID: [16]byte{7}, Generation: 88},
+		worldEntityIDs: []EntityID{{UUID: [16]byte{7}, Generation: 88}},
+	}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := commandNamed(t, commands, "entity")
+	player := PlayerID{UUID: [16]byte{1, 2}, Generation: 17}
+	host.worldPlayerIDs = []PlayerID{player}
+	for _, arguments := range []string{"text", "sword", "list"} {
+		output, err := runtime.HandleCommand(command.Index, CommandInput{
+			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: player, Name: "Spawner"}},
+		})
+		if err != nil || output.Failed {
+			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
+		}
+	}
+	if host.entityStateID != (EntityID{UUID: player.UUID, Generation: player.Generation}) {
+		t.Fatalf("state entity = %#v", host.entityStateID)
+	}
+	if len(host.entitySpawns) != 2 || host.entitySpawns[0].Kind != EntityText || host.entitySpawns[0].Text != "Native Rust entity" || host.entitySpawns[0].Position.Y != 65.5 {
+		t.Fatalf("text spawn = %#v", host.entitySpawns)
+	}
+	item := host.entitySpawns[1].Item
+	if item == nil || item.Identifier != "minecraft:diamond_sword" || item.Count != 1 {
+		t.Fatalf("item spawn = %#v", host.entitySpawns[1])
+	}
+	if len(host.texts) == 0 || host.texts[len(host.texts)-1] != "1 entities, 1 players." {
+		t.Fatalf("list message = %q", host.texts)
 	}
 }
 
@@ -924,7 +992,11 @@ func TestPingCommandUsesPlayerLatency(t *testing.T) {
 
 func TestDynamicCommandEnum(t *testing.T) {
 	runtime := openTestRuntime(t)
-	options, err := runtime.CommandEnumOptions(0, 6, 1, "Danick", []string{"Danick", "RestartFU"})
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	options, err := runtime.CommandEnumOptions(commandNamed(t, commands, "hello").Index, 6, 1, "Danick", []string{"Danick", "RestartFU"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1245,6 +1317,22 @@ func TestPlayerItemDamageAndDrop(t *testing.T) {
 	}
 	if cancelled {
 		t.Fatal("item drop cancelled")
+	}
+}
+
+func TestPlayerAttackEntityRoundTrip(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerAttackEntitySubscription == 0 {
+		t.Fatal("attack-entity subscription missing")
+	}
+	player := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 41}
+	target := EntityID{UUID: [16]byte{9, 8, 7}, Generation: 52}
+	output, err := runtime.HandlePlayerAttackEntity(73, PlayerAttackEntityInput{Player: player, Target: target}, 0.45, 0.3608, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Cancelled || output.KnockbackForce != 0.45 || output.KnockbackHeight != 0.3608 || !output.Critical {
+		t.Fatalf("attack output = %#v", output)
 	}
 }
 

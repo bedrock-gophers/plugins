@@ -45,6 +45,7 @@ type playerRuntime interface {
 	HandlePlayerItemRelease(native.InvocationID, native.PlayerID, native.ItemStack, time.Duration, bool) (bool, error)
 	HandlePlayerItemDamage(native.InvocationID, native.PlayerID, native.ItemStack, int, bool) (native.PlayerItemDamageOutput, error)
 	HandlePlayerItemDrop(native.InvocationID, native.PlayerID, native.ItemStack, bool) (bool, error)
+	HandlePlayerAttackEntity(native.InvocationID, native.PlayerAttackEntityInput, float64, float64, bool, bool) (native.PlayerAttackEntityOutput, error)
 }
 
 func (h *PlayerHandler) HandleJump(p *player.Player) {
@@ -161,6 +162,30 @@ func NewPlayerHandler(runtime playerRuntime, log *slog.Logger, players *Players)
 		log = slog.Default()
 	}
 	return &PlayerHandler{runtime: runtime, log: log, players: players}
+}
+
+func (h *PlayerHandler) HandleAttackEntity(ctx *player.Context, target world.Entity, force, height *float64, critical *bool) {
+	if h.runtime.Subscriptions()&native.PlayerAttackEntitySubscription == 0 {
+		return
+	}
+	p := ctx.Player()
+	targetID := h.players.EntityRegistry().Register(target)
+	if targetID.Generation == 0 {
+		return
+	}
+	invocation, leave := h.players.BeginInvocation(p.Tx())
+	defer leave()
+	output, err := h.runtime.HandlePlayerAttackEntity(invocation, native.PlayerAttackEntityInput{
+		Player: h.playerID(p), Target: targetID,
+	}, *force, *height, *critical, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin attack-entity handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	*force, *height, *critical = output.KnockbackForce, output.KnockbackHeight, output.Critical
+	if output.Cancelled {
+		ctx.Cancel()
+	}
 }
 
 func (h *PlayerHandler) HandleMove(ctx *player.Context, newPosition mgl64.Vec3, newRotation cube.Rotation) {

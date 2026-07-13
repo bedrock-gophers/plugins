@@ -131,12 +131,17 @@ func (p *Players) HeldItem(invocation native.InvocationID, id native.PlayerID, h
 	value, ok := readPlayer(p, invocation, id, func(connected *player.Player) struct {
 		value native.ItemStack
 		ok    bool
-	} { main, offhand := connected.HeldItems(); if hand == 1 {
-		main = offhand
-	}; converted, valid := itemStackToNative(main); return struct {
-		value native.ItemStack
-		ok    bool
-	}{converted, valid} })
+	} {
+		main, offhand := connected.HeldItems()
+		if hand == 1 {
+			main = offhand
+		}
+		converted, valid := itemStackToNative(main)
+		return struct {
+			value native.ItemStack
+			ok    bool
+		}{converted, valid}
+	})
 	return value.value, ok && value.ok
 }
 
@@ -273,6 +278,11 @@ func itemStackFromNative(value native.ItemStack) (stack item.Stack, ok bool) {
 		stack = stack.WithForcedEnchantments(item.NewEnchantment(typeValue, int(enchantment.Level)))
 	}
 	return stack, true
+}
+
+// ItemStackFromNative decodes a plugin item stack using Dragonfly registries.
+func ItemStackFromNative(value native.ItemStack) (item.Stack, bool) {
+	return itemStackFromNative(value)
 }
 
 func marshalItemNBT(value map[string]any) ([]byte, bool) {

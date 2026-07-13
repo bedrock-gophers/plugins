@@ -221,3 +221,13 @@ events:
       - { name: item, type: item_stack }
     state:
       - { name: cancelled, type: bool }
+  - name: attack_entity
+    id: 30
+    input:
+      - { name: player, type: player_id }
+      - { name: target, type: entity_id }
+    state:
+      - { name: cancelled, type: bool }
+      - { name: knockback_force, type: f64 }
+      - { name: knockback_height, type: f64 }
+      - { name: critical, type: bool }

@@ -9,6 +9,7 @@ import (
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/block"
 	"github.com/df-mc/dragonfly/server/block/cube"
+	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
@@ -36,6 +37,8 @@ type runtimeStub struct {
 	foodLossOutput      native.PlayerFoodLossOutput
 	deathInput          native.PlayerDeathInput
 	keepInventory       bool
+	attackInput         native.PlayerAttackEntityInput
+	attackOutput        native.PlayerAttackEntityOutput
 }
 
 type testDamageSource struct{}
@@ -136,6 +139,14 @@ func (r *runtimeStub) HandlePlayerItemDamage(_ native.InvocationID, _ native.Pla
 func (r *runtimeStub) HandlePlayerItemDrop(_ native.InvocationID, _ native.PlayerID, _ native.ItemStack, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
+func (r *runtimeStub) HandlePlayerAttackEntity(_ native.InvocationID, input native.PlayerAttackEntityInput, force, height float64, critical, cancelled bool) (native.PlayerAttackEntityOutput, error) {
+	r.attackInput = input
+	output := r.attackOutput
+	if output == (native.PlayerAttackEntityOutput{}) {
+		output = native.PlayerAttackEntityOutput{Cancelled: cancelled, KnockbackForce: force, KnockbackHeight: height, Critical: critical}
+	}
+	return output, nil
+}
 
 func (r *runtimeStub) Subscriptions() uint64 { return r.subscriptions }
 func (r *runtimeStub) HandlePlayerMove(_ native.InvocationID, input native.PlayerMoveInput, _ bool) (bool, error) {
@@ -180,6 +191,29 @@ func TestPlayerHandlerMove(t *testing.T) {
 		}
 		if runtime.moveInput.Player.Generation != 7 || runtime.moveInput.OldPosition != (native.Vec3{X: 1, Y: 2, Z: 3}) {
 			t.Fatalf("unexpected movement input: %+v", runtime.moveInput)
+		}
+	})
+}
+
+func TestPlayerHandlerAttackEntityUsesStableTargetID(t *testing.T) {
+	runtime := &runtimeStub{
+		subscriptions: native.PlayerAttackEntitySubscription,
+		attackOutput: native.PlayerAttackEntityOutput{
+			Cancelled: true, KnockbackForce: -0.25, KnockbackHeight: 0.9, Critical: true,
+		},
+	}
+	withPlayerTx(t, func(tx *world.Tx, p *player.Player) {
+		players := NewPlayers()
+		playerID := players.Register(p, 91)
+		handler := NewPlayerHandler(runtime, nil, players)
+		p.Handle(handler)
+		target := tx.AddEntity(entity.NewText("target", p.Position().Add(mgl64.Vec3{1, 0, 0})))
+		if p.AttackEntity(target) {
+			t.Fatal("cancelled attack succeeded")
+		}
+		targetID, ok := players.EntityRegistry().ID(target)
+		if !ok || runtime.attackInput.Player != playerID || runtime.attackInput.Target != targetID {
+			t.Fatalf("attack input = %#v, player=%#v target=%#v", runtime.attackInput, playerID, targetID)
 		}
 	})
 }
