@@ -1,13 +1,13 @@
 package host
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
+	"github.com/df-mc/dragonfly/server/block"
 	"github.com/df-mc/dragonfly/server/block/cube"
-	"github.com/df-mc/dragonfly/server/event"
-	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
@@ -36,6 +36,17 @@ type runtimeStub struct {
 	deathInput          native.PlayerDeathInput
 	keepInventory       bool
 }
+
+type testDamageSource struct{}
+
+func (testDamageSource) ReducedByArmour() bool     { return false }
+func (testDamageSource) ReducedByResistance() bool { return false }
+func (testDamageSource) Fire() bool                { return false }
+func (testDamageSource) IgnoreTotem() bool         { return false }
+
+type testHealingSource struct{}
+
+func (testHealingSource) HealingSource() {}
 
 func (r *runtimeStub) HandlePlayerJoin(input native.PlayerJoinInput, _ bool) (bool, error) {
 	r.joinInput = input
@@ -136,6 +147,10 @@ func (r *runtimeStub) HandlePlayerChat(input native.PlayerChatInput, _ bool) (na
 }
 
 func withPlayer(t *testing.T, function func(*player.Player)) {
+	withPlayerTx(t, func(_ *world.Tx, player *player.Player) { function(player) })
+}
+
+func withPlayerTx(t *testing.T, function func(*world.Tx, *player.Player)) {
 	t.Helper()
 	w := world.Config{Synchronous: true}.New()
 	t.Cleanup(func() { _ = w.Close() })
@@ -144,9 +159,11 @@ func withPlayer(t *testing.T, function func(*player.Player)) {
 		player.Type,
 		player.Config{UUID: id, Name: "TestPlayer", Position: mgl64.Vec3{1, 2, 3}},
 	)
-	<-w.Exec(func(tx *world.Tx) {
-		function(tx.AddEntity(handle).(*player.Player))
-	})
+	if err := w.Do(func(tx *world.Tx) {
+		function(tx, tx.AddEntity(handle).(*player.Player))
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPlayerHandlerMove(t *testing.T) {
@@ -155,10 +172,10 @@ func TestPlayerHandlerMove(t *testing.T) {
 		players := NewPlayers()
 		players.Register(p, 7)
 		handler := NewPlayerHandler(runtime, nil, players)
-		ctx := event.C(p)
-		handler.HandleMove(ctx, mgl64.Vec3{4, 5, 6}, [2]float64{90, 10})
-		if !ctx.Cancelled() {
-			t.Fatal("movement was not cancelled")
+		p.Handle(handler)
+		p.Move(mgl64.Vec3{3, 3, 3}, 90, 10)
+		if p.Position() != (mgl64.Vec3{1, 2, 3}) {
+			t.Fatalf("cancelled movement changed position: %v", p.Position())
 		}
 		if runtime.moveInput.Player.Generation != 7 || runtime.moveInput.OldPosition != (native.Vec3{X: 1, Y: 2, Z: 3}) {
 			t.Fatalf("unexpected movement input: %+v", runtime.moveInput)
@@ -176,12 +193,8 @@ func TestPlayerHandlerChat(t *testing.T) {
 		players := NewPlayers()
 		players.Register(p, 9)
 		handler := NewPlayerHandler(runtime, nil, players)
-		ctx := event.C(p)
-		message := "original"
-		handler.HandleChat(ctx, &message)
-		if !ctx.Cancelled() || message != replacement {
-			t.Fatalf("cancelled=%v message=%q", ctx.Cancelled(), message)
-		}
+		p.Handle(handler)
+		p.Chat("original")
 		if runtime.chatInput.Message != "original" || runtime.chatInput.Player.Generation != 9 {
 			t.Fatalf("unexpected chat input: %+v", runtime.chatInput)
 		}
@@ -224,17 +237,16 @@ func TestPlayerHandlerHurtAndHeal(t *testing.T) {
 		players := NewPlayers()
 		players.Register(p, 13)
 		handler := NewPlayerHandler(runtime, nil, players)
-		hurtContext := event.C(p)
-		damage, immunity := 8.0, 500*time.Millisecond
-		handler.HandleHurt(hurtContext, &damage, false, &immunity, nil)
-		if !hurtContext.Cancelled() || damage != 2.5 || immunity != 750*time.Millisecond {
-			t.Fatalf("cancelled=%v damage=%v immunity=%v", hurtContext.Cancelled(), damage, immunity)
+		p.Hurt(5, testDamageSource{})
+		p.Handle(handler)
+		before := p.Health()
+		p.Hurt(8, testDamageSource{})
+		if p.Health() != before {
+			t.Fatalf("cancelled hurt changed health: %v -> %v", before, p.Health())
 		}
-		healContext := event.C(p)
-		health := 1.0
-		handler.HandleHeal(healContext, &health, nil)
-		if healContext.Cancelled() || health != 3.5 {
-			t.Fatalf("cancelled=%v health=%v", healContext.Cancelled(), health)
+		p.Heal(1, testHealingSource{})
+		if p.Health() != before+3.5 {
+			t.Fatalf("modified heal = %v, want %v", p.Health(), before+3.5)
 		}
 		if runtime.hurtInput.Player.Generation != 13 || runtime.healInput.Player.Generation != 13 {
 			t.Fatalf("hurt=%+v heal=%+v", runtime.hurtInput, runtime.healInput)
@@ -248,24 +260,20 @@ func TestPlayerHandlerBlockBreakAndPlace(t *testing.T) {
 		blockBreakOutput:    native.PlayerBlockBreakOutput{Experience: 7},
 		blockPlaceCancelled: true,
 	}
-	withPlayer(t, func(p *player.Player) {
+	withPlayerTx(t, func(tx *world.Tx, p *player.Player) {
 		players := NewPlayers()
 		players.Register(p, 14)
 		handler := NewPlayerHandler(runtime, nil, players)
-		breakContext := event.C(p)
-		drops := []item.Stack{}
-		experience := 2
-		handler.HandleBlockBreak(breakContext, cube.Pos{1, 2, 3}, &drops, &experience)
-		if breakContext.Cancelled() || experience != 7 {
-			t.Fatalf("cancelled=%v experience=%d", breakContext.Cancelled(), experience)
-		}
-		placeContext := event.C(p)
-		handler.HandleBlockPlace(placeContext, cube.Pos{4, 5, 6}, nil)
-		if !placeContext.Cancelled() {
-			t.Fatal("block place was not cancelled")
-		}
-		if runtime.blockBreakInput.Position != (native.BlockPos{X: 1, Y: 2, Z: 3}) || runtime.blockPlaceInput.Position != (native.BlockPos{X: 4, Y: 5, Z: 6}) {
+		breakPos, placePos := cube.Pos{1, 2, 4}, cube.Pos{1, 2, 5}
+		tx.SetBlock(breakPos, block.Stone{}, nil)
+		p.Handle(handler)
+		p.BreakBlock(breakPos)
+		p.PlaceBlock(placePos, block.Dirt{}, nil)
+		if runtime.blockBreakInput.Position != (native.BlockPos{X: 1, Y: 2, Z: 4}) || runtime.blockPlaceInput.Position != (native.BlockPos{X: 1, Y: 2, Z: 5}) {
 			t.Fatalf("break=%+v place=%+v", runtime.blockBreakInput, runtime.blockPlaceInput)
+		}
+		if _, ok := tx.Block(placePos).(block.Air); !ok {
+			t.Fatalf("cancelled placement wrote %T", tx.Block(placePos))
 		}
 	})
 }
@@ -276,15 +284,17 @@ func TestPlayerHandlerFoodLossAndDeath(t *testing.T) {
 		foodLossOutput: native.PlayerFoodLossOutput{Cancelled: true, To: 8},
 		keepInventory:  true,
 	}
-	withPlayer(t, func(p *player.Player) {
+	withPlayerTx(t, func(tx *world.Tx, p *player.Player) {
 		players := NewPlayers()
 		players.Register(p, 15)
 		handler := NewPlayerHandler(runtime, nil, players)
-		foodContext := event.C(p)
-		food := 9
-		handler.HandleFoodLoss(foodContext, 10, &food)
-		if !foodContext.Cancelled() || food != 8 {
-			t.Fatalf("cancelled=%v food=%d", foodContext.Cancelled(), food)
+		tx.World().SetDifficulty(world.DifficultyHard)
+		p.SetFood(10)
+		p.Saturate(0, -20)
+		p.Handle(handler)
+		p.Exhaust(4)
+		if p.Food() != 10 {
+			t.Fatalf("cancelled food loss changed food to %d", p.Food())
 		}
 		keepInventory := false
 		handler.HandleDeath(p, nil, &keepInventory)

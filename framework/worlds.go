@@ -1,6 +1,7 @@
 package framework
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -128,12 +129,19 @@ func (m *WorldManager) Unload(id WorldID) error {
 	entry.unloading = true
 	m.mu.Unlock()
 
-	players := 0
-	<-entry.world.Exec(func(tx *world.Tx) {
+	players, err := world.Call(context.Background(), entry.world, func(tx *world.Tx) (int, error) {
+		count := 0
 		for range tx.Players() {
-			players++
+			count++
 		}
+		return count, nil
 	})
+	if err != nil {
+		m.mu.Lock()
+		entry.unloading = false
+		m.mu.Unlock()
+		return fmt.Errorf("inspect world %q: %w", id, err)
+	}
 	if players != 0 {
 		m.mu.Lock()
 		entry.unloading = false

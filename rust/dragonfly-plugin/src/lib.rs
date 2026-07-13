@@ -981,7 +981,7 @@ impl<S> Context<'_, S> {
         unsafe { string_view(self.input.arguments) }
     }
 
-    pub fn source_player(&self) -> Option<Player> {
+    fn source_player(&self) -> Option<Player> {
         if self.input.source_kind != dragonfly_plugin_sys::DF_COMMAND_SOURCE_PLAYER {
             return None;
         }
