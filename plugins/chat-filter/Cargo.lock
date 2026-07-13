@@ -12,7 +12,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=44237bef6ab7bb3c3d872da116521067fc5e6715#44237bef6ab7bb3c3d872da116521067fc5e6715"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=4a12b6aff9919a3ac89d0b1a695d121a9ec98b1e#4a12b6aff9919a3ac89d0b1a695d121a9ec98b1e"
 dependencies = [
  "dragonfly-plugin-macros",
  "dragonfly-plugin-sys",
@@ -23,7 +23,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-macros"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=44237bef6ab7bb3c3d872da116521067fc5e6715#44237bef6ab7bb3c3d872da116521067fc5e6715"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=4a12b6aff9919a3ac89d0b1a695d121a9ec98b1e#4a12b6aff9919a3ac89d0b1a695d121a9ec98b1e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -33,7 +33,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=44237bef6ab7bb3c3d872da116521067fc5e6715#44237bef6ab7bb3c3d872da116521067fc5e6715"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=4a12b6aff9919a3ac89d0b1a695d121a9ec98b1e#4a12b6aff9919a3ac89d0b1a695d121a9ec98b1e"
 
 [[package]]
 name = "itoa"
@@ -146,6 +146,6 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "zmij"
-version = "1.0.22"
+version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd2f034a4bebf216c9e4b7083603e024cf930873fd67830cfb083c9fa33129d9"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
