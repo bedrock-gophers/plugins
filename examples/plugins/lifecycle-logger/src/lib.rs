@@ -1,12 +1,4 @@
-use dragonfly::{
-    PlayerBlockBreakEvent, PlayerBlockPickEvent, PlayerBlockPlaceEvent, PlayerDeathEvent,
-    PlayerExperienceGainEvent, PlayerFireExtinguishEvent, PlayerFoodLossEvent, PlayerHealEvent,
-    PlayerHeldSlotChangeEvent, PlayerHurtEvent, PlayerItemConsumeEvent, PlayerItemDamageEvent,
-    PlayerItemDropEvent, PlayerItemReleaseEvent, PlayerItemUseEvent, PlayerItemUseOnBlockEvent,
-    PlayerJoinEvent, PlayerJumpEvent, PlayerLecternPageTurnEvent, PlayerPunchAirEvent,
-    PlayerQuitEvent, PlayerSignEditEvent, PlayerSleepEvent, PlayerStartBreakEvent,
-    PlayerTeleportEvent, PlayerToggleSneakEvent, PlayerToggleSprintEvent, Plugin, Title, plugin,
-};
+use dragonfly::{Event, Plugin, Title, plugin};
 
 #[derive(Default)]
 struct LifecycleLogger;
@@ -21,7 +13,7 @@ impl Plugin for LifecycleLogger {
         eprintln!("lifecycle-logger disabled");
     }
 
-    fn on_join(&self, event: &mut PlayerJoinEvent<'_>) {
+    fn on_join(&self, event: &mut Event::PlayerJoin<'_>) {
         eprintln!("{} joined", event.name());
         let player = event.player();
         player.message("Welcome from a Rust plugin.");
@@ -31,112 +23,112 @@ impl Plugin for LifecycleLogger {
         player.send_title(&Title::new("Rust plugin").subtitle("Native Dragonfly"));
     }
 
-    fn on_quit(&self, event: &PlayerQuitEvent<'_>) {
+    fn on_quit(&self, event: &Event::PlayerQuit<'_>) {
         eprintln!("{} quit", event.name());
     }
 
-    fn on_hurt(&self, event: &mut PlayerHurtEvent<'_>) {
+    fn on_hurt(&self, event: &mut Event::PlayerHurt<'_>) {
         eprintln!("player hurt for {} by {}", event.damage(), event.source());
     }
 
-    fn on_heal(&self, event: &mut PlayerHealEvent<'_>) {
+    fn on_heal(&self, event: &mut Event::PlayerHeal<'_>) {
         eprintln!("player healed for {} by {}", event.health(), event.source());
     }
 
-    fn on_block_break(&self, event: &mut PlayerBlockBreakEvent<'_>) {
+    fn on_block_break(&self, event: &mut Event::PlayerBlockBreak<'_>) {
         eprintln!("broke {} at {:?}", event.block(), event.position());
     }
 
-    fn on_block_place(&self, event: &mut PlayerBlockPlaceEvent<'_>) {
+    fn on_block_place(&self, event: &mut Event::PlayerBlockPlace<'_>) {
         eprintln!("placed {} at {:?}", event.block(), event.position());
     }
 
-    fn on_food_loss(&self, event: &mut PlayerFoodLossEvent<'_>) {
+    fn on_food_loss(&self, event: &mut Event::PlayerFoodLoss<'_>) {
         eprintln!("food changed from {} to {}", event.from(), event.to());
     }
 
-    fn on_death(&self, event: &mut PlayerDeathEvent<'_>) {
+    fn on_death(&self, event: &mut Event::PlayerDeath<'_>) {
         eprintln!("player died from {}", event.source());
     }
 
-    fn on_start_break(&self, event: &mut PlayerStartBreakEvent<'_>) {
+    fn on_start_break(&self, event: &mut Event::PlayerStartBreak<'_>) {
         eprintln!("started breaking at {:?}", event.position());
     }
 
-    fn on_fire_extinguish(&self, event: &mut PlayerFireExtinguishEvent<'_>) {
+    fn on_fire_extinguish(&self, event: &mut Event::PlayerFireExtinguish<'_>) {
         eprintln!("extinguished fire at {:?}", event.position());
     }
-    fn on_toggle_sprint(&self, event: &mut PlayerToggleSprintEvent<'_>) {
+    fn on_toggle_sprint(&self, event: &mut Event::PlayerToggleSprint<'_>) {
         eprintln!("sprint={}", event.after());
     }
-    fn on_toggle_sneak(&self, event: &mut PlayerToggleSneakEvent<'_>) {
+    fn on_toggle_sneak(&self, event: &mut Event::PlayerToggleSneak<'_>) {
         eprintln!("sneak={}", event.after());
     }
-    fn on_jump(&self, event: &PlayerJumpEvent<'_>) {
+    fn on_jump(&self, event: &Event::PlayerJump<'_>) {
         if let Some(name) = event.player().name() {
             eprintln!("{name} jumped");
         }
     }
-    fn on_teleport(&self, event: &mut PlayerTeleportEvent<'_>) {
+    fn on_teleport(&self, event: &mut Event::PlayerTeleport<'_>) {
         eprintln!("teleporting to {:?}", event.position());
     }
-    fn on_experience_gain(&self, event: &mut PlayerExperienceGainEvent<'_>) {
+    fn on_experience_gain(&self, event: &mut Event::PlayerExperienceGain<'_>) {
         eprintln!("gaining {} experience", event.amount());
     }
-    fn on_punch_air(&self, _event: &mut PlayerPunchAirEvent<'_>) {
+    fn on_punch_air(&self, _event: &mut Event::PlayerPunchAir<'_>) {
         eprintln!("punched air");
     }
-    fn on_held_slot_change(&self, event: &mut PlayerHeldSlotChangeEvent<'_>) {
+    fn on_held_slot_change(&self, event: &mut Event::PlayerHeldSlotChange<'_>) {
         eprintln!("held slot {} -> {}", event.from(), event.to());
     }
-    fn on_sleep(&self, event: &mut PlayerSleepEvent<'_>) {
+    fn on_sleep(&self, event: &mut Event::PlayerSleep<'_>) {
         eprintln!("sleeping, reminder={}", event.send_reminder());
     }
-    fn on_block_pick(&self, event: &mut PlayerBlockPickEvent<'_>) {
+    fn on_block_pick(&self, event: &mut Event::PlayerBlockPick<'_>) {
         eprintln!("picked {} at {:?}", event.block(), event.position());
     }
-    fn on_lectern_page_turn(&self, event: &mut PlayerLecternPageTurnEvent<'_>) {
+    fn on_lectern_page_turn(&self, event: &mut Event::PlayerLecternPageTurn<'_>) {
         eprintln!("lectern page {} -> {}", event.old_page(), event.new_page());
     }
-    fn on_sign_edit(&self, event: &mut PlayerSignEditEvent<'_>) {
+    fn on_sign_edit(&self, event: &mut Event::PlayerSignEdit<'_>) {
         eprintln!(
             "sign changed from {:?} to {:?}",
             event.old_text(),
             event.new_text()
         );
     }
-    fn on_item_use(&self, _event: &mut PlayerItemUseEvent<'_>) {
+    fn on_item_use(&self, _event: &mut Event::PlayerItemUse<'_>) {
         eprintln!("used an item");
     }
-    fn on_item_use_on_block(&self, event: &mut PlayerItemUseOnBlockEvent<'_>) {
+    fn on_item_use_on_block(&self, event: &mut Event::PlayerItemUseOnBlock<'_>) {
         eprintln!(
             "used item on {:?} face {:?}",
             event.position(),
             event.face()
         );
     }
-    fn on_item_consume(&self, event: &mut PlayerItemConsumeEvent<'_>) {
+    fn on_item_consume(&self, event: &mut Event::PlayerItemConsume<'_>) {
         eprintln!(
             "consumed {} x{}",
             event.item().identifier(),
             event.item().count()
         );
     }
-    fn on_item_release(&self, event: &mut PlayerItemReleaseEvent<'_>) {
+    fn on_item_release(&self, event: &mut Event::PlayerItemRelease<'_>) {
         eprintln!(
             "released {} after {:?}",
             event.item().identifier(),
             event.duration()
         );
     }
-    fn on_item_damage(&self, event: &mut PlayerItemDamageEvent<'_>) {
+    fn on_item_damage(&self, event: &mut Event::PlayerItemDamage<'_>) {
         eprintln!(
             "damaging {} by {}",
             event.item().identifier(),
             event.damage()
         );
     }
-    fn on_item_drop(&self, event: &mut PlayerItemDropEvent<'_>) {
+    fn on_item_drop(&self, event: &mut Event::PlayerItemDrop<'_>) {
         eprintln!(
             "dropping {} x{}",
             event.item().identifier(),

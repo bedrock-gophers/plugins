@@ -12,6 +12,39 @@ pub mod __private {
     pub use dragonfly_plugin_sys as sys;
 }
 
+#[allow(non_snake_case)]
+pub mod Event {
+    pub use super::PlayerBlockBreakEventData as PlayerBlockBreak;
+    pub use super::PlayerBlockPickEventData as PlayerBlockPick;
+    pub use super::PlayerBlockPlaceEventData as PlayerBlockPlace;
+    pub use super::PlayerChatEventData as PlayerChat;
+    pub use super::PlayerDeathEventData as PlayerDeath;
+    pub use super::PlayerExperienceGainEventData as PlayerExperienceGain;
+    pub use super::PlayerFireExtinguishEventData as PlayerFireExtinguish;
+    pub use super::PlayerFoodLossEventData as PlayerFoodLoss;
+    pub use super::PlayerHealEventData as PlayerHeal;
+    pub use super::PlayerHeldSlotChangeEventData as PlayerHeldSlotChange;
+    pub use super::PlayerHurtEventData as PlayerHurt;
+    pub use super::PlayerItemConsumeEventData as PlayerItemConsume;
+    pub use super::PlayerItemDamageEventData as PlayerItemDamage;
+    pub use super::PlayerItemDropEventData as PlayerItemDrop;
+    pub use super::PlayerItemReleaseEventData as PlayerItemRelease;
+    pub use super::PlayerItemUseEventData as PlayerItemUse;
+    pub use super::PlayerItemUseOnBlockEventData as PlayerItemUseOnBlock;
+    pub use super::PlayerJoinEventData as PlayerJoin;
+    pub use super::PlayerJumpEventData as PlayerJump;
+    pub use super::PlayerLecternPageTurnEventData as PlayerLecternPageTurn;
+    pub use super::PlayerMoveEventData as PlayerMove;
+    pub use super::PlayerPunchAirEventData as PlayerPunchAir;
+    pub use super::PlayerQuitEventData as PlayerQuit;
+    pub use super::PlayerSignEditEventData as PlayerSignEdit;
+    pub use super::PlayerSleepEventData as PlayerSleep;
+    pub use super::PlayerStartBreakEventData as PlayerStartBreak;
+    pub use super::PlayerTeleportEventData as PlayerTeleport;
+    pub use super::PlayerToggleSneakEventData as PlayerToggleSneak;
+    pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
+}
+
 static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV2> =
     AtomicPtr::new(core::ptr::null_mut());
 
@@ -78,26 +111,227 @@ pub enum BlockFace {
     East = 5,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct ItemStack<'a> {
-    raw: &'a dragonfly_plugin_sys::DfItemStackView,
+#[derive(Clone, Debug, PartialEq)]
+pub enum Value {
+    Byte(i8),
+    Short(i16),
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+    Bool(bool),
+    String(String),
+    ByteArray(Vec<u8>),
+    IntArray(Vec<i32>),
+    LongArray(Vec<i64>),
+    List(Vec<Value>),
+    Compound(std::collections::BTreeMap<String, Value>),
 }
 
-impl<'a> ItemStack<'a> {
-    fn from_raw(raw: &'a dragonfly_plugin_sys::DfItemStackView) -> Self {
-        Self { raw }
+macro_rules! value_from {
+    ($type:ty, $variant:ident) => {
+        impl From<$type> for Value {
+            fn from(value: $type) -> Self {
+                Self::$variant(value)
+            }
+        }
+    };
+}
+
+value_from!(i8, Byte);
+value_from!(i16, Short);
+value_from!(i32, Int);
+value_from!(i64, Long);
+value_from!(f32, Float);
+value_from!(f64, Double);
+value_from!(bool, Bool);
+value_from!(String, String);
+value_from!(Vec<Value>, List);
+value_from!(std::collections::BTreeMap<String, Value>, Compound);
+
+impl From<&str> for Value {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_owned())
     }
-    pub fn identifier(&self) -> &'a str {
-        unsafe { string_view(self.raw.identifier) }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct AppliedEnchantment {
+    enchantment: Enchantment,
+    level: u32,
+}
+
+impl AppliedEnchantment {
+    pub const fn new(enchantment: Enchantment, level: u32) -> Self {
+        Self { enchantment, level }
     }
+
+    pub const fn enchantment(self) -> Enchantment {
+        self.enchantment
+    }
+
+    pub const fn level(self) -> u32 {
+        self.level
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ItemStack {
+    identifier: String,
+    metadata: i32,
+    count: u32,
+    damage: u32,
+    custom_name: String,
+    lore: Vec<String>,
+    values: std::collections::BTreeMap<String, Value>,
+    enchantments: Vec<AppliedEnchantment>,
+}
+
+impl ItemStack {
+    pub fn new(identifier: impl Into<String>, count: u32, metadata: i32) -> Self {
+        Self {
+            identifier: identifier.into(),
+            metadata,
+            count,
+            damage: 0,
+            custom_name: String::new(),
+            lore: Vec::new(),
+            values: std::collections::BTreeMap::new(),
+            enchantments: Vec::new(),
+        }
+    }
+
+    fn from_raw(raw: &dragonfly_plugin_sys::DfItemStackView) -> Self {
+        Self {
+            identifier: unsafe { string_view(raw.identifier) }.to_owned(),
+            metadata: raw.metadata,
+            count: u32::try_from(raw.count).unwrap_or_default(),
+            damage: u32::try_from(raw.damage).unwrap_or_default(),
+            custom_name: String::new(),
+            lore: Vec::new(),
+            values: std::collections::BTreeMap::new(),
+            enchantments: Vec::new(),
+        }
+    }
+
+    pub fn potion(potion: Potion, count: u32) -> Self {
+        Self::new("minecraft:potion", count, i32::from(potion.id()))
+    }
+
+    pub fn splash_potion(potion: Potion, count: u32) -> Self {
+        Self::new("minecraft:splash_potion", count, i32::from(potion.id()))
+    }
+
+    pub fn lingering_potion(potion: Potion, count: u32) -> Self {
+        Self::new("minecraft:lingering_potion", count, i32::from(potion.id()))
+    }
+
+    pub fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
     pub fn metadata(&self) -> i32 {
-        self.raw.metadata
+        self.metadata
     }
-    pub fn count(&self) -> i32 {
-        self.raw.count
+
+    pub fn count(&self) -> u32 {
+        self.count
     }
-    pub fn damage(&self) -> i32 {
-        self.raw.damage
+
+    pub fn damage(&self) -> u32 {
+        self.damage
+    }
+
+    pub fn custom_name(&self) -> &str {
+        &self.custom_name
+    }
+
+    pub fn lore(&self) -> &[String] {
+        &self.lore
+    }
+
+    pub fn value(&self, key: &str) -> Option<&Value> {
+        self.values.get(key)
+    }
+
+    pub fn values(&self) -> &std::collections::BTreeMap<String, Value> {
+        &self.values
+    }
+
+    pub fn enchantment(&self, enchantment: Enchantment) -> Option<AppliedEnchantment> {
+        self.enchantments
+            .iter()
+            .copied()
+            .find(|applied| applied.enchantment == enchantment)
+    }
+
+    pub fn enchantments(&self) -> &[AppliedEnchantment] {
+        &self.enchantments
+    }
+
+    pub fn with_count(mut self, count: u32) -> Self {
+        self.count = count;
+        self
+    }
+
+    pub fn with_metadata(mut self, metadata: i32) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    pub fn with_damage(mut self, damage: u32) -> Self {
+        self.damage = damage;
+        self
+    }
+
+    pub fn with_custom_name(mut self, name: impl Into<String>) -> Self {
+        self.custom_name = name.into();
+        self
+    }
+
+    pub fn with_lore<I, S>(mut self, lines: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.lore = lines.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn with_value(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
+        self.values.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn without_value(mut self, key: &str) -> Self {
+        self.values.remove(key);
+        self
+    }
+
+    pub fn with_enchantment(mut self, enchantment: Enchantment, level: u32) -> Self {
+        self.enchantments
+            .retain(|applied| applied.enchantment != enchantment);
+        self.enchantments
+            .push(AppliedEnchantment::new(enchantment, level));
+        self.enchantments
+            .sort_unstable_by_key(|applied| applied.enchantment.id());
+        self
+    }
+
+    pub fn with_enchantments<I>(mut self, enchantments: I) -> Self
+    where
+        I: IntoIterator<Item = AppliedEnchantment>,
+    {
+        for applied in enchantments {
+            self = self.with_enchantment(applied.enchantment, applied.level);
+        }
+        self
+    }
+
+    pub fn without_enchantment(mut self, enchantment: Enchantment) -> Self {
+        self.enchantments
+            .retain(|applied| applied.enchantment != enchantment);
+        self
     }
 }
 
@@ -728,6 +962,7 @@ impl Player {
 }
 
 include!("player_state_generated.rs");
+include!("items_generated.rs");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Effect {
@@ -811,12 +1046,12 @@ impl From<dragonfly_plugin_sys::DfVec3> for Vec3 {
     }
 }
 
-pub struct PlayerMoveEvent<'a> {
+pub struct PlayerMoveEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerMoveInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerMoveState,
 }
 
-impl<'a> PlayerMoveEvent<'a> {
+impl<'a> PlayerMoveEventData<'a> {
     /// Creates a safe event view over runtime-validated ABI values.
     ///
     /// # Safety
@@ -846,11 +1081,11 @@ impl<'a> PlayerMoveEvent<'a> {
     }
 }
 
-pub struct PlayerJumpEvent<'a> {
+pub struct PlayerJumpEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerJumpInput,
 }
 
-impl<'a> PlayerJumpEvent<'a> {
+impl<'a> PlayerJumpEventData<'a> {
     /// # Safety
     /// The input must belong to the active jump callback.
     #[doc(hidden)]
@@ -863,12 +1098,12 @@ impl<'a> PlayerJumpEvent<'a> {
     }
 }
 
-pub struct PlayerTeleportEvent<'a> {
+pub struct PlayerTeleportEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerTeleportInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerTeleportState,
 }
 
-impl<'a> PlayerTeleportEvent<'a> {
+impl<'a> PlayerTeleportEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active teleport callback.
     #[doc(hidden)]
@@ -1373,17 +1608,17 @@ fn duration_milliseconds(duration: std::time::Duration) -> u64 {
     duration.as_millis().min(u128::from(u64::MAX)) as u64
 }
 
-pub struct PlayerChatEvent<'a> {
+pub struct PlayerChatEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerChatInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerChatState,
 }
 
-pub struct PlayerJoinEvent<'a> {
+pub struct PlayerJoinEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerJoinInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerJoinState,
 }
 
-impl<'a> PlayerJoinEvent<'a> {
+impl<'a> PlayerJoinEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active join callback.
     #[doc(hidden)]
@@ -1411,11 +1646,11 @@ impl<'a> PlayerJoinEvent<'a> {
     }
 }
 
-pub struct PlayerQuitEvent<'a> {
+pub struct PlayerQuitEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerQuitInput,
 }
 
-impl<'a> PlayerQuitEvent<'a> {
+impl<'a> PlayerQuitEventData<'a> {
     /// # Safety
     /// The reference must belong to an active quit callback.
     #[doc(hidden)]
@@ -1432,7 +1667,7 @@ impl<'a> PlayerQuitEvent<'a> {
     }
 }
 
-impl<'a> PlayerChatEvent<'a> {
+impl<'a> PlayerChatEventData<'a> {
     /// Creates a safe event view over runtime-validated ABI values.
     ///
     /// # Safety
@@ -1495,12 +1730,12 @@ impl<'a> PlayerChatEvent<'a> {
     }
 }
 
-pub struct PlayerHurtEvent<'a> {
+pub struct PlayerHurtEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerHurtInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerHurtState,
 }
 
-impl<'a> PlayerHurtEvent<'a> {
+impl<'a> PlayerHurtEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active hurt callback.
     #[doc(hidden)]
@@ -1549,17 +1784,17 @@ impl<'a> PlayerHurtEvent<'a> {
     }
 }
 
-pub struct PlayerHealEvent<'a> {
+pub struct PlayerHealEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerHealInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerHealState,
 }
 
-pub struct PlayerBlockBreakEvent<'a> {
+pub struct PlayerBlockBreakEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerBlockBreakInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerBlockBreakState,
 }
 
-impl<'a> PlayerBlockBreakEvent<'a> {
+impl<'a> PlayerBlockBreakEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active block-break callback.
     #[doc(hidden)]
@@ -1599,12 +1834,12 @@ impl<'a> PlayerBlockBreakEvent<'a> {
     }
 }
 
-pub struct PlayerBlockPlaceEvent<'a> {
+pub struct PlayerBlockPlaceEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerBlockPlaceInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerBlockPlaceState,
 }
 
-impl<'a> PlayerBlockPlaceEvent<'a> {
+impl<'a> PlayerBlockPlaceEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active block-place callback.
     #[doc(hidden)]
@@ -1636,7 +1871,7 @@ impl<'a> PlayerBlockPlaceEvent<'a> {
     }
 }
 
-impl<'a> PlayerHealEvent<'a> {
+impl<'a> PlayerHealEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active heal callback.
     #[doc(hidden)]
@@ -1672,12 +1907,12 @@ impl<'a> PlayerHealEvent<'a> {
     }
 }
 
-pub struct PlayerFoodLossEvent<'a> {
+pub struct PlayerFoodLossEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerFoodLossInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerFoodLossState,
 }
 
-impl<'a> PlayerFoodLossEvent<'a> {
+impl<'a> PlayerFoodLossEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active food-loss callback.
     #[doc(hidden)]
@@ -1713,12 +1948,12 @@ impl<'a> PlayerFoodLossEvent<'a> {
     }
 }
 
-pub struct PlayerDeathEvent<'a> {
+pub struct PlayerDeathEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerDeathInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerDeathState,
 }
 
-impl<'a> PlayerDeathEvent<'a> {
+impl<'a> PlayerDeathEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active death callback.
     #[doc(hidden)]
@@ -1781,7 +2016,7 @@ macro_rules! cancellable_position_event {
 }
 
 cancellable_position_event!(
-    PlayerStartBreakEvent,
+    PlayerStartBreakEventData,
     dragonfly_plugin_sys::DfPlayerStartBreakInput,
     dragonfly_plugin_sys::DfPlayerStartBreakState
 );
@@ -1821,27 +2056,27 @@ macro_rules! cancellable_toggle_event {
 }
 
 cancellable_toggle_event!(
-    PlayerToggleSprintEvent,
+    PlayerToggleSprintEventData,
     dragonfly_plugin_sys::DfPlayerToggleSprintInput,
     dragonfly_plugin_sys::DfPlayerToggleSprintState
 );
 cancellable_toggle_event!(
-    PlayerToggleSneakEvent,
+    PlayerToggleSneakEventData,
     dragonfly_plugin_sys::DfPlayerToggleSneakInput,
     dragonfly_plugin_sys::DfPlayerToggleSneakState
 );
 cancellable_position_event!(
-    PlayerFireExtinguishEvent,
+    PlayerFireExtinguishEventData,
     dragonfly_plugin_sys::DfPlayerFireExtinguishInput,
     dragonfly_plugin_sys::DfPlayerFireExtinguishState
 );
 
-pub struct PlayerExperienceGainEvent<'a> {
+pub struct PlayerExperienceGainEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerExperienceGainInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerExperienceGainState,
 }
 
-impl<'a> PlayerExperienceGainEvent<'a> {
+impl<'a> PlayerExperienceGainEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active experience-gain callback.
     #[doc(hidden)]
@@ -1868,17 +2103,17 @@ impl<'a> PlayerExperienceGainEvent<'a> {
     }
 }
 
-pub struct PlayerPunchAirEvent<'a> {
+pub struct PlayerPunchAirEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerPunchAirInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerPunchAirState,
 }
 
-pub struct PlayerHeldSlotChangeEvent<'a> {
+pub struct PlayerHeldSlotChangeEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerHeldSlotChangeInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerHeldSlotChangeState,
 }
 
-impl<'a> PlayerHeldSlotChangeEvent<'a> {
+impl<'a> PlayerHeldSlotChangeEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active held-slot callback.
     #[doc(hidden)]
@@ -1905,12 +2140,12 @@ impl<'a> PlayerHeldSlotChangeEvent<'a> {
     }
 }
 
-pub struct PlayerSleepEvent<'a> {
+pub struct PlayerSleepEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerSleepInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerSleepState,
 }
 
-impl<'a> PlayerSleepEvent<'a> {
+impl<'a> PlayerSleepEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active sleep callback.
     #[doc(hidden)]
@@ -1937,7 +2172,7 @@ impl<'a> PlayerSleepEvent<'a> {
     }
 }
 
-impl<'a> PlayerPunchAirEvent<'a> {
+impl<'a> PlayerPunchAirEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active punch-air callback.
     #[doc(hidden)]
@@ -1958,12 +2193,12 @@ impl<'a> PlayerPunchAirEvent<'a> {
     }
 }
 
-pub struct PlayerBlockPickEvent<'a> {
+pub struct PlayerBlockPickEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerBlockPickInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerBlockPickState,
 }
 
-impl<'a> PlayerBlockPickEvent<'a> {
+impl<'a> PlayerBlockPickEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active block-pick callback.
     #[doc(hidden)]
@@ -1990,17 +2225,17 @@ impl<'a> PlayerBlockPickEvent<'a> {
     }
 }
 
-pub struct PlayerLecternPageTurnEvent<'a> {
+pub struct PlayerLecternPageTurnEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerLecternPageTurnInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerLecternPageTurnState,
 }
 
-pub struct PlayerSignEditEvent<'a> {
+pub struct PlayerSignEditEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerSignEditInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerSignEditState,
 }
 
-impl<'a> PlayerSignEditEvent<'a> {
+impl<'a> PlayerSignEditEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active sign-edit callback.
     #[doc(hidden)]
@@ -2033,22 +2268,22 @@ impl<'a> PlayerSignEditEvent<'a> {
     }
 }
 
-pub struct PlayerItemUseEvent<'a> {
+pub struct PlayerItemUseEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerItemUseInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerItemUseState,
 }
 
-pub struct PlayerItemUseOnBlockEvent<'a> {
+pub struct PlayerItemUseOnBlockEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerItemUseOnBlockInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerItemUseOnBlockState,
 }
 
-pub struct PlayerItemConsumeEvent<'a> {
+pub struct PlayerItemConsumeEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerItemConsumeInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerItemConsumeState,
 }
 
-impl<'a> PlayerItemConsumeEvent<'a> {
+impl<'a> PlayerItemConsumeEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active item-consume callback.
     #[doc(hidden)]
@@ -2061,7 +2296,7 @@ impl<'a> PlayerItemConsumeEvent<'a> {
     pub fn player(&self) -> Player {
         Player::from_id(self.input.player)
     }
-    pub fn item(&self) -> ItemStack<'_> {
+    pub fn item(&self) -> ItemStack {
         ItemStack::from_raw(&self.input.item)
     }
     pub fn cancelled(&self) -> bool {
@@ -2072,17 +2307,17 @@ impl<'a> PlayerItemConsumeEvent<'a> {
     }
 }
 
-pub struct PlayerItemReleaseEvent<'a> {
+pub struct PlayerItemReleaseEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerItemReleaseInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerItemReleaseState,
 }
 
-pub struct PlayerItemDamageEvent<'a> {
+pub struct PlayerItemDamageEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerItemDamageInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerItemDamageState,
 }
 
-impl<'a> PlayerItemDamageEvent<'a> {
+impl<'a> PlayerItemDamageEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active item-damage callback.
     #[doc(hidden)]
@@ -2095,7 +2330,7 @@ impl<'a> PlayerItemDamageEvent<'a> {
     pub fn player(&self) -> Player {
         Player::from_id(self.input.player)
     }
-    pub fn item(&self) -> ItemStack<'_> {
+    pub fn item(&self) -> ItemStack {
         ItemStack::from_raw(&self.input.item)
     }
     pub fn damage(&self) -> i32 {
@@ -2112,12 +2347,12 @@ impl<'a> PlayerItemDamageEvent<'a> {
     }
 }
 
-pub struct PlayerItemDropEvent<'a> {
+pub struct PlayerItemDropEventData<'a> {
     input: &'a dragonfly_plugin_sys::DfPlayerItemDropInput,
     state: &'a mut dragonfly_plugin_sys::DfPlayerItemDropState,
 }
 
-impl<'a> PlayerItemDropEvent<'a> {
+impl<'a> PlayerItemDropEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active item-drop callback.
     #[doc(hidden)]
@@ -2130,7 +2365,7 @@ impl<'a> PlayerItemDropEvent<'a> {
     pub fn player(&self) -> Player {
         Player::from_id(self.input.player)
     }
-    pub fn item(&self) -> ItemStack<'_> {
+    pub fn item(&self) -> ItemStack {
         ItemStack::from_raw(&self.input.item)
     }
     pub fn cancelled(&self) -> bool {
@@ -2141,7 +2376,7 @@ impl<'a> PlayerItemDropEvent<'a> {
     }
 }
 
-impl<'a> PlayerItemReleaseEvent<'a> {
+impl<'a> PlayerItemReleaseEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active item-release callback.
     #[doc(hidden)]
@@ -2154,7 +2389,7 @@ impl<'a> PlayerItemReleaseEvent<'a> {
     pub fn player(&self) -> Player {
         Player::from_id(self.input.player)
     }
-    pub fn item(&self) -> ItemStack<'_> {
+    pub fn item(&self) -> ItemStack {
         ItemStack::from_raw(&self.input.item)
     }
     pub fn duration(&self) -> std::time::Duration {
@@ -2168,7 +2403,7 @@ impl<'a> PlayerItemReleaseEvent<'a> {
     }
 }
 
-impl<'a> PlayerItemUseOnBlockEvent<'a> {
+impl<'a> PlayerItemUseOnBlockEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active item-use-on-block callback.
     #[doc(hidden)]
@@ -2199,7 +2434,7 @@ impl<'a> PlayerItemUseOnBlockEvent<'a> {
     }
 }
 
-impl<'a> PlayerItemUseEvent<'a> {
+impl<'a> PlayerItemUseEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active item-use callback.
     #[doc(hidden)]
@@ -2220,7 +2455,7 @@ impl<'a> PlayerItemUseEvent<'a> {
     }
 }
 
-impl<'a> PlayerLecternPageTurnEvent<'a> {
+impl<'a> PlayerLecternPageTurnEventData<'a> {
     /// # Safety
     /// Both references must belong to the same active lectern callback.
     #[doc(hidden)]
@@ -2256,35 +2491,35 @@ impl<'a> PlayerLecternPageTurnEvent<'a> {
 pub trait Plugin: Default + Send + Sync + 'static {
     fn on_enable(&self) {}
     fn on_disable(&self) {}
-    fn on_move(&self, _event: &mut PlayerMoveEvent<'_>) {}
-    fn on_chat(&self, _event: &mut PlayerChatEvent<'_>) {}
-    fn on_join(&self, _event: &mut PlayerJoinEvent<'_>) {}
-    fn on_quit(&self, _event: &PlayerQuitEvent<'_>) {}
-    fn on_hurt(&self, _event: &mut PlayerHurtEvent<'_>) {}
-    fn on_heal(&self, _event: &mut PlayerHealEvent<'_>) {}
-    fn on_block_break(&self, _event: &mut PlayerBlockBreakEvent<'_>) {}
-    fn on_block_place(&self, _event: &mut PlayerBlockPlaceEvent<'_>) {}
-    fn on_food_loss(&self, _event: &mut PlayerFoodLossEvent<'_>) {}
-    fn on_death(&self, _event: &mut PlayerDeathEvent<'_>) {}
-    fn on_start_break(&self, _event: &mut PlayerStartBreakEvent<'_>) {}
-    fn on_fire_extinguish(&self, _event: &mut PlayerFireExtinguishEvent<'_>) {}
-    fn on_toggle_sprint(&self, _event: &mut PlayerToggleSprintEvent<'_>) {}
-    fn on_toggle_sneak(&self, _event: &mut PlayerToggleSneakEvent<'_>) {}
-    fn on_jump(&self, _event: &PlayerJumpEvent<'_>) {}
-    fn on_teleport(&self, _event: &mut PlayerTeleportEvent<'_>) {}
-    fn on_experience_gain(&self, _event: &mut PlayerExperienceGainEvent<'_>) {}
-    fn on_punch_air(&self, _event: &mut PlayerPunchAirEvent<'_>) {}
-    fn on_held_slot_change(&self, _event: &mut PlayerHeldSlotChangeEvent<'_>) {}
-    fn on_sleep(&self, _event: &mut PlayerSleepEvent<'_>) {}
-    fn on_block_pick(&self, _event: &mut PlayerBlockPickEvent<'_>) {}
-    fn on_lectern_page_turn(&self, _event: &mut PlayerLecternPageTurnEvent<'_>) {}
-    fn on_sign_edit(&self, _event: &mut PlayerSignEditEvent<'_>) {}
-    fn on_item_use(&self, _event: &mut PlayerItemUseEvent<'_>) {}
-    fn on_item_use_on_block(&self, _event: &mut PlayerItemUseOnBlockEvent<'_>) {}
-    fn on_item_consume(&self, _event: &mut PlayerItemConsumeEvent<'_>) {}
-    fn on_item_release(&self, _event: &mut PlayerItemReleaseEvent<'_>) {}
-    fn on_item_damage(&self, _event: &mut PlayerItemDamageEvent<'_>) {}
-    fn on_item_drop(&self, _event: &mut PlayerItemDropEvent<'_>) {}
+    fn on_move(&self, _event: &mut Event::PlayerMove<'_>) {}
+    fn on_chat(&self, _event: &mut Event::PlayerChat<'_>) {}
+    fn on_join(&self, _event: &mut Event::PlayerJoin<'_>) {}
+    fn on_quit(&self, _event: &Event::PlayerQuit<'_>) {}
+    fn on_hurt(&self, _event: &mut Event::PlayerHurt<'_>) {}
+    fn on_heal(&self, _event: &mut Event::PlayerHeal<'_>) {}
+    fn on_block_break(&self, _event: &mut Event::PlayerBlockBreak<'_>) {}
+    fn on_block_place(&self, _event: &mut Event::PlayerBlockPlace<'_>) {}
+    fn on_food_loss(&self, _event: &mut Event::PlayerFoodLoss<'_>) {}
+    fn on_death(&self, _event: &mut Event::PlayerDeath<'_>) {}
+    fn on_start_break(&self, _event: &mut Event::PlayerStartBreak<'_>) {}
+    fn on_fire_extinguish(&self, _event: &mut Event::PlayerFireExtinguish<'_>) {}
+    fn on_toggle_sprint(&self, _event: &mut Event::PlayerToggleSprint<'_>) {}
+    fn on_toggle_sneak(&self, _event: &mut Event::PlayerToggleSneak<'_>) {}
+    fn on_jump(&self, _event: &Event::PlayerJump<'_>) {}
+    fn on_teleport(&self, _event: &mut Event::PlayerTeleport<'_>) {}
+    fn on_experience_gain(&self, _event: &mut Event::PlayerExperienceGain<'_>) {}
+    fn on_punch_air(&self, _event: &mut Event::PlayerPunchAir<'_>) {}
+    fn on_held_slot_change(&self, _event: &mut Event::PlayerHeldSlotChange<'_>) {}
+    fn on_sleep(&self, _event: &mut Event::PlayerSleep<'_>) {}
+    fn on_block_pick(&self, _event: &mut Event::PlayerBlockPick<'_>) {}
+    fn on_lectern_page_turn(&self, _event: &mut Event::PlayerLecternPageTurn<'_>) {}
+    fn on_sign_edit(&self, _event: &mut Event::PlayerSignEdit<'_>) {}
+    fn on_item_use(&self, _event: &mut Event::PlayerItemUse<'_>) {}
+    fn on_item_use_on_block(&self, _event: &mut Event::PlayerItemUseOnBlock<'_>) {}
+    fn on_item_consume(&self, _event: &mut Event::PlayerItemConsume<'_>) {}
+    fn on_item_release(&self, _event: &mut Event::PlayerItemRelease<'_>) {}
+    fn on_item_damage(&self, _event: &mut Event::PlayerItemDamage<'_>) {}
+    fn on_item_drop(&self, _event: &mut Event::PlayerItemDrop<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }
@@ -2328,7 +2563,7 @@ mod tests {
     struct Guard;
 
     impl Plugin for Guard {
-        fn on_move(&self, event: &mut PlayerMoveEvent<'_>) {
+        fn on_move(&self, event: &mut Event::PlayerMove<'_>) {
             if event.new_position().y < 0.0 {
                 event.cancel();
             }
@@ -2346,7 +2581,7 @@ mod tests {
             ..Default::default()
         };
         let mut state = dragonfly_plugin_sys::DfPlayerMoveState::default();
-        let mut event = unsafe { PlayerMoveEvent::from_raw(&input, &mut state) };
+        let mut event = unsafe { PlayerMoveEventData::from_raw(&input, &mut state) };
         Guard.on_move(&mut event);
         assert!(event.cancelled());
     }
@@ -2393,5 +2628,68 @@ mod tests {
             ModeCommand::parse("maybe 12").unwrap(),
             ModeCommand::Maybe { value: Some(12) }
         );
+    }
+
+    #[test]
+    fn item_stack_builders_keep_typed_data() {
+        let nested = Value::Compound(std::collections::BTreeMap::from([
+            ("enabled".to_owned(), Value::Bool(true)),
+            (
+                "levels".to_owned(),
+                Value::List(vec![Value::Int(1), Value::Int(2)]),
+            ),
+        ]));
+        let stack = ItemStack::new("minecraft:diamond_sword", 1, 0)
+            .with_damage(7)
+            .with_custom_name("Guard blade")
+            .with_lore(["First line", "Second line"])
+            .with_value("example:data", nested.clone())
+            .with_enchantment(Enchantment::Sharpness, 5)
+            .with_enchantment(Enchantment::Unbreaking, 3);
+
+        assert_eq!(stack.identifier(), "minecraft:diamond_sword");
+        assert_eq!(stack.count(), 1);
+        assert_eq!(stack.damage(), 7);
+        assert_eq!(stack.custom_name(), "Guard blade");
+        assert_eq!(stack.lore(), ["First line", "Second line"]);
+        assert_eq!(stack.value("example:data"), Some(&nested));
+        assert_eq!(
+            stack.enchantment(Enchantment::Sharpness),
+            Some(AppliedEnchantment::new(Enchantment::Sharpness, 5))
+        );
+        assert_eq!(Enchantment::Sharpness.max_level(), Some(5));
+        assert_eq!(Enchantment::Custom(512).id(), 512);
+    }
+
+    #[test]
+    fn potion_helpers_use_dragonfly_metadata() {
+        let potion = ItemStack::potion(Potion::StrongHealing, 2);
+        assert_eq!(potion.identifier(), "minecraft:potion");
+        assert_eq!(potion.count(), 2);
+        assert_eq!(potion.metadata(), 22);
+        assert_eq!(Potion::from_id(22), Potion::StrongHealing);
+        assert_eq!(Potion::from_id(255), Potion::Custom(255));
+    }
+
+    #[test]
+    fn event_item_view_becomes_owned() {
+        let stack = {
+            let identifier = b"minecraft:stone".to_vec();
+            let raw = dragonfly_plugin_sys::DfItemStackView {
+                identifier: dragonfly_plugin_sys::DfStringView {
+                    data: identifier.as_ptr(),
+                    len: identifier.len() as u64,
+                },
+                metadata: 3,
+                count: 12,
+                damage: 4,
+            };
+            ItemStack::from_raw(&raw)
+        };
+
+        assert_eq!(stack.identifier(), "minecraft:stone");
+        assert_eq!(stack.metadata(), 3);
+        assert_eq!(stack.count(), 12);
+        assert_eq!(stack.damage(), 4);
     }
 }

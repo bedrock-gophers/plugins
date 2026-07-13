@@ -1074,7 +1074,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerMoveInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerMoveState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerMoveEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerMoveEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_move(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1082,7 +1082,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerChatInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerChatState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerChatEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerChatEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_chat(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1090,14 +1090,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerJoinInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerJoinState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerJoinEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerJoinEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_join(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     sys::DF_EVENT_PLAYER_QUIT => {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerQuitInput>() };
-                        let event = unsafe { ::dragonfly_plugin::PlayerQuitEvent::from_raw(input) };
+                        let event = unsafe { ::dragonfly_plugin::PlayerQuitEventData::from_raw(input) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_quit(plugin, &event);
                         sys::DF_STATUS_OK
                     }
@@ -1105,7 +1105,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerHurtInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerHurtState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerHurtEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerHurtEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_hurt(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1113,7 +1113,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerHealInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerHealState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerHealEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerHealEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_heal(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1121,7 +1121,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerBlockBreakInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerBlockBreakState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerBlockBreakEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerBlockBreakEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_block_break(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1129,7 +1129,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerBlockPlaceInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerBlockPlaceState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerBlockPlaceEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerBlockPlaceEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_block_place(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1137,7 +1137,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerFoodLossInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerFoodLossState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerFoodLossEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerFoodLossEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_food_loss(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1145,7 +1145,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerDeathInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerDeathState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerDeathEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerDeathEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_death(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1153,7 +1153,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerStartBreakInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerStartBreakState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerStartBreakEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerStartBreakEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_start_break(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1161,7 +1161,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerFireExtinguishInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerFireExtinguishState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerFireExtinguishEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerFireExtinguishEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_fire_extinguish(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1169,7 +1169,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerToggleSprintInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerToggleSprintState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerToggleSprintEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerToggleSprintEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_toggle_sprint(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1177,14 +1177,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerToggleSneakInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerToggleSneakState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerToggleSneakEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerToggleSneakEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_toggle_sneak(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
                     sys::DF_EVENT_PLAYER_JUMP => {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerJumpInput>() };
-                        let event = unsafe { ::dragonfly_plugin::PlayerJumpEvent::from_raw(input) };
+                        let event = unsafe { ::dragonfly_plugin::PlayerJumpEventData::from_raw(input) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_jump(plugin, &event);
                         sys::DF_STATUS_OK
                     }
@@ -1192,7 +1192,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerTeleportInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerTeleportState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerTeleportEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerTeleportEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_teleport(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1200,7 +1200,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerExperienceGainInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerExperienceGainState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerExperienceGainEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerExperienceGainEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_experience_gain(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1208,7 +1208,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerPunchAirInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerPunchAirState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerPunchAirEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerPunchAirEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_punch_air(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1216,7 +1216,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerHeldSlotChangeInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerHeldSlotChangeState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerHeldSlotChangeEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerHeldSlotChangeEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_held_slot_change(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1224,7 +1224,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerSleepInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerSleepState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerSleepEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerSleepEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_sleep(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1232,7 +1232,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerBlockPickInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerBlockPickState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerBlockPickEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerBlockPickEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_block_pick(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1240,7 +1240,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerLecternPageTurnInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerLecternPageTurnState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerLecternPageTurnEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerLecternPageTurnEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_lectern_page_turn(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1248,7 +1248,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerSignEditInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerSignEditState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerSignEditEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerSignEditEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_sign_edit(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1256,7 +1256,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerItemUseInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemUseState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemUseEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemUseEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_use(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1264,7 +1264,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerItemUseOnBlockInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemUseOnBlockState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemUseOnBlockEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemUseOnBlockEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_use_on_block(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1272,7 +1272,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerItemConsumeInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemConsumeState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemConsumeEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemConsumeEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_consume(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1280,7 +1280,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerItemReleaseInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemReleaseState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemReleaseEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemReleaseEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_release(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1288,7 +1288,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerItemDamageInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemDamageState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemDamageEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemDamageEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_damage(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
@@ -1296,7 +1296,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         let plugin = unsafe { &*instance.cast::<PluginType>() };
                         let input = unsafe { &*input.cast::<sys::DfPlayerItemDropInput>() };
                         let state = unsafe { &mut *state.cast::<sys::DfPlayerItemDropState>() };
-                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemDropEvent::from_raw(input, state) };
+                        let mut event = unsafe { ::dragonfly_plugin::PlayerItemDropEventData::from_raw(input, state) };
                         <PluginType as ::dragonfly_plugin::Plugin>::on_item_drop(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }

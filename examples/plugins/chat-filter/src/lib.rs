@@ -1,11 +1,11 @@
-use dragonfly::{PlayerChatEvent, Plugin, plugin};
+use dragonfly::{Event, Plugin, plugin};
 
 #[derive(Default)]
 struct ChatFilter;
 
 #[plugin]
 impl Plugin for ChatFilter {
-    fn on_chat(&self, event: &mut PlayerChatEvent<'_>) {
+    fn on_chat(&self, event: &mut Event::PlayerChat<'_>) {
         if event.message().eq_ignore_ascii_case("blocked") {
             event.cancel();
             return;
