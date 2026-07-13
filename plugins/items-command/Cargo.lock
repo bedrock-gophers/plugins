@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=7388fa753b6b52c2cca3e5d37eda05a22e19ae3b#7388fa753b6b52c2cca3e5d37eda05a22e19ae3b"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=03a9129b9cd11e27831a4b11986a7aeda2dae83e#03a9129b9cd11e27831a4b11986a7aeda2dae83e"
 dependencies = [
  "dragonfly-plugin-macros",
  "dragonfly-plugin-sys",
@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-macros"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=7388fa753b6b52c2cca3e5d37eda05a22e19ae3b#7388fa753b6b52c2cca3e5d37eda05a22e19ae3b"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=03a9129b9cd11e27831a4b11986a7aeda2dae83e#03a9129b9cd11e27831a4b11986a7aeda2dae83e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=7388fa753b6b52c2cca3e5d37eda05a22e19ae3b#7388fa753b6b52c2cca3e5d37eda05a22e19ae3b"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=03a9129b9cd11e27831a4b11986a7aeda2dae83e#03a9129b9cd11e27831a4b11986a7aeda2dae83e"
 
 [[package]]
 name = "items-command"
