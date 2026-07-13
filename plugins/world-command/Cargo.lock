@@ -3,13 +3,6 @@
 version = 4
 
 [[package]]
-name = "chat-filter"
-version = "0.1.0"
-dependencies = [
- "dragonfly-plugin",
-]
-
-[[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=2b386d99d1ef842fd4cc90c9dce94afc52ae3479#2b386d99d1ef842fd4cc90c9dce94afc52ae3479"
@@ -122,6 +115,13 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "world-command"
+version = "0.1.0"
+dependencies = [
+ "dragonfly-plugin",
+]
 
 [[package]]
 name = "zmij"

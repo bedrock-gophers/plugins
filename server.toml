@@ -1,6 +1,9 @@
 [plugins]
   directory = "plugins"
 
+[worlds]
+  directory = ".data/worlds"
+
 [dragonfly]
 
   [dragonfly.Network]
@@ -22,4 +25,3 @@
   [dragonfly.Resources]
     AutoBuildPack = true
     Folder = ".data/resources"
-
