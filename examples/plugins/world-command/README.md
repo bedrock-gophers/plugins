@@ -7,3 +7,5 @@ Shows typed world lookup, default and specified persistent custom-world creation
 - `/world open <namespace:name>`
 - `/world open-spec <namespace:name>` opens `examples/managed` with manual saves,
   disabled random ticks, fixed noon, and clear weather.
+- `/world transfer <namespace:name>` moves the invoking player to the managed
+  world using the stable session-preserving player handle.

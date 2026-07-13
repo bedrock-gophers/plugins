@@ -1,5 +1,11 @@
 # Transferable Entities Implementation Plan
 
+> **Obsolete ABI sketch — do not execute as written.** This experiment's host
+> ABI v16 layout predates the released world-spec v16 prefix and player-transfer
+> v17 tail. Host ABI v18 is reserved. Any future implementation must rebase on
+> the then-current prefix and append transferable-entity fields as v19. The
+> historical task details below remain only as design evidence.
+
 > Steps use checkbox (`- [ ]`) syntax for tracking implementation progress.
 
 **Goal:** Expose safe, move-only non-player entity removal and re-addition across managed Dragonfly worlds.

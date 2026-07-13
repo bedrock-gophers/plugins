@@ -85,16 +85,16 @@ Files:
 
 Red-green sequence:
 
-1. Change layout tests first to require `DfHostApiV17`, size 464,
+1. [x] Change layout tests first to require `DfHostApiV17`, size 464,
    `world_open_spec` offset 448, and `player_transfer` offset 456.
-2. Append `DfHostPlayerTransferFn` in the generator and regenerate C/Rust.
-3. Rename all generated/runtime/macro host API references from v16 to v17,
+2. [x] Append `DfHostPlayerTransferFn` in the generator and regenerate C/Rust.
+3. [x] Rename all generated/runtime/macro host API references from v16 to v17,
    retaining the exact v16 prefix.
-4. Add `Host.TransferPlayer` plus no-op implementation.
-5. Add a separate cgo exporter validating pointers/values and forwarding to
+4. [x] Add `Host.TransferPlayer` plus no-op implementation.
+5. [x] Add a separate cgo exporter validating values and forwarding to
    the framework; it returns only private ABI status.
-6. Wire bridge extern, wrapper, initializer, and static assertions.
-7. Verify generator check, layout tests, native tests, runtime tests, and
+6. [x] Wire bridge extern, wrapper, initializer, and static assertions.
+7. [x] Verify generator check, layout tests, native tests, runtime tests, and
    macros; commit the ABI milestone.
 
 ## Milestone 4: Rust API and integration
@@ -108,15 +108,14 @@ Files:
 
 Red-green sequence:
 
-1. Add a Rust test host recording player/world/position and require
+1. [x] Add a Rust test host recording player/world/position and require
    `Player::transfer(World, Vec3) -> ()`.
-2. Implement the method as one private host call, ignoring unavailable host or
+2. [x] Implement the method as one private host call, ignoring unavailable host or
    non-OK status.
-3. Add native/runtime integration coverage proving all values cross the ABI.
-4. Add a small transfer command/example in its own command module/plugin
+3. [x] Add native/runtime integration coverage proving all values cross the ABI.
+4. [x] Add a small transfer subcommand to the focused world-command example
    structure.
-5. Record whether a public session-backed fixture was feasible and the exact
-   equivalent evidence used if it was not.
+5. [x] Record the public session-backed fixture and its loader/teardown evidence.
 6. Commit the SDK/example/documentation milestone.
 
 ## Final verification gate

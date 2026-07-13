@@ -4,6 +4,8 @@
 mod command_descriptor_test;
 #[cfg(test)]
 mod items_generated_test;
+#[cfg(test)]
+mod player_transfer_test;
 
 extern crate self as dragonfly_plugin;
 
@@ -1131,6 +1133,28 @@ impl Player {
             0.0,
             0.0,
         );
+    }
+
+    /// Moves this player to another managed world at the exact position.
+    /// Host rejection is intentionally private, matching other player actions.
+    pub fn transfer(&self, world: World, position: Vec3) {
+        let Some(host) = host_api() else { return };
+        let Some(transfer) = host.player_transfer else {
+            return;
+        };
+        let _ = unsafe {
+            transfer(
+                host.context,
+                current_invocation(),
+                self.raw_id(),
+                dragonfly_plugin_sys::DfWorldId { value: world.raw() },
+                dragonfly_plugin_sys::DfVec3 {
+                    x: position.x,
+                    y: position.y,
+                    z: position.z,
+                },
+            )
+        };
     }
 
     pub fn move_by(&self, delta: Vec3, delta_yaw: f64, delta_pitch: f64) {

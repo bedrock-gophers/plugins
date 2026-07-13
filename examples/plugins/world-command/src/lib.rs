@@ -1,6 +1,6 @@
 use dragonfly::{
     BlockPos, Context, Dimension, OpenMode, Player, Plugin, RandomTicks, SavePolicy, TimePolicy,
-    WeatherPolicy, World, WorldSpec, block, plugin,
+    Vec3, WeatherPolicy, World, WorldSpec, block, plugin,
 };
 
 #[derive(Default)]
@@ -13,7 +13,7 @@ impl Plugin for WorldCommand {
     fn root(&self, context: &mut Context<'_, Player>) {
         context
             .source()
-            .message("Use /world inspect, /world set-stone, /world open, or /world open-spec.");
+            .message("Use /world inspect, /world set-stone, /world open, /world open-spec, or /world transfer.");
     }
 
     #[subcommand("inspect")]
@@ -75,6 +75,22 @@ impl Plugin for WorldCommand {
         context
             .source()
             .message(&format!("Opened {name} from a typed specification."));
+    }
+
+    #[subcommand("transfer")]
+    fn transfer(&self, context: &mut Context<'_, Player>, name: String) {
+        let Some(world) = World::get(&name) else {
+            context.source().message("World is unavailable.");
+            return;
+        };
+        context.source().transfer(
+            world,
+            Vec3 {
+                x: 0.5,
+                y: 65.0,
+                z: 0.5,
+            },
+        );
     }
 }
 

@@ -223,6 +223,10 @@ impl World {
         Self { raw }
     }
 
+    pub(crate) const fn raw(self) -> u64 {
+        self.raw
+    }
+
     pub fn get(name: &str) -> Option<Self> {
         let host = crate::host_api()?;
         let lookup = host.world_lookup?;

@@ -205,7 +205,7 @@ Every ABI structure must:
 - Avoid platform-sized `long`, `size_t` in persisted layouts, and C bitfields.
 - Have generated size, alignment, and offset tests.
 
-The ABI is intentionally strict while the project is WIP. Host ABI v16 appends the 80-byte `DfWorldOpenSpecV1` contract and `world_open_spec` function at offset 448; plugin ABI remains v3. A breaking layout or callback change increments the host ABI version, and mismatched runtimes/plugins fail to load. Compatibility shims are deferred until the API is stable enough to justify them. Independent ABI branches must never publish different layouts under one version; the transferable-entity prototype must advance to v17 if integrated after this v16.
+The ABI is intentionally strict while the project is WIP. Host ABI v17 retains the complete v16 world-specification prefix (`world_open_spec` at offset 448) and appends the stable player-transfer call at offset 456; plugin ABI remains v3. A breaking layout or callback change increments the host ABI version, and mismatched runtimes/plugins fail to load. Compatibility shims are deferred until the API is stable enough to justify them. Independent ABI branches must never publish different layouts under one version; v18 is reserved, so the transferable-entity prototype must rebase and append as v19 if integrated.
 
 ## Runtime
 
