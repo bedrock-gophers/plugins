@@ -1,6 +1,6 @@
 use dragonfly::{
     CommandEnum, CommandSource, Context, Dynamic, DynamicCommandEnum, Effect, EffectType, GameMode,
-    Player, Plugin, Rotation, Varargs, Vec3, plugin,
+    Player, Plugin, Rotation, Sound, Varargs, Vec3, plugin,
 };
 
 struct GreetingTargets;
@@ -209,5 +209,21 @@ impl Plugin for HelloCommand {
     fn immobile(&self, context: &mut Context<'_, Player>, immobile: bool) {
         context.source().set_immobile(immobile);
         context.reply(&format!("Immobile: {}", context.source().immobile()));
+    }
+
+    #[subcommand("sound")]
+    fn sound(&self, context: &mut Context<'_, Player>) {
+        context.source().play_sound(Sound::LevelUp);
+        context.reply("Played level-up sound.");
+    }
+
+    #[subcommand("disconnect")]
+    fn disconnect(&self, context: &mut Context<'_, Player>) {
+        context.source().disconnect("Disconnected by Rust plugin.");
+    }
+
+    #[subcommand("kick")]
+    fn kick(&self, context: &mut Context<'_, Player>) {
+        context.source().kick("Kicked by Rust plugin.");
     }
 }
