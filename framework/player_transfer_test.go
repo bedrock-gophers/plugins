@@ -464,6 +464,27 @@ func TestTransferPlayerRejectsBusyDestinationWithoutBlockingOwner(t *testing.T) 
 	}
 }
 
+func TestTransferPlayerOffCallbackReportsRejectedBusyDestination(t *testing.T) {
+	fixture := newTransferFixture(t)
+	destination, ok := fixture.manager.entryByHandle(fixture.targetID)
+	if !ok {
+		t.Fatal("destination missing")
+	}
+	destination.lifecycle.Lock()
+	defer destination.lifecycle.Unlock()
+
+	if fixture.manager.TransferPlayer(0, fixture.playerID, fixture.targetID, native.Vec3{Y: 70}) {
+		t.Fatal("off-callback transfer reported acceptance after its destination precheck became invalid")
+	}
+	if err := fixture.source.Do(func(tx *world.Tx) {
+		if _, ok := fixture.handle.Entity(tx); !ok {
+			t.Fatal("rejected transfer removed player from source")
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTransferPlayerLeaseMakesUnloadWaitForHandoff(t *testing.T) {
 	players := host.NewPlayers()
 	manager := newWorldManager("", nil, players)

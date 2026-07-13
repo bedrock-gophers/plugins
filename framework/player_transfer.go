@@ -43,13 +43,14 @@ func (m *WorldManager) TransferPlayer(invocation native.InvocationID, id native.
 		if _, ok := m.entryByHandle(destinationID); !ok {
 			return false
 		}
+		accepted := false
 		task := handle.Do(func(tx *world.Tx, entity world.Entity) {
 			connected, playerOK := entity.(*player.Player)
 			if playerOK {
-				m.transferPlayerFromTransaction(tx, connected, handle, destinationID, position)
+				accepted = m.transferPlayerFromTransaction(tx, connected, handle, destinationID, position)
 			}
 		})
-		return task.Wait(context.Background()) == nil
+		return task.Wait(context.Background()) == nil && accepted
 	}
 	tx, ok := m.players.InvocationTx(invocation)
 	if !ok {

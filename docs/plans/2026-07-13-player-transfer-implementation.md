@@ -1,5 +1,7 @@
 # Stable Player Transfer Implementation Plan
 
+**Status:** Implemented and verified on 2026-07-13.
+
 **Goal:** Add generation-safe, session-preserving player transfer between
 managed Dragonfly worlds through host ABI v17 and a minimal Rust API.
 
@@ -32,7 +34,7 @@ ordinary Dragonfly teleport. Tests live in separate focused files.
   `Player.Teleport`, entity-handle scheduling, and natural change-world tick.
 - [x] Record exact public, ABI, lease, rollback, identity, event, and failure
   contracts in the design document.
-- [ ] Commit the documentation milestone.
+- [x] Commit the documentation milestone (`dc166d8`).
 
 ## Milestone 2: Framework transfer core
 
@@ -64,7 +66,7 @@ Red-green sequence:
 8. [x] Add a public Dragonfly session fixture proving loader switch and
    connection teardown while the player handle is worldless.
 9. [x] Add terminal double-world-close eviction and logging coverage.
-10. Commit the framework milestone.
+10. [x] Commit the framework milestone (`edeefba`, hardened by `8b656fa`).
 
 The integration fixture uses Dragonfly's real player entity type, world owners,
 handlers, ticks, and public `session.Config.New`/`SetHandle`/`Spawn` APIs with a
@@ -95,7 +97,7 @@ Red-green sequence:
    the framework; it returns only private ABI status.
 6. [x] Wire bridge extern, wrapper, initializer, and static assertions.
 7. [x] Verify generator check, layout tests, native tests, runtime tests, and
-   macros; commit the ABI milestone.
+   macros; commit the ABI milestone (`881f02d`).
 
 ## Milestone 4: Rust API and integration
 
@@ -116,7 +118,8 @@ Red-green sequence:
 4. [x] Add a small transfer subcommand to the focused world-command example
    structure.
 5. [x] Record the public session-backed fixture and its loader/teardown evidence.
-6. Commit the SDK/example/documentation milestone.
+6. [x] Commit the SDK/example milestone (`28027b0`) and record final
+   documentation status in this plan.
 
 ## Final verification gate
 
@@ -128,9 +131,28 @@ go test -race ./...
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-make native-integration
+make build-native
+make test
 ```
 
 Also run focused transfer tests repeatedly under the race detector and verify
 the example plugin build. Report all exact commands and results before handing
 the local commits to the parent task.
+
+All final gates passed:
+
+- `go run ./cmd/abi-gen -root . -check`
+- `go run ./cmd/block-gen -root . -check`
+- `go test -race ./...`
+- `cargo fmt --all --check`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo test --workspace`
+- `make build-native`
+- `go test ./internal/native -run TestPlayerTransferCrossesRustAndCHostBoundary -count=1 -v`
+- `make test`
+- `go test ./framework -run 'TestTransferPlayer(OffCallbackReportsRejectedBusyDestination|OffCallbackFollowsHandleAndOrdersMutations|RejectsBusyDestinationWithoutBlockingOwner)$' -count=10`
+
+The repository has no `native-integration` Make target. `make test` is the
+actual generated-code, Rust workspace, example-plugin, and Go/native
+integration gate, so the obsolete command above was replaced with the real
+targets.
