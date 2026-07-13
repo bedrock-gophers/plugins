@@ -1,4 +1,4 @@
-BEDROCK_GOPHERS_REV := 2b386d99d1ef842fd4cc90c9dce94afc52ae3479
+BEDROCK_GOPHERS_REV := 90b695e003e6e37a0b57a3baf573deb6f74a8a42
 BEDROCK_GOPHERS_SHORT_REV := $(shell printf '%.12s' $(BEDROCK_GOPHERS_REV))
 GO_FRAMEWORK_REV := $(shell go list -m -f '{{.Version}}' github.com/bedrock-gophers/plugins | sed 's/.*-//')
 CACHE := .cache/bedrock-gophers
@@ -14,6 +14,7 @@ SCOREBOARD_LIBRARY := libscoreboard.dylib
 FORMS_LIBRARY := libforms.dylib
 PING_LIBRARY := libping_command.dylib
 WORLD_LIBRARY := libworld_command.dylib
+ENTITY_LIBRARY := libentity_command_plugin.dylib
 else
 RUNTIME_LIBRARY := libdragonfly_plugin_runtime.so
 PLUGIN_LIBRARY := libmovement_guard.so
@@ -25,6 +26,7 @@ SCOREBOARD_LIBRARY := libscoreboard.so
 FORMS_LIBRARY := libforms.so
 PING_LIBRARY := libping_command.so
 WORLD_LIBRARY := libworld_command.so
+ENTITY_LIBRARY := libentity_command_plugin.so
 endif
 
 .PHONY: check-revision prepare build run clean
@@ -50,6 +52,7 @@ build: check-revision prepare
 	cargo build --release --manifest-path plugins/forms/Cargo.toml
 	cargo build --release --manifest-path plugins/ping-command/Cargo.toml
 	cargo build --release --manifest-path plugins/world-command/Cargo.toml
+	cargo build --release --manifest-path plugins/entity-command/Cargo.toml
 	cargo build --release --manifest-path $(CACHE)/Cargo.toml -p dragonfly-plugin-runtime
 	mkdir -p lib plugins
 	cp $(CACHE)/target/release/$(RUNTIME_LIBRARY) lib/
@@ -62,11 +65,12 @@ build: check-revision prepare
 	cp plugins/forms/target/release/$(FORMS_LIBRARY) plugins/
 	cp plugins/ping-command/target/release/$(PING_LIBRARY) plugins/
 	cp plugins/world-command/target/release/$(WORLD_LIBRARY) plugins/
+	cp plugins/entity-command/target/release/$(ENTITY_LIBRARY) plugins/
 	go mod download
 
 run: build
 	go run .
 
 clean:
-	rm -rf .cache .data lib plugins/movement-guard/target plugins/chat-filter/target plugins/lifecycle-logger/target plugins/hello-command/target plugins/items-command/target plugins/ping-command/target plugins/scoreboard/target plugins/forms/target plugins/world-command/target
-	rm -f plugins/$(PLUGIN_LIBRARY) plugins/$(CHAT_LIBRARY) plugins/$(LIFECYCLE_LIBRARY) plugins/$(COMMAND_LIBRARY) plugins/$(ITEMS_LIBRARY) plugins/$(PING_LIBRARY) plugins/$(SCOREBOARD_LIBRARY) plugins/$(FORMS_LIBRARY) plugins/$(WORLD_LIBRARY)
+	rm -rf .cache .data lib plugins/movement-guard/target plugins/chat-filter/target plugins/lifecycle-logger/target plugins/hello-command/target plugins/items-command/target plugins/ping-command/target plugins/scoreboard/target plugins/forms/target plugins/world-command/target plugins/entity-command/target
+	rm -f plugins/$(PLUGIN_LIBRARY) plugins/$(CHAT_LIBRARY) plugins/$(LIFECYCLE_LIBRARY) plugins/$(COMMAND_LIBRARY) plugins/$(ITEMS_LIBRARY) plugins/$(PING_LIBRARY) plugins/$(SCOREBOARD_LIBRARY) plugins/$(FORMS_LIBRARY) plugins/$(WORLD_LIBRARY) plugins/$(ENTITY_LIBRARY)

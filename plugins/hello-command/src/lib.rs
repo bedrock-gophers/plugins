@@ -79,7 +79,7 @@ impl Plugin for HelloCommand {
 
     #[subcommand("about")]
     fn about(&self, context: &mut Context<'_>) {
-        context.reply("Rust plugin running in Dragonfly.");
+        context.reply("Hello from a Rust plugin running in Dragonfly.");
     }
 
     #[subcommand("greet")]

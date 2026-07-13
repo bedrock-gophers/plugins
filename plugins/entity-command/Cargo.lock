@@ -28,6 +28,13 @@ version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=90b695e003e6e37a0b57a3baf573deb6f74a8a42#90b695e003e6e37a0b57a3baf573deb6f74a8a42"
 
 [[package]]
+name = "entity-command-plugin"
+version = "0.1.0"
+dependencies = [
+ "dragonfly-plugin",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -38,13 +45,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "ping-command"
-version = "0.1.0"
-dependencies = [
- "dragonfly-plugin",
-]
 
 [[package]]
 name = "proc-macro2"
