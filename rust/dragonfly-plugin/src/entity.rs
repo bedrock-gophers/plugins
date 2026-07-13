@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use crate::{ItemStack, Potion, Rotation, Vec3, World, block};
 
@@ -204,6 +204,560 @@ pub struct EntityState {
     pub can_teleport: bool,
 }
 
+/// Physics applied by Dragonfly after a plugin tick callback.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Physics {
+    pub gravity: f64,
+    pub drag: f64,
+    pub drag_before_gravity: bool,
+}
+
+impl Physics {
+    pub const fn passive(gravity: f64, drag: f64) -> Self {
+        Self {
+            gravity,
+            drag,
+            drag_before_gravity: true,
+        }
+    }
+
+    pub const fn drag_after_gravity(mut self) -> Self {
+        self.drag_before_gravity = false;
+        self
+    }
+}
+
+/// Failure to decode or encode plugin-owned persistent entity state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StateError;
+
+/// Read-only plugin-owned entity state loaded from disk.
+pub struct SavedState<'a> {
+    version: u32,
+    values: BTreeMap<String, crate::Value>,
+    _lifetime: core::marker::PhantomData<&'a [u8]>,
+}
+
+impl<'a> SavedState<'a> {
+    #[doc(hidden)]
+    pub fn decode(version: u32, bytes: &'a [u8]) -> Result<Self, StateError> {
+        let values = if bytes.is_empty() {
+            BTreeMap::new()
+        } else {
+            crate::item_nbt::decode_values(bytes).map_err(|_| StateError)?
+        };
+        Ok(Self {
+            version,
+            values,
+            _lifetime: core::marker::PhantomData,
+        })
+    }
+
+    pub const fn version(&self) -> u32 {
+        self.version
+    }
+
+    pub fn i64(&self, key: &str) -> Option<i64> {
+        match self.values.get(key)? {
+            crate::Value::Long(value) => Some(*value),
+            crate::Value::Int(value) => Some(i64::from(*value)),
+            _ => None,
+        }
+    }
+
+    pub fn f64(&self, key: &str) -> Option<f64> {
+        match self.values.get(key)? {
+            crate::Value::Double(value) => Some(*value),
+            crate::Value::Float(value) => Some(f64::from(*value)),
+            _ => None,
+        }
+    }
+
+    pub fn bool(&self, key: &str) -> Option<bool> {
+        match self.values.get(key)? {
+            crate::Value::Byte(value) => Some(*value != 0),
+            _ => None,
+        }
+    }
+
+    pub fn str(&self, key: &str) -> Option<&str> {
+        match self.values.get(key)? {
+            crate::Value::String(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub fn value(&self, key: &str) -> Option<&crate::Value> {
+        self.values.get(key)
+    }
+}
+
+/// Builder for plugin-owned persistent entity state.
+#[derive(Default)]
+pub struct SavedStateMut {
+    values: BTreeMap<String, crate::Value>,
+}
+
+impl SavedStateMut {
+    pub const fn new() -> Self {
+        Self {
+            values: BTreeMap::new(),
+        }
+    }
+
+    pub fn set(&mut self, key: impl Into<String>, value: impl Into<crate::Value>) {
+        self.values.insert(key.into(), value.into());
+    }
+
+    pub fn remove(&mut self, key: &str) {
+        self.values.remove(key);
+    }
+
+    #[doc(hidden)]
+    pub fn encode(&self) -> Result<Vec<u8>, StateError> {
+        crate::item_nbt::encode_values(&self.values).map_err(|_| StateError)
+    }
+}
+
+/// Context passed to a plugin-owned entity tick.
+pub struct TickContext<'a> {
+    input: &'a dragonfly_plugin_sys::DfEntityTickInput,
+    state: &'a mut dragonfly_plugin_sys::DfEntityTickState,
+}
+
+impl<'a> TickContext<'a> {
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfEntityTickInput,
+        state: &'a mut dragonfly_plugin_sys::DfEntityTickState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn entity(&self) -> Entity {
+        Entity::from_id(self.input.entity.into())
+    }
+
+    pub const fn current(&self) -> i64 {
+        self.input.current
+    }
+
+    pub fn age(&self) -> Duration {
+        Duration::from_millis(self.input.age_milliseconds)
+    }
+
+    pub fn despawn(&mut self) {
+        self.state.despawn = 1;
+    }
+}
+
+/// Mutable pre-damage callback for a plugin-owned living entity.
+pub struct Hurt<'a> {
+    input: &'a dragonfly_plugin_sys::DfEntityHurtInput,
+    state: &'a mut dragonfly_plugin_sys::DfEntityHurtState,
+}
+
+impl<'a> Hurt<'a> {
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfEntityHurtInput,
+        state: &'a mut dragonfly_plugin_sys::DfEntityHurtState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn entity(&self) -> Entity {
+        Entity::from_id(self.input.entity.into())
+    }
+
+    pub fn damage_source(&self) -> crate::damage::Source<'_> {
+        unsafe { crate::damage::Source::from_raw(&self.input.source) }.unwrap_or_else(|| {
+            crate::damage::Custom::new(
+                "unknown",
+                crate::damage::Traits::default(),
+                crate::damage::AffectedProtections::NONE,
+            )
+            .into()
+        })
+    }
+
+    pub const fn health(&self) -> f64 {
+        self.input.health
+    }
+
+    pub const fn max_health(&self) -> f64 {
+        self.input.max_health
+    }
+
+    pub const fn damage(&self) -> f64 {
+        self.state.damage
+    }
+
+    pub fn set_damage(&mut self, damage: f64) {
+        self.state.damage = if damage.is_finite() {
+            damage.max(0.0)
+        } else {
+            0.0
+        };
+    }
+
+    pub const fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
+/// Mutable pre-heal callback for a plugin-owned living entity.
+pub struct Heal<'a> {
+    input: &'a dragonfly_plugin_sys::DfEntityHealInput,
+    state: &'a mut dragonfly_plugin_sys::DfEntityHealState,
+}
+
+impl<'a> Heal<'a> {
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfEntityHealInput,
+        state: &'a mut dragonfly_plugin_sys::DfEntityHealState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn entity(&self) -> Entity {
+        Entity::from_id(self.input.entity.into())
+    }
+
+    pub fn healing_source(&self) -> crate::healing::Source<'_> {
+        unsafe { crate::healing::Source::from_raw(&self.input.source) }
+            .unwrap_or_else(|| crate::healing::Custom::new("unknown").into())
+    }
+
+    pub const fn health_before(&self) -> f64 {
+        self.input.health
+    }
+
+    pub const fn max_health(&self) -> f64 {
+        self.input.max_health
+    }
+
+    pub const fn amount(&self) -> f64 {
+        self.state.health
+    }
+
+    pub fn set_amount(&mut self, amount: f64) {
+        self.state.health = if amount.is_finite() {
+            amount.max(0.0)
+        } else {
+            0.0
+        };
+    }
+
+    pub const fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
+/// Mutable lethal-damage callback for a plugin-owned living entity.
+pub struct Death<'a> {
+    input: &'a dragonfly_plugin_sys::DfEntityDeathInput,
+    state: &'a mut dragonfly_plugin_sys::DfEntityDeathState,
+}
+
+impl<'a> Death<'a> {
+    #[doc(hidden)]
+    pub unsafe fn from_raw(
+        input: &'a dragonfly_plugin_sys::DfEntityDeathInput,
+        state: &'a mut dragonfly_plugin_sys::DfEntityDeathState,
+    ) -> Self {
+        Self { input, state }
+    }
+
+    pub fn entity(&self) -> Entity {
+        Entity::from_id(self.input.entity.into())
+    }
+
+    pub fn damage_source(&self) -> crate::damage::Source<'_> {
+        unsafe { crate::damage::Source::from_raw(&self.input.source) }.unwrap_or_else(|| {
+            crate::damage::Custom::new(
+                "unknown",
+                crate::damage::Traits::default(),
+                crate::damage::AffectedProtections::NONE,
+            )
+            .into()
+        })
+    }
+
+    pub const fn health(&self) -> f64 {
+        self.input.health
+    }
+
+    pub const fn damage(&self) -> f64 {
+        self.input.damage
+    }
+
+    pub const fn cancelled(&self) -> bool {
+        self.state.cancelled != 0
+    }
+
+    pub fn cancel(&mut self) {
+        self.state.cancelled = 1;
+    }
+}
+
+/// Behaviour of a plugin-owned non-living ticking entity.
+pub trait Ticking: Default + Send + 'static {
+    const PHYSICS: Option<Physics> = None;
+    const STATE_VERSION: u32 = 0;
+
+    fn load(_state: &SavedState<'_>) -> Self {
+        Self::default()
+    }
+    fn save(&self, _state: &mut SavedStateMut) {}
+    fn tick(&mut self, _context: &mut TickContext<'_>) {}
+}
+
+/// Behaviour of a plugin-owned living entity.
+pub trait Living: Default + Send + 'static {
+    const INITIAL_HEALTH: f64 = 20.0;
+    const MAX_HEALTH: f64 = 20.0;
+    const SPEED: f64 = 0.1;
+    const PHYSICS: Option<Physics> = Some(Physics::passive(0.08, 0.02));
+    const STATE_VERSION: u32 = 0;
+
+    fn load(_state: &SavedState<'_>) -> Self {
+        Self::default()
+    }
+    fn save(&self, _state: &mut SavedStateMut) {}
+    fn tick(&mut self, _context: &mut TickContext<'_>) {}
+    fn hurt(&mut self, _event: &mut Hurt<'_>) {}
+    fn heal(&mut self, _event: &mut Heal<'_>) {}
+    fn death(&mut self, _event: &mut Death<'_>) {}
+}
+
+trait AdvancedAdapter {
+    type State: Default + Send + 'static;
+    const STATE_VERSION: u32;
+
+    fn load(state: &SavedState<'_>) -> Self::State;
+    fn save(value: &Self::State, state: &mut SavedStateMut);
+    fn tick(value: &mut Self::State, context: &mut TickContext<'_>);
+    fn hurt(_value: &mut Self::State, _event: &mut Hurt<'_>) -> bool {
+        false
+    }
+    fn heal(_value: &mut Self::State, _event: &mut Heal<'_>) -> bool {
+        false
+    }
+    fn death(_value: &mut Self::State, _event: &mut Death<'_>) -> bool {
+        false
+    }
+}
+
+struct TickingAdapter<T>(core::marker::PhantomData<T>);
+
+impl<T: Ticking> AdvancedAdapter for TickingAdapter<T> {
+    type State = T;
+    const STATE_VERSION: u32 = T::STATE_VERSION;
+
+    fn load(state: &SavedState<'_>) -> T {
+        T::load(state)
+    }
+    fn save(value: &T, state: &mut SavedStateMut) {
+        value.save(state);
+    }
+    fn tick(value: &mut T, context: &mut TickContext<'_>) {
+        value.tick(context);
+    }
+}
+
+struct LivingAdapter<T>(core::marker::PhantomData<T>);
+
+impl<T: Living> AdvancedAdapter for LivingAdapter<T> {
+    type State = T;
+    const STATE_VERSION: u32 = T::STATE_VERSION;
+
+    fn load(state: &SavedState<'_>) -> T {
+        T::load(state)
+    }
+    fn save(value: &T, state: &mut SavedStateMut) {
+        value.save(state);
+    }
+    fn tick(value: &mut T, context: &mut TickContext<'_>) {
+        value.tick(context);
+    }
+    fn hurt(value: &mut T, event: &mut Hurt<'_>) -> bool {
+        value.hurt(event);
+        true
+    }
+    fn heal(value: &mut T, event: &mut Heal<'_>) -> bool {
+        value.heal(event);
+        true
+    }
+    fn death(value: &mut T, event: &mut Death<'_>) -> bool {
+        value.death(event);
+        true
+    }
+}
+
+#[doc(hidden)]
+pub unsafe fn handle_ticking<T: Ticking>(
+    operation: u32,
+    instance: u64,
+    input: *const core::ffi::c_void,
+    state: *mut core::ffi::c_void,
+) -> dragonfly_plugin_sys::DfStatus {
+    unsafe { handle_advanced::<TickingAdapter<T>>(operation, instance, input, state) }
+}
+
+#[doc(hidden)]
+pub unsafe fn handle_living<T: Living>(
+    operation: u32,
+    instance: u64,
+    input: *const core::ffi::c_void,
+    state: *mut core::ffi::c_void,
+) -> dragonfly_plugin_sys::DfStatus {
+    unsafe { handle_advanced::<LivingAdapter<T>>(operation, instance, input, state) }
+}
+
+unsafe fn handle_advanced<A: AdvancedAdapter>(
+    operation: u32,
+    instance: u64,
+    input: *const core::ffi::c_void,
+    state: *mut core::ffi::c_void,
+) -> dragonfly_plugin_sys::DfStatus {
+    use dragonfly_plugin_sys as sys;
+    match operation {
+        sys::DF_ENTITY_OPERATION_ADOPT => {
+            if instance == 0 {
+                sys::DF_STATUS_ERROR
+            } else {
+                sys::DF_STATUS_OK
+            }
+        }
+        sys::DF_ENTITY_OPERATION_LOAD => {
+            let (Some(input), Some(output)) = (
+                unsafe { input.cast::<sys::DfEntityLoadInput>().as_ref() },
+                unsafe { state.cast::<sys::DfEntityLoadState>().as_mut() },
+            ) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            let Ok(length) = usize::try_from(input.data.len) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            if length > 16 << 20 || (length != 0 && input.data.data.is_null()) {
+                return sys::DF_STATUS_ERROR;
+            }
+            let bytes = if length == 0 {
+                &[]
+            } else {
+                unsafe { core::slice::from_raw_parts(input.data.data, length) }
+            };
+            let Ok(saved) = SavedState::decode(input.version, bytes) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            output.instance = Box::into_raw(Box::new(A::load(&saved))) as usize as u64;
+            sys::DF_STATUS_OK
+        }
+        sys::DF_ENTITY_OPERATION_SAVE => {
+            let (Some(value), Some(output)) = (
+                unsafe { (instance as usize as *const A::State).as_ref() },
+                unsafe { state.cast::<sys::DfEntitySaveState>().as_mut() },
+            ) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            let mut saved = SavedStateMut::new();
+            A::save(value, &mut saved);
+            let Ok(bytes) = saved.encode() else {
+                return sys::DF_STATUS_ERROR;
+            };
+            output.version = A::STATE_VERSION;
+            output.data.len = bytes.len() as u64;
+            let Ok(capacity) = usize::try_from(output.data.capacity) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            if bytes.len() > capacity || (bytes.len() != 0 && output.data.data.is_null()) {
+                return sys::DF_STATUS_ERROR;
+            }
+            if !bytes.is_empty() {
+                unsafe {
+                    core::ptr::copy_nonoverlapping(bytes.as_ptr(), output.data.data, bytes.len())
+                };
+            }
+            sys::DF_STATUS_OK
+        }
+        sys::DF_ENTITY_OPERATION_TICK => {
+            let (Some(value), Some(input), Some(output)) = (
+                unsafe { (instance as usize as *mut A::State).as_mut() },
+                unsafe { input.cast::<sys::DfEntityTickInput>().as_ref() },
+                unsafe { state.cast::<sys::DfEntityTickState>().as_mut() },
+            ) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            let mut context = unsafe { TickContext::from_raw(input, output) };
+            crate::with_invocation(input.invocation, || A::tick(value, &mut context));
+            sys::DF_STATUS_OK
+        }
+        sys::DF_ENTITY_OPERATION_HURT => {
+            let (Some(value), Some(input), Some(output)) = (
+                unsafe { (instance as usize as *mut A::State).as_mut() },
+                unsafe { input.cast::<sys::DfEntityHurtInput>().as_ref() },
+                unsafe { state.cast::<sys::DfEntityHurtState>().as_mut() },
+            ) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            let mut event = unsafe { Hurt::from_raw(input, output) };
+            if crate::with_invocation(input.invocation, || A::hurt(value, &mut event)) {
+                sys::DF_STATUS_OK
+            } else {
+                sys::DF_STATUS_ERROR
+            }
+        }
+        sys::DF_ENTITY_OPERATION_HEAL => {
+            let (Some(value), Some(input), Some(output)) = (
+                unsafe { (instance as usize as *mut A::State).as_mut() },
+                unsafe { input.cast::<sys::DfEntityHealInput>().as_ref() },
+                unsafe { state.cast::<sys::DfEntityHealState>().as_mut() },
+            ) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            let mut event = unsafe { Heal::from_raw(input, output) };
+            if crate::with_invocation(input.invocation, || A::heal(value, &mut event)) {
+                sys::DF_STATUS_OK
+            } else {
+                sys::DF_STATUS_ERROR
+            }
+        }
+        sys::DF_ENTITY_OPERATION_DEATH => {
+            let (Some(value), Some(input), Some(output)) = (
+                unsafe { (instance as usize as *mut A::State).as_mut() },
+                unsafe { input.cast::<sys::DfEntityDeathInput>().as_ref() },
+                unsafe { state.cast::<sys::DfEntityDeathState>().as_mut() },
+            ) else {
+                return sys::DF_STATUS_ERROR;
+            };
+            let mut event = unsafe { Death::from_raw(input, output) };
+            if crate::with_invocation(input.invocation, || A::death(value, &mut event)) {
+                sys::DF_STATUS_OK
+            } else {
+                sys::DF_STATUS_ERROR
+            }
+        }
+        sys::DF_ENTITY_OPERATION_DESTROY => {
+            if instance == 0 {
+                return sys::DF_STATUS_ERROR;
+            }
+            drop(unsafe { Box::from_raw(instance as usize as *mut A::State) });
+            sys::DF_STATUS_OK
+        }
+        _ => sys::DF_STATUS_ERROR,
+    }
+}
+
 /// Common options applied when an entity is spawned.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpawnOptions {
@@ -375,8 +929,10 @@ pub struct FallingBlock {
 }
 
 impl FallingBlock {
-    pub const fn new(block: block::Block) -> Self {
-        Self { block }
+    pub fn new(block: impl Into<block::Block>) -> Self {
+        Self {
+            block: block.into(),
+        }
     }
 
     pub const fn block(&self) -> &block::Block {
@@ -525,35 +1081,114 @@ impl Definition {
 /// Implemented by unit structs annotated with `#[dragonfly::entity]`.
 pub trait CustomType {
     const DEFINITION: Definition;
+
+    #[doc(hidden)]
+    fn encode_spawn(self) -> EncodedSpawnable
+    where
+        Self: Sized,
+    {
+        EncodedSpawnable {
+            kind: SpawnKind::Custom,
+            payload: SpawnPayload::Custom {
+                identifier: Self::DEFINITION.identifier(),
+                instance: None,
+            },
+        }
+    }
 }
 
 #[doc(hidden)]
-#[repr(transparent)]
-pub struct RegisteredType(dragonfly_plugin_sys::DfEntityTypeDescriptorV1);
+pub type EntityHandler = unsafe fn(
+    operation: u32,
+    instance: u64,
+    input: *const core::ffi::c_void,
+    state: *mut core::ffi::c_void,
+) -> dragonfly_plugin_sys::DfStatus;
+
+pub struct RegisteredType {
+    descriptor: dragonfly_plugin_sys::DfEntityTypeDescriptorV2,
+    handler: Option<EntityHandler>,
+}
 
 impl RegisteredType {
     pub const fn new(definition: Definition) -> Self {
         let bounds = definition.bounds();
-        Self(dragonfly_plugin_sys::DfEntityTypeDescriptorV1 {
-            save_id: dragonfly_plugin_sys::DfStringView {
-                data: definition.identifier().as_ptr(),
-                len: definition.identifier().len() as u64,
+        Self {
+            descriptor: dragonfly_plugin_sys::DfEntityTypeDescriptorV2 {
+                save_id: dragonfly_plugin_sys::DfStringView {
+                    data: definition.identifier().as_ptr(),
+                    len: definition.identifier().len() as u64,
+                },
+                network_id: dragonfly_plugin_sys::DfStringView {
+                    data: definition.network_identifier().as_ptr(),
+                    len: definition.network_identifier().len() as u64,
+                },
+                min: dragonfly_plugin_sys::DfVec3 {
+                    x: bounds[0],
+                    y: bounds[1],
+                    z: bounds[2],
+                },
+                max: dragonfly_plugin_sys::DfVec3 {
+                    x: bounds[3],
+                    y: bounds[4],
+                    z: bounds[5],
+                },
+                type_key: 0,
+                family: dragonfly_plugin_sys::DF_ENTITY_FAMILY_BASE,
+                callback_flags: 0,
+                initial_health: 0.0,
+                max_health: 0.0,
+                speed: 0.0,
+                state_version: 0,
+                physics_flags: 0,
+                gravity: 0.0,
+                drag: 0.0,
             },
-            network_id: dragonfly_plugin_sys::DfStringView {
-                data: definition.network_identifier().as_ptr(),
-                len: definition.network_identifier().len() as u64,
-            },
-            min: dragonfly_plugin_sys::DfVec3 {
-                x: bounds[0],
-                y: bounds[1],
-                z: bounds[2],
-            },
-            max: dragonfly_plugin_sys::DfVec3 {
-                x: bounds[3],
-                y: bounds[4],
-                z: bounds[5],
-            },
-        })
+            handler: None,
+        }
+    }
+
+    #[doc(hidden)]
+    pub const fn advanced(
+        definition: Definition,
+        family: u32,
+        callback_flags: u32,
+        initial_health: f64,
+        max_health: f64,
+        speed: f64,
+        state_version: u32,
+        physics: Option<Physics>,
+        handler: EntityHandler,
+    ) -> Self {
+        let mut registered = Self::new(definition);
+        registered.descriptor.family = family;
+        registered.descriptor.callback_flags = callback_flags;
+        registered.descriptor.initial_health = initial_health;
+        registered.descriptor.max_health = max_health;
+        registered.descriptor.speed = speed;
+        registered.descriptor.state_version = state_version;
+        if let Some(physics) = physics {
+            registered.descriptor.physics_flags = dragonfly_plugin_sys::DF_ENTITY_PHYSICS_ENABLED
+                | if physics.drag_before_gravity {
+                    dragonfly_plugin_sys::DF_ENTITY_PHYSICS_DRAG_BEFORE_GRAVITY
+                } else {
+                    0
+                };
+            registered.descriptor.gravity = physics.gravity;
+            registered.descriptor.drag = physics.drag;
+        }
+        registered.handler = Some(handler);
+        registered
+    }
+
+    #[doc(hidden)]
+    pub const fn descriptor(&self) -> dragonfly_plugin_sys::DfEntityTypeDescriptorV2 {
+        self.descriptor
+    }
+
+    #[doc(hidden)]
+    pub const fn handler(&self) -> Option<EntityHandler> {
+        self.handler
     }
 }
 
@@ -573,7 +1208,7 @@ mod private {
 /// This trait is sealed so every descriptor has a stable host encoding.
 pub trait Spawnable: private::Sealed {
     #[doc(hidden)]
-    fn encode(&self) -> EncodedSpawnable;
+    fn encode(self) -> EncodedSpawnable;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -594,7 +1229,7 @@ pub(crate) enum SpawnKind {
     Custom,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum SpawnPayload {
     Text(String),
     Lightning {
@@ -626,26 +1261,81 @@ pub(crate) enum SpawnPayload {
         owner: Entity,
         potion: Potion,
     },
-    Custom(&'static str),
+    Custom {
+        identifier: &'static str,
+        instance: Option<OwnedInstance>,
+    },
+}
+
+pub(crate) struct OwnedInstance {
+    raw: u64,
+    destroy: unsafe fn(u64),
+}
+
+impl core::fmt::Debug for OwnedInstance {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("OwnedInstance")
+            .field(&self.raw)
+            .finish()
+    }
+}
+
+impl PartialEq for OwnedInstance {
+    fn eq(&self, other: &Self) -> bool {
+        self.raw == other.raw
+    }
+}
+
+impl Drop for OwnedInstance {
+    fn drop(&mut self) {
+        if self.raw != 0 {
+            unsafe { (self.destroy)(self.raw) };
+        }
+    }
 }
 
 /// Internal, owned representation passed from a typed descriptor to the SDK's
 /// host adapter.
 #[doc(hidden)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct EncodedSpawnable {
     pub(crate) kind: SpawnKind,
     pub(crate) payload: SpawnPayload,
 }
 
 impl EncodedSpawnable {
-    pub(crate) fn with_raw<R>(
-        &self,
+    #[doc(hidden)]
+    pub fn custom_owned<T: Send + 'static>(identifier: &'static str, value: T) -> Self {
+        let raw = Box::into_raw(Box::new(value)) as usize as u64;
+        Self {
+            kind: SpawnKind::Custom,
+            payload: SpawnPayload::Custom {
+                identifier,
+                instance: Some(OwnedInstance {
+                    raw,
+                    destroy: Self::destroy_owned::<T>,
+                }),
+            },
+        }
+    }
+
+    #[doc(hidden)]
+    pub unsafe fn destroy_owned<T>(raw: u64) {
+        if raw != 0 {
+            drop(unsafe { Box::from_raw(raw as usize as *mut T) });
+        }
+    }
+
+    pub(crate) fn with_raw(
+        mut self,
         options: &SpawnOptions,
-        callback: impl FnOnce(&dragonfly_plugin_sys::DfEntitySpawnViewV2) -> R,
-    ) -> Option<R> {
+        callback: impl FnOnce(
+            &dragonfly_plugin_sys::DfEntitySpawnViewV3,
+        ) -> dragonfly_plugin_sys::DfStatus,
+    ) -> Option<dragonfly_plugin_sys::DfStatus> {
         let mut callback = Some(callback);
-        let mut view = dragonfly_plugin_sys::DfEntitySpawnViewV2 {
+        let mut view = dragonfly_plugin_sys::DfEntitySpawnViewV3 {
             kind: 0,
             flags: 0,
             options: dragonfly_plugin_sys::DfEntitySpawnOptions {
@@ -665,8 +1355,9 @@ impl EncodedSpawnable {
             item: core::ptr::null(),
             block: core::ptr::null(),
             custom_type: dragonfly_plugin_sys::DfStringView::default(),
+            custom_instance: 0,
         };
-        match &self.payload {
+        let result = match &mut self.payload {
             SpawnPayload::Text(text) => {
                 view.kind = dragonfly_plugin_sys::DF_ENTITY_TEXT;
                 view.text = crate::string_view_from_str(text);
@@ -778,31 +1469,41 @@ impl EncodedSpawnable {
                     callback.take()?,
                 )
             }
-            SpawnPayload::Custom(identifier) => {
+            SpawnPayload::Custom {
+                identifier,
+                instance,
+            } => {
                 view.kind = dragonfly_plugin_sys::DF_ENTITY_CUSTOM;
                 view.custom_type = crate::string_view_from_str(identifier);
+                view.custom_instance = instance.as_ref().map_or(0, |instance| instance.raw);
                 Some(callback.take()?(&view))
             }
+        };
+        if result == Some(dragonfly_plugin_sys::DF_STATUS_OK)
+            && let SpawnPayload::Custom {
+                instance: Some(instance),
+                ..
+            } = &mut self.payload
+        {
+            instance.raw = 0;
         }
+        result
     }
 }
 
 impl<T: CustomType> private::Sealed for T {}
 
 impl<T: CustomType> Spawnable for T {
-    fn encode(&self) -> EncodedSpawnable {
-        EncodedSpawnable {
-            kind: SpawnKind::Custom,
-            payload: SpawnPayload::Custom(T::DEFINITION.identifier()),
-        }
+    fn encode(self) -> EncodedSpawnable {
+        T::encode_spawn(self)
     }
 }
 
 fn encode_owner_projectile<R>(
-    view: &mut dragonfly_plugin_sys::DfEntitySpawnViewV2,
+    view: &mut dragonfly_plugin_sys::DfEntitySpawnViewV3,
     kind: u32,
     owner: Entity,
-    callback: impl FnOnce(&dragonfly_plugin_sys::DfEntitySpawnViewV2) -> R,
+    callback: impl FnOnce(&dragonfly_plugin_sys::DfEntitySpawnViewV3) -> R,
 ) -> Option<R> {
     view.kind = kind;
     view.owner = owner.raw_id();
@@ -842,10 +1543,10 @@ macro_rules! impl_spawnable {
         impl private::Sealed for $type {}
 
         impl Spawnable for $type {
-            fn encode(&self) -> EncodedSpawnable {
+            fn encode(self) -> EncodedSpawnable {
                 EncodedSpawnable {
                     kind: SpawnKind::$kind,
-                    payload: ($encode)(self),
+                    payload: ($encode)(&self),
                 }
             }
         }
@@ -910,6 +1611,15 @@ impl_spawnable!(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Default)]
+    struct MacroLivingEntity;
+
+    #[dragonfly_plugin_macros::entity(width = 0.6, height = 1.8)]
+    impl Living for MacroLivingEntity {
+        fn tick(&mut self, _context: &mut TickContext<'_>) {}
+        fn hurt(&mut self, _event: &mut Hurt<'_>) {}
+    }
     use crate::item;
 
     #[test]
@@ -978,7 +1688,7 @@ mod tests {
             }
         );
 
-        let block = block::new("minecraft:sand").with_property("sand_type", "normal");
+        let block = block::new(block::Sand);
         assert_eq!(
             FallingBlock::new(block.clone()).encode().payload,
             SpawnPayload::FallingBlock(block)
@@ -1018,7 +1728,7 @@ mod tests {
         assert_spawnable(&TNT::new(Duration::from_secs(4)));
         assert_spawnable(&ExperienceOrb::new(7));
         assert_spawnable(&DroppedItem::new(item::new(item::Apple, 1)));
-        assert_spawnable(&FallingBlock::new(block::new("minecraft:sand")));
+        assert_spawnable(&FallingBlock::new(block::Sand));
         let owner = Entity::from_id(EntityId::from_parts([7; 16], 9));
         assert_spawnable(&Arrow::new(owner).tip(Potion::Poison).critical(true));
         assert_spawnable(&Egg::new(owner));
@@ -1027,5 +1737,115 @@ mod tests {
         assert_spawnable(&BottleOfEnchanting::new(owner));
         assert_spawnable(&SplashPotion::new(owner, Potion::Healing));
         assert_spawnable(&LingeringPotion::new(owner, Potion::Poison));
+    }
+
+    #[test]
+    fn saved_state_round_trips_typed_values() {
+        let mut written = SavedStateMut::new();
+        written.set("hits", 42_i64);
+        written.set("name", "dummy");
+        written.set("active", true);
+        let bytes = written.encode().unwrap();
+        let read = SavedState::decode(7, &bytes).unwrap();
+        assert_eq!(read.version(), 7);
+        assert_eq!(read.i64("hits"), Some(42));
+        assert_eq!(read.str("name"), Some("dummy"));
+        assert_eq!(read.bool("active"), Some(true));
+        assert_eq!(read.i64("missing"), None);
+    }
+
+    #[test]
+    fn entity_context_cancellation_is_monotonic() {
+        let input = dragonfly_plugin_sys::DfEntityHurtInput {
+            entity: dragonfly_plugin_sys::DfEntityId {
+                bytes: [4; 16],
+                generation: 9,
+            },
+            health: 20.0,
+            max_health: 40.0,
+            ..Default::default()
+        };
+        let mut state = dragonfly_plugin_sys::DfEntityHurtState {
+            damage: 6.0,
+            cancelled: 0,
+        };
+        let mut event = unsafe { Hurt::from_raw(&input, &mut state) };
+        assert_eq!(event.entity().id().generation(), 9);
+        assert_eq!(event.health(), 20.0);
+        assert_eq!(event.max_health(), 40.0);
+        assert_eq!(event.damage(), 6.0);
+        event.set_damage(-1.0);
+        assert_eq!(event.damage(), 0.0);
+        event.cancel();
+        event.set_damage(2.0);
+        assert!(event.cancelled());
+    }
+
+    #[derive(Default)]
+    struct TestLiving;
+
+    impl Living for TestLiving {}
+
+    #[test]
+    fn living_defaults_match_dragonfly() {
+        assert_eq!(TestLiving::INITIAL_HEALTH, 20.0);
+        assert_eq!(TestLiving::MAX_HEALTH, 20.0);
+        assert_eq!(TestLiving::SPEED, 0.1);
+        assert_eq!(TestLiving::PHYSICS, Some(Physics::passive(0.08, 0.02)));
+    }
+
+    #[test]
+    fn advanced_entity_macro_registers_owned_living_state() {
+        let registered = REGISTERED_TYPES
+            .iter()
+            .find(|registered| {
+                registered.descriptor().family == dragonfly_plugin_sys::DF_ENTITY_FAMILY_LIVING
+            })
+            .expect("advanced entity registration");
+        assert_eq!(
+            registered.descriptor().family,
+            dragonfly_plugin_sys::DF_ENTITY_FAMILY_LIVING
+        );
+        assert!(registered.handler().is_some());
+    }
+
+    #[test]
+    fn custom_spawn_instance_drops_on_failure_and_transfers_on_success() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        #[derive(Clone)]
+        struct DropCount(Arc<AtomicUsize>);
+        impl Drop for DropCount {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let failed = Arc::new(AtomicUsize::new(0));
+        let encoded = EncodedSpawnable::custom_owned("example:failed", DropCount(failed.clone()));
+        assert_eq!(
+            encoded.with_raw(&SpawnOptions::new(Vec3::default()), |_| {
+                dragonfly_plugin_sys::DF_STATUS_ERROR
+            }),
+            Some(dragonfly_plugin_sys::DF_STATUS_ERROR)
+        );
+        assert_eq!(failed.load(Ordering::SeqCst), 1);
+
+        let adopted = Arc::new(AtomicUsize::new(0));
+        let encoded = EncodedSpawnable::custom_owned("example:ok", DropCount(adopted.clone()));
+        let mut raw = 0;
+        assert_eq!(
+            encoded.with_raw(&SpawnOptions::new(Vec3::default()), |view| {
+                raw = view.custom_instance;
+                dragonfly_plugin_sys::DF_STATUS_OK
+            }),
+            Some(dragonfly_plugin_sys::DF_STATUS_OK)
+        );
+        assert_eq!(adopted.load(Ordering::SeqCst), 0);
+        unsafe { EncodedSpawnable::destroy_owned::<DropCount>(raw) };
+        assert_eq!(adopted.load(Ordering::SeqCst), 1);
     }
 }

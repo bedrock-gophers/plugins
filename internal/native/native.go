@@ -20,7 +20,10 @@ import (
 	"unsafe"
 )
 
-const maxEntityTypes = 1024
+const (
+	maxEntityTypes      = 1024
+	maxEntityStateBytes = 16 << 20
+)
 
 const (
 	PlayerMoveSubscription            uint64 = 1
@@ -478,22 +481,59 @@ func (r *Runtime) EntityTypes() ([]EntityTypeDefinition, error) {
 	}
 	types := make([]EntityTypeDefinition, 0, count)
 	for index := uint64(0); index < count; index++ {
-		var descriptor C.DfEntityTypeDescriptorV1
+		var descriptor C.DfEntityTypeDescriptorV2
 		if status := C.bg_runtime_entity_type_at(r.ptr, C.uint64_t(index), &descriptor); status != C.DF_STATUS_OK {
 			return nil, fmt.Errorf("read native entity type %d: status %d", index, int32(status))
 		}
 		definition := EntityTypeDefinition{
 			SaveID: stringView(descriptor.save_id), NetworkID: stringView(descriptor.network_id),
 			Min: nativeEntityVec3(descriptor.min), Max: nativeEntityVec3(descriptor.max),
+			TypeKey: uint64(descriptor.type_key), Family: EntityFamily(descriptor.family),
+			CallbackFlags: uint32(descriptor.callback_flags), InitialHealth: float64(descriptor.initial_health),
+			MaxHealth: float64(descriptor.max_health), Speed: float64(descriptor.speed), StateVersion: uint32(descriptor.state_version),
 		}
-		if len(definition.SaveID) == 0 || len(definition.SaveID) > maxEntityTypeBytes || !utf8.ValidString(definition.SaveID) ||
-			len(definition.NetworkID) == 0 || len(definition.NetworkID) > maxEntityTypeBytes || !utf8.ValidString(definition.NetworkID) ||
-			!validEntityBounds(definition.Min, definition.Max) {
+		if uint32(descriptor.physics_flags)&uint32(C.DF_ENTITY_PHYSICS_ENABLED) != 0 {
+			definition.Physics = &EntityPhysics{
+				Gravity: float64(descriptor.gravity), Drag: float64(descriptor.drag),
+				DragBeforeGravity: uint32(descriptor.physics_flags)&uint32(C.DF_ENTITY_PHYSICS_DRAG_BEFORE_GRAVITY) != 0,
+			}
+		}
+		if !validEntityTypeDefinition(definition) {
 			return nil, fmt.Errorf("invalid native entity type %d", index)
 		}
 		types = append(types, definition)
 	}
 	return types, nil
+}
+
+func validEntityTypeDefinition(definition EntityTypeDefinition) bool {
+	if definition.TypeKey == 0 ||
+		len(definition.SaveID) == 0 || len(definition.SaveID) > maxEntityTypeBytes || !utf8.ValidString(definition.SaveID) ||
+		len(definition.NetworkID) == 0 || len(definition.NetworkID) > maxEntityTypeBytes || !utf8.ValidString(definition.NetworkID) ||
+		!validEntityBounds(definition.Min, definition.Max) {
+		return false
+	}
+	const knownCallbacks = EntityCallbackState | EntityCallbackTick | EntityCallbackHurt | EntityCallbackHeal | EntityCallbackDeath
+	if definition.CallbackFlags&^knownCallbacks != 0 || definition.CallbackFlags&EntityCallbackState == 0 && definition.StateVersion != 0 {
+		return false
+	}
+	finite := func(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
+	if definition.Physics != nil && (!finite(definition.Physics.Gravity) || !finite(definition.Physics.Drag) || definition.Physics.Drag < 0 || definition.Physics.Drag > 1) {
+		return false
+	}
+	switch definition.Family {
+	case EntityFamilyBase:
+		return definition.CallbackFlags == 0 && definition.StateVersion == 0 && definition.Physics == nil &&
+			definition.InitialHealth == 0 && definition.MaxHealth == 0 && definition.Speed == 0
+	case EntityFamilyTicking:
+		return definition.CallbackFlags&(EntityCallbackHurt|EntityCallbackHeal|EntityCallbackDeath) == 0 &&
+			definition.InitialHealth == 0 && definition.MaxHealth == 0 && definition.Speed == 0
+	case EntityFamilyLiving:
+		return finite(definition.InitialHealth) && finite(definition.MaxHealth) && finite(definition.Speed) &&
+			definition.InitialHealth > 0 && definition.InitialHealth <= definition.MaxHealth && definition.Speed >= 0
+	default:
+		return false
+	}
 }
 
 func validEntityBounds(minimum, maximum Vec3) bool {
@@ -504,6 +544,157 @@ func validEntityBounds(minimum, maximum Vec3) bool {
 		}
 	}
 	return minimum.X <= maximum.X && minimum.Y <= maximum.Y && minimum.Z <= maximum.Z
+}
+
+func (r *Runtime) EntityAdopt(typeKey, opaque uint64) (EntityInstanceID, error) {
+	if r == nil || r.ptr == nil {
+		return 0, errors.New("native runtime is closed")
+	}
+	var instance C.DfEntityInstanceId
+	if status := C.bg_runtime_entity_adopt(r.ptr, C.uint64_t(typeKey), C.uint64_t(opaque), &instance); status != C.DF_STATUS_OK {
+		return 0, fmt.Errorf("adopt native entity: status %d", int32(status))
+	}
+	return EntityInstanceID(instance), nil
+}
+
+func (r *Runtime) EntityLoad(typeKey uint64, input EntityLoadInput) (EntityInstanceID, error) {
+	if r == nil || r.ptr == nil {
+		return 0, errors.New("native runtime is closed")
+	}
+	if len(input.Data) > maxEntityStateBytes {
+		return 0, errors.New("native entity state is too large")
+	}
+	data := C.CBytes(input.Data)
+	defer C.free(data)
+	nativeInput := C.DfEntityLoadInput{
+		data:    C.DfBytesView{data: (*C.uint8_t)(data), len: C.uint64_t(len(input.Data))},
+		version: C.uint32_t(input.Version),
+	}
+	var instance C.DfEntityInstanceId
+	if status := C.bg_runtime_entity_load(r.ptr, C.uint64_t(typeKey), &nativeInput, &instance); status != C.DF_STATUS_OK {
+		return 0, fmt.Errorf("load native entity: status %d", int32(status))
+	}
+	return EntityInstanceID(instance), nil
+}
+
+func (r *Runtime) EntitySave(instance EntityInstanceID) (EntitySaveOutput, error) {
+	if r == nil || r.ptr == nil {
+		return EntitySaveOutput{}, errors.New("native runtime is closed")
+	}
+	capacity := 4 << 10
+	for attempts := 0; attempts < 2; attempts++ {
+		data := C.malloc(C.size_t(capacity))
+		if data == nil {
+			return EntitySaveOutput{}, errors.New("allocate native entity state")
+		}
+		state := C.DfEntitySaveState{data: C.DfBytesBuffer{data: (*C.uint8_t)(data), capacity: C.uint64_t(capacity)}}
+		status := C.bg_runtime_entity_save(r.ptr, C.DfEntityInstanceId(instance), &state)
+		length := uint64(state.data.len)
+		if status == C.DF_STATUS_OK && length <= uint64(capacity) {
+			output := EntitySaveOutput{Version: uint32(state.version), Data: C.GoBytes(data, C.int(length))}
+			C.free(data)
+			return output, nil
+		}
+		C.free(data)
+		if length <= uint64(capacity) || length > maxEntityStateBytes {
+			return EntitySaveOutput{}, fmt.Errorf("save native entity: status %d", int32(status))
+		}
+		capacity = int(length)
+	}
+	return EntitySaveOutput{}, errors.New("save native entity state did not fit")
+}
+
+func (r *Runtime) EntityTick(instance EntityInstanceID, input EntityTickInput) (EntityTickOutput, error) {
+	output := EntityTickOutput{}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	nativeInput := C.DfEntityTickInput{
+		invocation: C.DfInvocationId(input.Invocation), current: C.int64_t(input.Current),
+		age_milliseconds: C.uint64_t(max(input.Age.Milliseconds(), 0)),
+	}
+	fillEntityID(&nativeInput.entity, input.Entity)
+	var state C.DfEntityTickState
+	if status := C.bg_runtime_entity_tick(r.ptr, C.DfEntityInstanceId(instance), &nativeInput, &state); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("tick native entity: status %d", int32(status))
+	}
+	output.Despawn = state.despawn != 0
+	return output, nil
+}
+
+func (r *Runtime) EntityHurt(instance EntityInstanceID, input EntityHurtInput) (EntityHurtOutput, error) {
+	output := EntityHurtOutput{Damage: input.Damage}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	source, release, ok := nativeDamageSource(input.Source)
+	if !ok {
+		return output, errors.New("encode entity damage source")
+	}
+	defer release()
+	nativeInput := C.DfEntityHurtInput{
+		invocation: C.DfInvocationId(input.Invocation), source: source,
+		health: C.double(input.Health), max_health: C.double(input.MaxHealth),
+	}
+	fillEntityID(&nativeInput.entity, input.Entity)
+	state := C.DfEntityHurtState{damage: C.double(input.Damage)}
+	if status := C.bg_runtime_entity_hurt(r.ptr, C.DfEntityInstanceId(instance), &nativeInput, &state); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("hurt native entity: status %d", int32(status))
+	}
+	output.Damage, output.Cancelled = float64(state.damage), state.cancelled != 0
+	return output, nil
+}
+
+func (r *Runtime) EntityHeal(instance EntityInstanceID, input EntityHealInput) (EntityHealOutput, error) {
+	output := EntityHealOutput{Amount: input.Amount}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	source, release, ok := nativeHealingSource(input.Source)
+	if !ok {
+		return output, errors.New("encode entity healing source")
+	}
+	defer release()
+	nativeInput := C.DfEntityHealInput{
+		invocation: C.DfInvocationId(input.Invocation), source: source,
+		health: C.double(input.Health), max_health: C.double(input.MaxHealth),
+	}
+	fillEntityID(&nativeInput.entity, input.Entity)
+	state := C.DfEntityHealState{health: C.double(input.Amount)}
+	if status := C.bg_runtime_entity_heal(r.ptr, C.DfEntityInstanceId(instance), &nativeInput, &state); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("heal native entity: status %d", int32(status))
+	}
+	output.Amount, output.Cancelled = float64(state.health), state.cancelled != 0
+	return output, nil
+}
+
+func (r *Runtime) EntityDeath(instance EntityInstanceID, input EntityDeathInput) (EntityDeathOutput, error) {
+	output := EntityDeathOutput{}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	source, release, ok := nativeDamageSource(input.Source)
+	if !ok {
+		return output, errors.New("encode entity death source")
+	}
+	defer release()
+	nativeInput := C.DfEntityDeathInput{
+		invocation: C.DfInvocationId(input.Invocation), source: source,
+		health: C.double(input.Health), damage: C.double(input.Damage),
+	}
+	fillEntityID(&nativeInput.entity, input.Entity)
+	state := C.DfEntityDeathState{}
+	if status := C.bg_runtime_entity_death(r.ptr, C.DfEntityInstanceId(instance), &nativeInput, &state); status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("death native entity: status %d", int32(status))
+	}
+	output.Cancelled = state.cancelled != 0
+	return output, nil
+}
+
+func (r *Runtime) EntityDestroy(instance EntityInstanceID) {
+	if r != nil && r.ptr != nil && instance != 0 {
+		C.bg_runtime_entity_destroy(r.ptr, C.DfEntityInstanceId(instance))
+	}
 }
 
 func (r *Runtime) Commands() ([]Command, error) {
@@ -805,15 +996,15 @@ func (r *Runtime) HandlePlayerHeal(invocation InvocationID, input PlayerHealInpu
 	if r == nil || r.ptr == nil {
 		return output, errors.New("native runtime is closed")
 	}
-	source := C.CBytes([]byte(input.Source.Name))
-	defer C.free(source)
+	source, releaseSource, ok := nativeHealingSource(input.Source)
+	if !ok {
+		return output, errors.New("encode healing source")
+	}
+	defer releaseSource()
 	var nativeInput C.DfPlayerHealInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
 	fillPlayerID(&nativeInput.player, input.Player)
-	nativeInput.source = C.DfHealingSourceView{
-		name: C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source.Name))},
-		kind: C.uint32_t(input.Source.Kind), data: C.uint8_t(boolByte(input.Source.Data)),
-	}
+	nativeInput.source = source
 	state := C.DfPlayerHealState{health: C.double(input.Health)}
 	if cancelled {
 		state.cancelled = 1
@@ -1474,6 +1665,17 @@ func nativeDamageSource(source DamageSource) (C.DfDamageSourceView, func(), bool
 		view.block = block
 	}
 	return view, release, true
+}
+
+func nativeHealingSource(source HealingSource) (C.DfHealingSourceView, func(), bool) {
+	name := C.CBytes([]byte(source.Name))
+	if len(source.Name) != 0 && name == nil {
+		return C.DfHealingSourceView{}, func() {}, false
+	}
+	return C.DfHealingSourceView{
+		name: C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(source.Name))},
+		kind: C.uint32_t(source.Kind), data: C.uint8_t(boolByte(source.Data)),
+	}, func() { C.free(name) }, true
 }
 
 func fillPlayerID(destination *C.DfPlayerId, source PlayerID) {

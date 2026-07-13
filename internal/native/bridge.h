@@ -25,8 +25,16 @@ uint64_t bg_runtime_entity_type_count(const BgRuntimeLibrary *library);
 DfStatus bg_runtime_entity_type_at(
     const BgRuntimeLibrary *library,
     uint64_t index,
-    DfEntityTypeDescriptorV1 *out
+    DfEntityTypeDescriptorV2 *out
 );
+DfStatus bg_runtime_entity_adopt(BgRuntimeLibrary *library, uint64_t type_key, uint64_t opaque, DfEntityInstanceId *out);
+DfStatus bg_runtime_entity_load(BgRuntimeLibrary *library, uint64_t type_key, const DfEntityLoadInput *input, DfEntityInstanceId *out);
+DfStatus bg_runtime_entity_save(BgRuntimeLibrary *library, DfEntityInstanceId instance, DfEntitySaveState *state);
+DfStatus bg_runtime_entity_tick(BgRuntimeLibrary *library, DfEntityInstanceId instance, const DfEntityTickInput *input, DfEntityTickState *state);
+DfStatus bg_runtime_entity_hurt(BgRuntimeLibrary *library, DfEntityInstanceId instance, const DfEntityHurtInput *input, DfEntityHurtState *state);
+DfStatus bg_runtime_entity_heal(BgRuntimeLibrary *library, DfEntityInstanceId instance, const DfEntityHealInput *input, DfEntityHealState *state);
+DfStatus bg_runtime_entity_death(BgRuntimeLibrary *library, DfEntityInstanceId instance, const DfEntityDeathInput *input, DfEntityDeathState *state);
+DfStatus bg_runtime_entity_destroy(BgRuntimeLibrary *library, DfEntityInstanceId instance);
 uint64_t bg_runtime_command_count(const BgRuntimeLibrary *library);
 DfStatus bg_runtime_command_at(
     const BgRuntimeLibrary *library,

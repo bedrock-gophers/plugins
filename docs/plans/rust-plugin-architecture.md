@@ -1,6 +1,6 @@
 # Native Plugin Architecture Plan
 
-Status: Active implementation; managed worlds, blocks, typed particles/sounds, and persistent custom base entities complete
+Status: Active implementation; managed worlds, generated typed blocks, typed forms/particles/sounds, and persistent custom base/ticking/living entities complete
 
 Initial language: Rust
 
@@ -271,12 +271,12 @@ if let Some(lobby) = lobby {
     lobby.set_time(6000);
     lobby.set_block(
         BlockPos { x: 0, y: 64, z: 0 },
-        &block::new("minecraft:stone"),
+        block::Stone,
     );
 }
 ```
 
-`World::get` resolves core or custom names. `World::open` loads or creates a persistent custom world. Block properties preserve Dragonfly's exact `bool`, `uint8`, `int32`, and `string` state types through tagged little-endian NBT. Setters expose no host transport errors; lookup and reads return `Option` for unavailable/stale resources.
+`World::get` resolves core or custom names. `World::open` loads or creates a persistent custom world. Built-in block identities and states are generated from Dragonfly's registry: simple values use types such as `block::Sand`, while stateful values use typed constructors/builders such as `block::OakLog::new(block::PillarAxis::Y)`. `block::Custom` is the explicit identifier/property escape hatch for plugin-registered blocks. Properties preserve Dragonfly's exact `bool`, `uint8`, `int32`, and `string` state types through tagged little-endian NBT. Setters expose no host transport errors; lookup and reads return `Option` for unavailable/stale resources.
 
 Remaining world parity:
 
@@ -461,7 +461,7 @@ Dragonfly v0.11 entity values are transaction-scoped. The host registry stores s
 
 Host callbacks execute synchronously while the plugin callback is active. Large values such as skins and item stacks use bounded Go-owned snapshots. Ordinary snapshots use RAII close on the Rust side. Event-owned snapshots survive the complete plugin chain and are closed only by the runtime. No Go pointer crosses or survives the ABI.
 
-Forms are the deliberate asynchronous exception. `Player::send_form` transfers an owned `FnOnce + Send + 'static` callback into a bounded host registry. Dragonfly retains only an opaque registration ID, and dispatches the submitted or closed response inside the response transaction. Player disconnect, runtime disable, and runtime destruction drain pending callbacks before plugin libraries unload. The public API is fire-and-forget: host transport failures discard the callback without exposing native status values.
+Forms are the deliberate asynchronous exception. The SDK exposes Dragonfly-style concrete `form::Menu`, `form::Modal`, and `form::Custom` types; buttons/elements and their response values remain typed, while `form::Raw` is the explicit JSON escape hatch. `Player::send_form` transfers an owned `FnOnce + Send + 'static` callback into a bounded host registry. Dragonfly retains only an opaque registration ID, and dispatches the submitted or closed response inside the response transaction. Player disconnect, runtime disable, and runtime destruction drain pending callbacks before plugin libraries unload. The public API is fire-and-forget: host transport failures discard the callback without exposing native status values.
 
 Separate event mutations from host actions.
 
@@ -484,7 +484,7 @@ Current host actions include:
 
 Every synchronous player callback registers one invocation ID for its exact transaction. Same-world block operations use that `world.Tx` directly. Calls with no invocation are off-owner: writes enqueue through `World.Do` and reads use `world.Call`. Cross-world writes from callbacks enqueue, while cross-world synchronous block reads are rejected because reciprocal owner calls can deadlock. Save/unload are rejected from callbacks and run only off-owner. Transaction values never cross or survive the ABI; the asynchronous task API will provide callback-safe cross-world reads and lifecycle operations.
 
-The host ABI is currently v14 and the plugin ABI is v2. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+The host ABI is currently v15 and the plugin ABI is v3. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
 
 ## Entities
 
@@ -505,9 +505,9 @@ struct Marker;
 
 The save ID defaults to `<cargo-package>:<snake_case_type>`. An explicit `id = "namespace:name"` pins persistence across package/type renames, and an explicit six-value `bbox` replaces `width`/`height` for asymmetric shapes. The macro contributes a link-time descriptor; plugins do not maintain registration arrays or call a bootstrap function. The runtime validates, deduplicates, and sorts copied descriptors before Go merges them into Dragonfly's configured entity registry before `server.Config.New`. The merge preserves all vanilla types and factory callbacks and rejects collisions.
 
-The Go base proxy implements only `world.Entity`, name tag, and teleport capabilities. It does not accidentally satisfy `TickerEntity`, `entity.Living`, or velocity interfaces. Dragonfly owns its `EntityHandle`, common `EntityData`, world membership, viewer updates, NBT save identity, and provider reload. This first family is intentionally stateless beyond common Dragonfly data. Plugin-owned state codecs plus ticking and living proxy families remain pending; base despawn closes in Dragonfly's required remove-then-handle-close order.
+The base proxy implements only `world.Entity`, name tag, and teleport capabilities. Ticking and living definitions use distinct proxy types so optional Dragonfly interfaces remain exact. Rust owns one opaque state value per advanced entity; Go owns `entity.Ent`, movement, health, effects, speed, viewer updates, and world membership. Versioned Rust state and Dragonfly living state persist through providers. Spawn adoption transfers a Rust value into a runtime instance ID only after the host accepts it, with exactly-once destruction on every path.
 
-Shutdown disables command/event callbacks, closes Dragonfly sessions and core worlds, then closes custom worlds, and unloads the native runtime last. Custom worlds must not disappear while connected players can still reference them, and descriptor/code pointers must remain valid until every entity provider has finished encoding.
+Shutdown closes Dragonfly sessions and core worlds, then custom worlds, then disables plugins and unloads the native runtime. Descriptor/code pointers remain valid until every entity provider finishes encoding.
 
 Common entity state is capability-based. Every managed entity exposes its `World`; position and rotation exist on every `world.Entity`, while velocity, teleport, and name tag are optional capabilities. Rust getters return `Option`, while unsupported/stale setters silently no-op and never expose host transport errors. Dragonfly v0.11 has no exported generic rotation setter, so only spawn-time rotation and rotation reads are supported. Reflection or unsafe access to private `entity.Ent` state is forbidden.
 
@@ -517,7 +517,7 @@ Entity spawn returns a handle synchronously, so it currently requires the target
 
 Projectile factories preserve Dragonfly owner resolution and built-in behavior. Current Dragonfly has no global projectile-impact callback: its per-config `Hit` callback is post-effect, non-cancellable, and misses surviving arrow/block collisions. A global cancellable projectile-hit event requires an upstream pre-impact hook. Reimplementing private potion, pearl, bottle, and arrow behavior in this project is rejected because it would drift from raw Dragonfly.
 
-Dragonfly v0.11 also has no generic living-entity hurt or death handler. `world.Handler` exposes entity spawn/despawn only, and despawn is not death: it also covers manual removal, transfer, expiry, and unload and carries no damage source. Each `entity.Living` implementation owns `Hurt` and its death transition. The runtime therefore does not synthesize global entity hurt/death events from attack or despawn callbacks. Player hurt/death remain exact through `player.Handler`; future framework-owned custom living proxies will emit their own exact pre-damage and death callbacks. Covering arbitrary third-party living implementations requires a generic Dragonfly hook upstream.
+Dragonfly v0.11 has no generic living-entity hurt or death handler. Framework-owned living proxies therefore emit exact pre-damage, heal, and lethal callbacks, first to the owning Rust value and then to global plugin subscribers. Cancellation is default-allowed and monotonic; cancelling death rejects the lethal hit. Despawn remains distinct from death. Covering arbitrary third-party living implementations still requires a generic Dragonfly hook upstream.
 
 `Event::PlayerAttackEntity` is bridged at Dragonfly's native pre-damage handler. It exposes attacker, stable target entity, cancellable default-allowed state, knockback force/height, and critical flag. Cancellation remains monotonic across plugins.
 

@@ -31,36 +31,41 @@ use dragonfly_plugin_sys::{
     DF_SUBSCRIPTION_PLAYER_SKIN_CHANGE, DF_SUBSCRIPTION_PLAYER_SLEEP,
     DF_SUBSCRIPTION_PLAYER_START_BREAK, DF_SUBSCRIPTION_PLAYER_TELEPORT,
     DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK, DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT, DfCommandDescriptor,
-    DfCommandInput, DfCommandState, DfEntityTypeDescriptorV1, DfHostApiV14, DfItemStackSnapshot,
-    DfPlayerAttackEntityInput, DfPlayerAttackEntityState, DfPlayerBlockBreakInput,
-    DfPlayerBlockBreakState, DfPlayerBlockPickInput, DfPlayerBlockPickState,
-    DfPlayerBlockPlaceInput, DfPlayerBlockPlaceState, DfPlayerChangeWorldInput,
-    DfPlayerChangeWorldState, DfPlayerChatInput, DfPlayerChatState, DfPlayerDeathInput,
-    DfPlayerDeathState, DfPlayerExperienceGainInput, DfPlayerExperienceGainState,
-    DfPlayerFireExtinguishInput, DfPlayerFireExtinguishState, DfPlayerFoodLossInput,
-    DfPlayerFoodLossState, DfPlayerHealInput, DfPlayerHealState, DfPlayerHeldSlotChangeInput,
-    DfPlayerHeldSlotChangeState, DfPlayerHurtInput, DfPlayerHurtState, DfPlayerItemConsumeInput,
-    DfPlayerItemConsumeState, DfPlayerItemDamageInput, DfPlayerItemDamageState,
-    DfPlayerItemDropInput, DfPlayerItemDropState, DfPlayerItemReleaseInput,
-    DfPlayerItemReleaseState, DfPlayerItemUseInput, DfPlayerItemUseOnBlockInput,
-    DfPlayerItemUseOnBlockState, DfPlayerItemUseOnEntityInput, DfPlayerItemUseOnEntityState,
-    DfPlayerItemUseState, DfPlayerJoinInput, DfPlayerJoinState, DfPlayerJumpInput,
-    DfPlayerJumpState, DfPlayerLecternPageTurnInput, DfPlayerLecternPageTurnState,
-    DfPlayerMoveInput, DfPlayerMoveState, DfPlayerPunchAirInput, DfPlayerPunchAirState,
-    DfPlayerQuitInput, DfPlayerQuitState, DfPlayerRespawnInput, DfPlayerRespawnState,
-    DfPlayerSignEditInput, DfPlayerSignEditState, DfPlayerSkinChangeInput, DfPlayerSkinChangeState,
-    DfPlayerSleepInput, DfPlayerSleepState, DfPlayerStartBreakInput, DfPlayerStartBreakState,
-    DfPlayerTeleportInput, DfPlayerTeleportState, DfPlayerToggleSneakInput,
-    DfPlayerToggleSneakState, DfPlayerToggleSprintInput, DfPlayerToggleSprintState, DfPluginApiV2,
-    DfPluginEntryV2Fn, DfStatus, DfStringView,
+    DfCommandInput, DfCommandState, DfEntityDeathInput, DfEntityDeathState, DfEntityHealInput,
+    DfEntityHealState, DfEntityHurtInput, DfEntityHurtState, DfEntityInstanceId, DfEntityLoadInput,
+    DfEntityLoadState, DfEntitySaveState, DfEntityTickInput, DfEntityTickState,
+    DfEntityTypeDescriptorV2, DfHostApiV15, DfItemStackSnapshot, DfPlayerAttackEntityInput,
+    DfPlayerAttackEntityState, DfPlayerBlockBreakInput, DfPlayerBlockBreakState,
+    DfPlayerBlockPickInput, DfPlayerBlockPickState, DfPlayerBlockPlaceInput,
+    DfPlayerBlockPlaceState, DfPlayerChangeWorldInput, DfPlayerChangeWorldState, DfPlayerChatInput,
+    DfPlayerChatState, DfPlayerDeathInput, DfPlayerDeathState, DfPlayerExperienceGainInput,
+    DfPlayerExperienceGainState, DfPlayerFireExtinguishInput, DfPlayerFireExtinguishState,
+    DfPlayerFoodLossInput, DfPlayerFoodLossState, DfPlayerHealInput, DfPlayerHealState,
+    DfPlayerHeldSlotChangeInput, DfPlayerHeldSlotChangeState, DfPlayerHurtInput, DfPlayerHurtState,
+    DfPlayerItemConsumeInput, DfPlayerItemConsumeState, DfPlayerItemDamageInput,
+    DfPlayerItemDamageState, DfPlayerItemDropInput, DfPlayerItemDropState,
+    DfPlayerItemReleaseInput, DfPlayerItemReleaseState, DfPlayerItemUseInput,
+    DfPlayerItemUseOnBlockInput, DfPlayerItemUseOnBlockState, DfPlayerItemUseOnEntityInput,
+    DfPlayerItemUseOnEntityState, DfPlayerItemUseState, DfPlayerJoinInput, DfPlayerJoinState,
+    DfPlayerJumpInput, DfPlayerJumpState, DfPlayerLecternPageTurnInput,
+    DfPlayerLecternPageTurnState, DfPlayerMoveInput, DfPlayerMoveState, DfPlayerPunchAirInput,
+    DfPlayerPunchAirState, DfPlayerQuitInput, DfPlayerQuitState, DfPlayerRespawnInput,
+    DfPlayerRespawnState, DfPlayerSignEditInput, DfPlayerSignEditState, DfPlayerSkinChangeInput,
+    DfPlayerSkinChangeState, DfPlayerSleepInput, DfPlayerSleepState, DfPlayerStartBreakInput,
+    DfPlayerStartBreakState, DfPlayerTeleportInput, DfPlayerTeleportState,
+    DfPlayerToggleSneakInput, DfPlayerToggleSneakState, DfPlayerToggleSprintInput,
+    DfPlayerToggleSprintState, DfPluginApiV3, DfPluginEntryV3Fn, DfStatus, DfStringView,
 };
 use libloading::{Library, Symbol};
+use std::collections::HashMap;
 use std::ffi::{OsStr, c_void};
 use std::fs;
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::ptr;
 use std::slice;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 
 const MAX_ABI_SLICE_ITEMS: u64 = 1024;
 const MAX_ENTITY_TYPES: u64 = MAX_ABI_SLICE_ITEMS;
@@ -68,12 +73,14 @@ const MAX_ENTITY_TYPES: u64 = MAX_ABI_SLICE_ITEMS;
 #[repr(C)]
 pub struct DfRuntimeConfig {
     pub plugin_directory: DfStringView,
-    pub host: *const DfHostApiV14,
+    pub host: *const DfHostApiV15,
 }
 
 pub struct DfRuntime {
     plugins: Vec<LoadedPlugin>,
-    entity_types: Vec<DfEntityTypeDescriptorV1>,
+    entity_types: Vec<RuntimeEntityType>,
+    entity_instances: RwLock<HashMap<DfEntityInstanceId, Arc<RuntimeEntityInstance>>>,
+    next_entity_instance: AtomicU64,
     commands: Vec<RuntimeCommand>,
     subscriptions: u64,
 }
@@ -84,8 +91,92 @@ struct RuntimeCommand {
     descriptor: DfCommandDescriptor,
 }
 
+#[derive(Clone, Copy)]
+struct RuntimeEntityType {
+    descriptor: DfEntityTypeDescriptorV2,
+    plugin: usize,
+    local: u64,
+}
+
+struct RuntimeEntityInstance {
+    plugin: usize,
+    local: u64,
+    opaque: u64,
+    lifecycle: Mutex<EntityInstanceLifecycle>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EntityInstanceLifecycle {
+    Idle,
+    Calling,
+    DestroyAfterCall,
+    Destroyed,
+}
+
+impl RuntimeEntityInstance {
+    fn lifecycle(&self) -> std::sync::MutexGuard<'_, EntityInstanceLifecycle> {
+        self.lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn begin_call(&self) -> bool {
+        let mut lifecycle = self.lifecycle();
+        if *lifecycle != EntityInstanceLifecycle::Idle {
+            return false;
+        }
+        *lifecycle = EntityInstanceLifecycle::Calling;
+        true
+    }
+
+    /// Requests destruction, returning whether the opaque value can be destroyed now.
+    fn request_destroy(&self) -> bool {
+        let mut lifecycle = self.lifecycle();
+        match *lifecycle {
+            EntityInstanceLifecycle::Idle => {
+                *lifecycle = EntityInstanceLifecycle::Destroyed;
+                true
+            }
+            EntityInstanceLifecycle::Calling => {
+                *lifecycle = EntityInstanceLifecycle::DestroyAfterCall;
+                false
+            }
+            EntityInstanceLifecycle::DestroyAfterCall | EntityInstanceLifecycle::Destroyed => false,
+        }
+    }
+
+    /// Finishes a callback, returning whether it must destroy the opaque value.
+    fn finish_call(&self) -> bool {
+        let mut lifecycle = self.lifecycle();
+        match *lifecycle {
+            EntityInstanceLifecycle::Calling => {
+                *lifecycle = EntityInstanceLifecycle::Idle;
+                false
+            }
+            EntityInstanceLifecycle::DestroyAfterCall => {
+                *lifecycle = EntityInstanceLifecycle::Destroyed;
+                true
+            }
+            EntityInstanceLifecycle::Idle | EntityInstanceLifecycle::Destroyed => false,
+        }
+    }
+}
+
+struct EntityCallGuard<'a> {
+    runtime: &'a DfRuntime,
+    instance: Arc<RuntimeEntityInstance>,
+}
+
+impl Drop for EntityCallGuard<'_> {
+    fn drop(&mut self) {
+        if self.instance.finish_call() {
+            self.runtime.destroy_opaque(&self.instance);
+        }
+    }
+}
+
 struct LoadedPlugin {
-    api: &'static DfPluginApiV2,
+    api: &'static DfPluginApiV3,
     instance: *mut c_void,
     id: String,
     enabled: bool,
@@ -106,12 +197,12 @@ impl Drop for LoadedPlugin {
 }
 
 impl DfRuntime {
-    fn load(plugin_directory: &Path, host: *const DfHostApiV14) -> Result<Self, String> {
+    fn load(plugin_directory: &Path, host: *const DfHostApiV15) -> Result<Self, String> {
         let mut paths = native_libraries(plugin_directory)?;
         paths.sort();
 
         let mut plugins = Vec::with_capacity(paths.len());
-        let mut entity_types: Vec<DfEntityTypeDescriptorV1> = Vec::new();
+        let mut entity_types: Vec<RuntimeEntityType> = Vec::new();
         let mut subscriptions = 0;
         for path in paths {
             // SAFETY: symbols and returned API are validated before use. Library stays owned by LoadedPlugin.
@@ -122,45 +213,213 @@ impl DfRuntime {
             {
                 return Err(format!("duplicate plugin ID {:?}", plugin.id));
             }
-            if let Some(read) = plugin.api.entity_types {
-                let mut count = 0;
-                let descriptors = unsafe { read(plugin.instance, &mut count) };
-                if count > MAX_ENTITY_TYPES || (count != 0 && descriptors.is_null()) {
+            if let Some(count_types) = plugin.api.entity_type_count {
+                let count = unsafe { count_types(plugin.instance) };
+                if count > MAX_ENTITY_TYPES {
                     return Err(format!(
-                        "plugin {:?} returned invalid entity types",
+                        "plugin {:?} returned too many entity types",
                         plugin.id
                     ));
                 }
-                let descriptors = unsafe { abi_slice(descriptors, count) }.map_err(|()| {
-                    format!("plugin {:?} returned too many entity types", plugin.id)
-                })?;
-                for descriptor in descriptors.iter().copied() {
+                let Some(read_type) = plugin.api.entity_type_at else {
+                    if count == 0 {
+                        subscriptions |= plugin.api.header.subscriptions;
+                        plugins.push(plugin);
+                        continue;
+                    }
+                    return Err(format!("plugin {:?} omitted entity_type_at", plugin.id));
+                };
+                for local in 0..count {
+                    let mut descriptor =
+                        core::mem::MaybeUninit::<DfEntityTypeDescriptorV2>::zeroed();
+                    let status =
+                        unsafe { read_type(plugin.instance, local, descriptor.as_mut_ptr()) };
+                    if status != DF_STATUS_OK {
+                        return Err(format!(
+                            "plugin {:?} rejected entity type {local}",
+                            plugin.id
+                        ));
+                    }
+                    let mut descriptor = unsafe { descriptor.assume_init() };
+                    descriptor.type_key = 0;
                     valid_entity_type_descriptor(&descriptor)?;
                     let save_id = unsafe { string_view(descriptor.save_id) }?;
                     if entity_types.iter().any(|existing| {
-                        unsafe { string_view(existing.save_id) }.is_ok_and(|id| id == save_id)
+                        unsafe { string_view(existing.descriptor.save_id) }
+                            .is_ok_and(|id| id == save_id)
                     }) {
                         return Err(format!("duplicate custom entity type {save_id:?}"));
                     }
-                    entity_types.push(descriptor);
+                    if descriptor.family != dragonfly_plugin_sys::DF_ENTITY_FAMILY_BASE
+                        && plugin.api.handle_entity.is_none()
+                    {
+                        return Err(format!("plugin {:?} omitted entity handler", plugin.id));
+                    }
+                    entity_types.push(RuntimeEntityType {
+                        descriptor,
+                        plugin: plugins.len(),
+                        local,
+                    });
                 }
+            } else if plugin.api.entity_type_at.is_some() {
+                return Err(format!("plugin {:?} omitted entity_type_count", plugin.id));
             }
             subscriptions |= plugin.api.header.subscriptions;
             plugins.push(plugin);
         }
         entity_types.sort_by(|left, right| {
             // SAFETY: every descriptor was validated above and plugin libraries remain loaded.
-            let left = unsafe { string_view(left.save_id) }.unwrap_or_default();
+            let left = unsafe { string_view(left.descriptor.save_id) }.unwrap_or_default();
             // SAFETY: every descriptor was validated above and plugin libraries remain loaded.
-            let right = unsafe { string_view(right.save_id) }.unwrap_or_default();
+            let right = unsafe { string_view(right.descriptor.save_id) }.unwrap_or_default();
             left.cmp(right)
         });
+        for (index, entity_type) in entity_types.iter_mut().enumerate() {
+            entity_type.descriptor.type_key = index as u64 + 1;
+        }
         Ok(Self {
             plugins,
             entity_types,
+            entity_instances: RwLock::new(HashMap::new()),
+            next_entity_instance: AtomicU64::new(1),
             commands: Vec::new(),
             subscriptions,
         })
+    }
+
+    fn entity_type(&self, type_key: u64) -> Option<&RuntimeEntityType> {
+        let entity_type = self
+            .entity_types
+            .get(usize::try_from(type_key.checked_sub(1)?).ok()?)?;
+        (entity_type.descriptor.type_key == type_key).then_some(entity_type)
+    }
+
+    fn call_entity_type(
+        &self,
+        entity_type: &RuntimeEntityType,
+        operation: u32,
+        opaque: u64,
+        input: *const c_void,
+        state: *mut c_void,
+    ) -> DfStatus {
+        let Some(plugin) = self.plugins.get(entity_type.plugin) else {
+            return DF_STATUS_ERROR;
+        };
+        let Some(handle) = plugin.api.handle_entity else {
+            return DF_STATUS_ERROR;
+        };
+        unsafe {
+            handle(
+                plugin.instance,
+                entity_type.local,
+                operation,
+                opaque,
+                input,
+                state,
+            )
+        }
+    }
+
+    fn register_entity_instance(
+        &self,
+        entity_type: &RuntimeEntityType,
+        opaque: u64,
+    ) -> Option<DfEntityInstanceId> {
+        if opaque == 0 {
+            return None;
+        }
+        let mut instances = self.entity_instances.write().ok()?;
+        for _ in 0..u16::MAX {
+            let id = self.next_entity_instance.fetch_add(1, Ordering::Relaxed);
+            if id == 0 || instances.contains_key(&id) {
+                continue;
+            }
+            instances.insert(
+                id,
+                Arc::new(RuntimeEntityInstance {
+                    plugin: entity_type.plugin,
+                    local: entity_type.local,
+                    opaque,
+                    lifecycle: Mutex::new(EntityInstanceLifecycle::Idle),
+                }),
+            );
+            return Some(id);
+        }
+        None
+    }
+
+    fn enter_entity_instance(&self, id: DfEntityInstanceId) -> Option<EntityCallGuard<'_>> {
+        let instances = self.entity_instances.read().ok()?;
+        let instance = instances.get(&id)?.clone();
+        if !instance.begin_call() {
+            return None;
+        }
+        drop(instances);
+        Some(EntityCallGuard {
+            runtime: self,
+            instance,
+        })
+    }
+
+    fn call_entity_instance(
+        &self,
+        id: DfEntityInstanceId,
+        operation: u32,
+        input: *const c_void,
+        state: *mut c_void,
+    ) -> DfStatus {
+        let Some(guard) = self.enter_entity_instance(id) else {
+            return DF_STATUS_ERROR;
+        };
+        let Some(plugin) = self.plugins.get(guard.instance.plugin) else {
+            return DF_STATUS_ERROR;
+        };
+        let Some(handle) = plugin.api.handle_entity else {
+            return DF_STATUS_ERROR;
+        };
+        unsafe {
+            handle(
+                plugin.instance,
+                guard.instance.local,
+                operation,
+                guard.instance.opaque,
+                input,
+                state,
+            )
+        }
+    }
+
+    fn destroy_opaque(&self, instance: &RuntimeEntityInstance) {
+        let Some(plugin) = self.plugins.get(instance.plugin) else {
+            return;
+        };
+        let Some(handle) = plugin.api.handle_entity else {
+            return;
+        };
+        let _ = unsafe {
+            handle(
+                plugin.instance,
+                instance.local,
+                dragonfly_plugin_sys::DF_ENTITY_OPERATION_DESTROY,
+                instance.opaque,
+                ptr::null(),
+                ptr::null_mut(),
+            )
+        };
+    }
+
+    fn destroy_entity_instance(&self, id: DfEntityInstanceId) -> DfStatus {
+        let instance = match self.entity_instances.write() {
+            Ok(mut instances) => instances.remove(&id),
+            Err(_) => None,
+        };
+        let Some(instance) = instance else {
+            return DF_STATUS_ERROR;
+        };
+        if instance.request_destroy() {
+            self.destroy_opaque(&instance);
+        }
+        DF_STATUS_OK
     }
 
     fn handle_move(&self, input: &DfPlayerMoveInput, state: &mut DfPlayerMoveState) -> DfStatus {
@@ -1388,9 +1647,114 @@ impl DfRuntime {
         }
         DF_STATUS_OK
     }
+
+    fn handle_entity_hurt(
+        &self,
+        input: &DfEntityHurtInput,
+        state: &mut DfEntityHurtState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions
+                    & dragonfly_plugin_sys::DF_SUBSCRIPTION_ENTITY_HURT
+                    == 0
+            {
+                continue;
+            }
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let was_cancelled = state.cancelled != 0;
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    dragonfly_plugin_sys::DF_EVENT_ENTITY_HURT,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if status != DF_STATUS_OK || !state.damage.is_finite() {
+                return DF_STATUS_ERROR;
+            }
+        }
+        DF_STATUS_OK
+    }
+
+    fn handle_entity_heal(
+        &self,
+        input: &DfEntityHealInput,
+        state: &mut DfEntityHealState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions
+                    & dragonfly_plugin_sys::DF_SUBSCRIPTION_ENTITY_HEAL
+                    == 0
+            {
+                continue;
+            }
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let was_cancelled = state.cancelled != 0;
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    dragonfly_plugin_sys::DF_EVENT_ENTITY_HEAL,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if status != DF_STATUS_OK || !state.health.is_finite() {
+                return DF_STATUS_ERROR;
+            }
+        }
+        DF_STATUS_OK
+    }
+
+    fn handle_entity_death(
+        &self,
+        input: &DfEntityDeathInput,
+        state: &mut DfEntityDeathState,
+    ) -> DfStatus {
+        for plugin in &self.plugins {
+            if !plugin.enabled
+                || plugin.api.header.subscriptions
+                    & dragonfly_plugin_sys::DF_SUBSCRIPTION_ENTITY_DEATH
+                    == 0
+            {
+                continue;
+            }
+            let Some(handle) = plugin.api.handle_event else {
+                return DF_STATUS_ERROR;
+            };
+            let was_cancelled = state.cancelled != 0;
+            let status = unsafe {
+                handle(
+                    plugin.instance,
+                    dragonfly_plugin_sys::DF_EVENT_ENTITY_DEATH,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                )
+            };
+            if was_cancelled {
+                state.cancelled = 1;
+            }
+            if status != DF_STATUS_OK {
+                return status;
+            }
+        }
+        DF_STATUS_OK
+    }
 }
 
-fn valid_entity_type_descriptor(descriptor: &DfEntityTypeDescriptorV1) -> Result<(), String> {
+fn valid_entity_type_descriptor(descriptor: &DfEntityTypeDescriptorV2) -> Result<(), String> {
     let save_id = unsafe { string_view(descriptor.save_id) }?;
     let network_id = unsafe { string_view(descriptor.network_id) }?;
     if save_id.is_empty() || save_id.len() > 256 || network_id.is_empty() || network_id.len() > 256
@@ -1404,11 +1768,85 @@ fn valid_entity_type_descriptor(descriptor: &DfEntityTypeDescriptorV1) -> Result
     {
         return Err(format!("invalid bounds for custom entity {save_id:?}"));
     }
+    let allowed_callbacks = dragonfly_plugin_sys::DF_ENTITY_CALLBACK_STATE
+        | dragonfly_plugin_sys::DF_ENTITY_CALLBACK_TICK
+        | dragonfly_plugin_sys::DF_ENTITY_CALLBACK_HURT
+        | dragonfly_plugin_sys::DF_ENTITY_CALLBACK_HEAL
+        | dragonfly_plugin_sys::DF_ENTITY_CALLBACK_DEATH;
+    if descriptor.callback_flags & !allowed_callbacks != 0 {
+        return Err(format!("invalid callbacks for custom entity {save_id:?}"));
+    }
+    match descriptor.family {
+        dragonfly_plugin_sys::DF_ENTITY_FAMILY_BASE => {
+            if descriptor.callback_flags != 0
+                || descriptor.initial_health != 0.0
+                || descriptor.max_health != 0.0
+                || descriptor.speed != 0.0
+            {
+                return Err(format!("invalid base custom entity {save_id:?}"));
+            }
+        }
+        dragonfly_plugin_sys::DF_ENTITY_FAMILY_TICKING => {
+            if descriptor.callback_flags
+                & (dragonfly_plugin_sys::DF_ENTITY_CALLBACK_HURT
+                    | dragonfly_plugin_sys::DF_ENTITY_CALLBACK_HEAL
+                    | dragonfly_plugin_sys::DF_ENTITY_CALLBACK_DEATH)
+                != 0
+                || descriptor.initial_health != 0.0
+                || descriptor.max_health != 0.0
+                || descriptor.speed != 0.0
+            {
+                return Err(format!("invalid ticking custom entity {save_id:?}"));
+            }
+        }
+        dragonfly_plugin_sys::DF_ENTITY_FAMILY_LIVING => {
+            if !descriptor.initial_health.is_finite()
+                || !descriptor.max_health.is_finite()
+                || !descriptor.speed.is_finite()
+                || descriptor.initial_health <= 0.0
+                || descriptor.initial_health > descriptor.max_health
+                || descriptor.max_health <= 0.0
+                || descriptor.speed < 0.0
+            {
+                return Err(format!("invalid living custom entity {save_id:?}"));
+            }
+        }
+        _ => return Err(format!("invalid family for custom entity {save_id:?}")),
+    }
+    if descriptor.callback_flags & dragonfly_plugin_sys::DF_ENTITY_CALLBACK_STATE == 0
+        && descriptor.state_version != 0
+    {
+        return Err(format!(
+            "state version without codec for custom entity {save_id:?}"
+        ));
+    }
+    let allowed_physics = dragonfly_plugin_sys::DF_ENTITY_PHYSICS_ENABLED
+        | dragonfly_plugin_sys::DF_ENTITY_PHYSICS_DRAG_BEFORE_GRAVITY;
+    if descriptor.physics_flags & !allowed_physics != 0
+        || descriptor.physics_flags & dragonfly_plugin_sys::DF_ENTITY_PHYSICS_ENABLED == 0
+            && (descriptor.physics_flags != 0
+                || descriptor.gravity != 0.0
+                || descriptor.drag != 0.0)
+        || descriptor.physics_flags & dragonfly_plugin_sys::DF_ENTITY_PHYSICS_ENABLED != 0
+            && (!descriptor.gravity.is_finite()
+                || !descriptor.drag.is_finite()
+                || !(0.0..=1.0).contains(&descriptor.drag))
+    {
+        return Err(format!("invalid physics for custom entity {save_id:?}"));
+    }
     Ok(())
 }
 
 impl Drop for DfRuntime {
     fn drop(&mut self) {
+        let ids: Vec<_> = self
+            .entity_instances
+            .read()
+            .map(|instances| instances.keys().copied().collect())
+            .unwrap_or_default();
+        for id in ids {
+            let _ = self.destroy_entity_instance(id);
+        }
         self.disable();
     }
 }
@@ -1482,12 +1920,12 @@ impl LoadedPlugin {
         self.enabled = false;
     }
 
-    unsafe fn open(path: &Path, host: *const DfHostApiV14) -> Result<Self, String> {
+    unsafe fn open(path: &Path, host: *const DfHostApiV15) -> Result<Self, String> {
         // SAFETY: loading native plugins is the purpose of this trusted plugin runtime.
         let library = unsafe { Library::new(path) }
             .map_err(|err| format!("load {}: {err}", path.display()))?;
-        // SAFETY: symbol name and function signature are fixed by ABI v2.
-        let entry: Symbol<DfPluginEntryV2Fn> = unsafe { library.get(b"df_plugin_entry_v2\0") }
+        // SAFETY: symbol name and function signature are fixed by ABI v3.
+        let entry: Symbol<DfPluginEntryV3Fn> = unsafe { library.get(b"df_plugin_entry_v3\0") }
             .map_err(|err| format!("load entry from {}: {err}", path.display()))?;
         // SAFETY: entry has no arguments and returns a static API descriptor.
         let api_ptr = unsafe { entry() };
@@ -1502,7 +1940,7 @@ impl LoadedPlugin {
                 DF_ABI_VERSION
             ));
         }
-        if api.header.struct_size < size_of::<DfPluginApiV2>() as u32 {
+        if api.header.struct_size < size_of::<DfPluginApiV3>() as u32 {
             return Err(format!(
                 "{} returned a truncated plugin API",
                 path.display()
@@ -1738,7 +2176,7 @@ pub unsafe extern "C" fn df_runtime_create(
             return Err("null host API".to_owned());
         };
         if host_api.abi_version != DF_HOST_ABI_VERSION
-            || host_api.struct_size < size_of::<DfHostApiV14>() as u32
+            || host_api.struct_size < size_of::<DfHostApiV15>() as u32
         {
             return Err("incompatible host API".to_owned());
         }
@@ -1834,7 +2272,7 @@ pub unsafe extern "C" fn df_runtime_entity_type_count(runtime: *const DfRuntime)
 pub unsafe extern "C" fn df_runtime_entity_type_at(
     runtime: *const DfRuntime,
     index: u64,
-    out: *mut DfEntityTypeDescriptorV1,
+    out: *mut DfEntityTypeDescriptorV2,
 ) -> DfStatus {
     let (Some(runtime), Some(out)) = (unsafe { runtime.as_ref() }, unsafe { out.as_mut() }) else {
         return DF_STATUS_ERROR;
@@ -1842,8 +2280,237 @@ pub unsafe extern "C" fn df_runtime_entity_type_at(
     let Some(descriptor) = runtime.entity_types.get(index as usize) else {
         return DF_STATUS_ERROR;
     };
-    *out = *descriptor;
+    *out = descriptor.descriptor;
     DF_STATUS_OK
+}
+
+#[unsafe(no_mangle)]
+/// Adopts a plugin-owned custom entity value and returns a runtime instance ID.
+///
+/// # Safety
+/// `runtime` and `out` must be writable, and `opaque` must be a value allocated by the
+/// plugin that owns `type_key`. Ownership transfers only when this returns `DF_STATUS_OK`.
+pub unsafe extern "C" fn df_runtime_entity_adopt(
+    runtime: *mut DfRuntime,
+    type_key: u64,
+    opaque: u64,
+    out: *mut DfEntityInstanceId,
+) -> DfStatus {
+    let (Some(runtime), Some(out)) = (unsafe { runtime.as_ref() }, unsafe { out.as_mut() }) else {
+        return DF_STATUS_ERROR;
+    };
+    *out = 0;
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(entity_type) = runtime.entity_type(type_key) else {
+            return DF_STATUS_ERROR;
+        };
+        if opaque == 0
+            || runtime.call_entity_type(
+                entity_type,
+                dragonfly_plugin_sys::DF_ENTITY_OPERATION_ADOPT,
+                opaque,
+                ptr::null(),
+                ptr::null_mut(),
+            ) != DF_STATUS_OK
+        {
+            return DF_STATUS_ERROR;
+        }
+        let Some(instance) = runtime.register_entity_instance(entity_type, opaque) else {
+            return DF_STATUS_ERROR;
+        };
+        *out = instance;
+        DF_STATUS_OK
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+#[unsafe(no_mangle)]
+/// Loads a custom entity value from plugin-owned saved state.
+///
+/// # Safety
+/// Pointers and the byte view in `input` must remain valid for this synchronous call.
+pub unsafe extern "C" fn df_runtime_entity_load(
+    runtime: *mut DfRuntime,
+    type_key: u64,
+    input: *const DfEntityLoadInput,
+    out: *mut DfEntityInstanceId,
+) -> DfStatus {
+    let (Some(runtime), Some(input), Some(out)) = (
+        unsafe { runtime.as_ref() },
+        unsafe { input.as_ref() },
+        unsafe { out.as_mut() },
+    ) else {
+        return DF_STATUS_ERROR;
+    };
+    *out = 0;
+    if input.data.len > 16 << 20 || (input.data.len != 0 && input.data.data.is_null()) {
+        return DF_STATUS_ERROR;
+    }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(entity_type) = runtime.entity_type(type_key) else {
+            return DF_STATUS_ERROR;
+        };
+        let mut loaded = DfEntityLoadState::default();
+        if runtime.call_entity_type(
+            entity_type,
+            dragonfly_plugin_sys::DF_ENTITY_OPERATION_LOAD,
+            0,
+            ptr::from_ref(input).cast(),
+            ptr::from_mut(&mut loaded).cast(),
+        ) != DF_STATUS_OK
+            || loaded.instance == 0
+        {
+            return DF_STATUS_ERROR;
+        }
+        let Some(instance) = runtime.register_entity_instance(entity_type, loaded.instance) else {
+            let temporary = RuntimeEntityInstance {
+                plugin: entity_type.plugin,
+                local: entity_type.local,
+                opaque: loaded.instance,
+                lifecycle: Mutex::new(EntityInstanceLifecycle::Idle),
+            };
+            runtime.destroy_opaque(&temporary);
+            return DF_STATUS_ERROR;
+        };
+        *out = instance;
+        DF_STATUS_OK
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+#[unsafe(no_mangle)]
+/// Saves one live custom entity value into the caller's buffer.
+///
+/// # Safety
+/// `runtime` and `state` must point to live ABI-compatible values for this call.
+pub unsafe extern "C" fn df_runtime_entity_save(
+    runtime: *mut DfRuntime,
+    instance: DfEntityInstanceId,
+    state: *mut DfEntitySaveState,
+) -> DfStatus {
+    let (Some(runtime), Some(state)) = (unsafe { runtime.as_ref() }, unsafe { state.as_mut() })
+    else {
+        return DF_STATUS_ERROR;
+    };
+    if state.data.len > state.data.capacity
+        || (state.data.capacity != 0 && state.data.data.is_null())
+    {
+        return DF_STATUS_ERROR;
+    }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.call_entity_instance(
+            instance,
+            dragonfly_plugin_sys::DF_ENTITY_OPERATION_SAVE,
+            ptr::null(),
+            ptr::from_mut(state).cast(),
+        )
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
+}
+
+macro_rules! entity_operation {
+    ($name:ident, $operation:ident, $input:ty, $state:ty, $validate:expr, $after:expr) => {
+        #[unsafe(no_mangle)]
+        /// Dispatches an operation to one live custom entity value.
+        ///
+        /// # Safety
+        /// All pointers and nested views must remain valid for this synchronous call.
+        pub unsafe extern "C" fn $name(
+            runtime: *mut DfRuntime,
+            instance: DfEntityInstanceId,
+            input: *const $input,
+            state: *mut $state,
+        ) -> DfStatus {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.as_ref() },
+                unsafe { state.as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            if !($validate)(input, state) {
+                return DF_STATUS_ERROR;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let status = runtime.call_entity_instance(
+                    instance,
+                    dragonfly_plugin_sys::$operation,
+                    ptr::from_ref(input).cast(),
+                    ptr::from_mut(state).cast(),
+                );
+                if status != DF_STATUS_OK || !($validate)(input, state) {
+                    return DF_STATUS_ERROR;
+                }
+                ($after)(runtime, input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR)
+        }
+    };
+}
+
+entity_operation!(
+    df_runtime_entity_tick,
+    DF_ENTITY_OPERATION_TICK,
+    DfEntityTickInput,
+    DfEntityTickState,
+    |input: &DfEntityTickInput, _state: &DfEntityTickState| input.entity.generation != 0,
+    |_runtime: &DfRuntime, _input: &DfEntityTickInput, _state: &mut DfEntityTickState| DF_STATUS_OK
+);
+entity_operation!(
+    df_runtime_entity_hurt,
+    DF_ENTITY_OPERATION_HURT,
+    DfEntityHurtInput,
+    DfEntityHurtState,
+    |input: &DfEntityHurtInput, state: &DfEntityHurtState| input.entity.generation != 0
+        && input.health.is_finite()
+        && input.max_health.is_finite()
+        && state.damage.is_finite()
+        && unsafe { valid_damage_source(&input.source) },
+    |runtime: &DfRuntime, input: &DfEntityHurtInput, state: &mut DfEntityHurtState| runtime
+        .handle_entity_hurt(input, state)
+);
+entity_operation!(
+    df_runtime_entity_heal,
+    DF_ENTITY_OPERATION_HEAL,
+    DfEntityHealInput,
+    DfEntityHealState,
+    |input: &DfEntityHealInput, state: &DfEntityHealState| input.entity.generation != 0
+        && input.health.is_finite()
+        && input.max_health.is_finite()
+        && state.health.is_finite()
+        && unsafe { valid_healing_source(&input.source) },
+    |runtime: &DfRuntime, input: &DfEntityHealInput, state: &mut DfEntityHealState| runtime
+        .handle_entity_heal(input, state)
+);
+entity_operation!(
+    df_runtime_entity_death,
+    DF_ENTITY_OPERATION_DEATH,
+    DfEntityDeathInput,
+    DfEntityDeathState,
+    |input: &DfEntityDeathInput, _state: &DfEntityDeathState| input.entity.generation != 0
+        && input.health.is_finite()
+        && input.damage.is_finite()
+        && unsafe { valid_damage_source(&input.source) },
+    |runtime: &DfRuntime, input: &DfEntityDeathInput, state: &mut DfEntityDeathState| runtime
+        .handle_entity_death(input, state)
+);
+
+#[unsafe(no_mangle)]
+/// Destroys one runtime-owned custom entity instance.
+///
+/// # Safety
+/// `runtime` must point to a live runtime for this call.
+pub unsafe extern "C" fn df_runtime_entity_destroy(
+    runtime: *mut DfRuntime,
+    instance: DfEntityInstanceId,
+) -> DfStatus {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
+        return DF_STATUS_ERROR;
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.destroy_entity_instance(instance)
+    }))
+    .unwrap_or(DF_STATUS_ERROR)
 }
 
 #[unsafe(no_mangle)]
@@ -2297,6 +2964,68 @@ pub unsafe extern "C" fn df_runtime_handle_event(
                 DF_STATUS_ERROR
             }
         }
+        dragonfly_plugin_sys::DF_EVENT_ENTITY_HURT => {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.cast::<DfEntityHurtInput>().as_ref() },
+                unsafe { state.cast::<DfEntityHurtState>().as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            if input.entity.generation == 0
+                || !input.health.is_finite()
+                || !input.max_health.is_finite()
+                || !state.damage.is_finite()
+                || !unsafe { valid_damage_source(&input.source) }
+            {
+                return DF_STATUS_ERROR;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime.handle_entity_hurt(input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR)
+        }
+        dragonfly_plugin_sys::DF_EVENT_ENTITY_HEAL => {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.cast::<DfEntityHealInput>().as_ref() },
+                unsafe { state.cast::<DfEntityHealState>().as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            if input.entity.generation == 0
+                || !input.health.is_finite()
+                || !input.max_health.is_finite()
+                || !state.health.is_finite()
+                || !unsafe { valid_healing_source(&input.source) }
+            {
+                return DF_STATUS_ERROR;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime.handle_entity_heal(input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR)
+        }
+        dragonfly_plugin_sys::DF_EVENT_ENTITY_DEATH => {
+            let (Some(runtime), Some(input), Some(state)) = (
+                unsafe { runtime.as_ref() },
+                unsafe { input.cast::<DfEntityDeathInput>().as_ref() },
+                unsafe { state.cast::<DfEntityDeathState>().as_mut() },
+            ) else {
+                return DF_STATUS_ERROR;
+            };
+            if input.entity.generation == 0
+                || !input.health.is_finite()
+                || !input.damage.is_finite()
+                || !unsafe { valid_damage_source(&input.source) }
+            {
+                return DF_STATUS_ERROR;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime.handle_entity_death(input, state)
+            }))
+            .unwrap_or(DF_STATUS_ERROR)
+        }
         _ => DF_STATUS_ERROR,
     }
 }
@@ -2748,9 +3477,9 @@ mod tests {
             std::env::temp_dir().join(format!("dragonfly-runtime-{}", std::process::id()));
         let _ = fs::remove_dir_all(&directory);
         fs::create_dir_all(&directory).unwrap();
-        let host = DfHostApiV14 {
+        let host = DfHostApiV15 {
             abi_version: DF_HOST_ABI_VERSION,
-            struct_size: size_of::<DfHostApiV14>() as u32,
+            struct_size: size_of::<DfHostApiV15>() as u32,
             context: 0,
             player_text: None,
             player_title: None,
@@ -2825,6 +3554,8 @@ mod tests {
         let mut runtime = DfRuntime {
             plugins: Vec::new(),
             entity_types: Vec::new(),
+            entity_instances: RwLock::new(HashMap::new()),
+            next_entity_instance: AtomicU64::new(1),
             commands: Vec::new(),
             subscriptions: 0,
         };
@@ -2856,6 +3587,8 @@ mod tests {
         let mut runtime = DfRuntime {
             plugins: Vec::new(),
             entity_types: Vec::new(),
+            entity_instances: RwLock::new(HashMap::new()),
+            next_entity_instance: AtomicU64::new(1),
             commands: Vec::new(),
             subscriptions: 0,
         };
@@ -2906,6 +3639,8 @@ mod tests {
         let mut runtime = DfRuntime {
             plugins: Vec::new(),
             entity_types: Vec::new(),
+            entity_instances: RwLock::new(HashMap::new()),
+            next_entity_instance: AtomicU64::new(1),
             commands: Vec::new(),
             subscriptions: 0,
         };
@@ -2956,6 +3691,8 @@ mod tests {
         let mut runtime = DfRuntime {
             plugins: Vec::new(),
             entity_types: Vec::new(),
+            entity_instances: RwLock::new(HashMap::new()),
+            next_entity_instance: AtomicU64::new(1),
             commands: Vec::new(),
             subscriptions: 0,
         };
@@ -3070,7 +3807,7 @@ mod tests {
     fn validates_entity_type_descriptors() {
         let save_id = b"example:marker";
         let network_id = b"minecraft:armor_stand";
-        let mut descriptor = DfEntityTypeDescriptorV1 {
+        let mut descriptor = DfEntityTypeDescriptorV2 {
             save_id: DfStringView {
                 data: save_id.as_ptr(),
                 len: save_id.len() as u64,
@@ -3089,6 +3826,16 @@ mod tests {
                 y: 1.975,
                 z: 0.25,
             },
+            type_key: 0,
+            family: dragonfly_plugin_sys::DF_ENTITY_FAMILY_BASE,
+            callback_flags: 0,
+            initial_health: 0.0,
+            max_health: 0.0,
+            speed: 0.0,
+            state_version: 0,
+            physics_flags: 0,
+            gravity: 0.0,
+            drag: 0.0,
         };
         assert!(valid_entity_type_descriptor(&descriptor).is_ok());
 
@@ -3121,5 +3868,41 @@ mod tests {
         assert!(unsafe { abi_slice(values.as_ptr(), MAX_ENTITY_TYPES + 1) }.is_err());
         assert!(unsafe { abi_slice::<u8>(ptr::null(), 1) }.is_err());
         assert!(unsafe { abi_slice::<u8>(ptr::null(), 0) }.is_ok());
+    }
+
+    #[test]
+    fn entity_destroy_during_call_is_completed_by_call_exit() {
+        let instance = RuntimeEntityInstance {
+            plugin: 0,
+            local: 0,
+            opaque: 1,
+            lifecycle: Mutex::new(EntityInstanceLifecycle::Idle),
+        };
+
+        assert!(instance.begin_call());
+        assert!(!instance.request_destroy());
+        assert!(instance.finish_call());
+        assert!(!instance.begin_call());
+    }
+
+    #[test]
+    fn concurrent_entity_destroy_is_completed_exactly_once() {
+        let instance = Arc::new(RuntimeEntityInstance {
+            plugin: 0,
+            local: 0,
+            opaque: 1,
+            lifecycle: Mutex::new(EntityInstanceLifecycle::Idle),
+        });
+
+        assert!(instance.begin_call());
+        let destroy_instance = Arc::clone(&instance);
+        assert!(
+            !std::thread::spawn(move || destroy_instance.request_destroy())
+                .join()
+                .unwrap()
+        );
+        assert!(instance.finish_call());
+        assert!(!instance.finish_call());
+        assert!(!instance.request_destroy());
     }
 }

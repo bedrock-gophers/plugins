@@ -259,9 +259,23 @@ func (m *WorldManager) newEntityHandle(tx *world.Tx, value native.EntitySpawn) (
 		}
 	case native.EntityCustom:
 		entityType, found := tx.World().EntityRegistry().Lookup(value.Type)
-		foreign, owned := entityType.(*foreignBaseEntityType)
-		if found && owned {
-			handle = opts.New(foreign, foreignBaseEntityConfig{})
+		if found && isForeignEntityType(entityType) {
+			instance := native.EntityInstanceID(0)
+			if advanced, ok := foreignAdvancedType(entityType); ok && advanced.services.runtime != nil {
+				if value.CustomInstance == 0 {
+					return nil, false
+				}
+				adopted, adoptErr := advanced.services.runtime.EntityAdopt(advanced.definition.TypeKey, value.CustomInstance)
+				if adoptErr != nil || adopted == 0 {
+					return nil, false
+				}
+				instance = adopted
+			}
+			handle = opts.New(entityType, foreignEntityConfigFor(entityType, instance))
+			if handle == nil && instance != 0 {
+				advanced, _ := foreignAdvancedType(entityType)
+				advanced.services.runtime.EntityDestroy(instance)
+			}
 		}
 	default:
 		owner, ok := m.entityHandles.Resolve(value.Owner, tx)

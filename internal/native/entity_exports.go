@@ -18,7 +18,7 @@ const (
 )
 
 //export bg_go_world_entity_spawn
-func bg_go_world_entity_spawn(context C.uint64_t, invocation C.DfInvocationId, worldID C.DfWorldId, view *C.DfEntitySpawnViewV2, output *C.DfEntityId) C.DfStatus {
+func bg_go_world_entity_spawn(context C.uint64_t, invocation C.DfInvocationId, worldID C.DfWorldId, view *C.DfEntitySpawnViewV3, output *C.DfEntityId) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
 	if !ok || view == nil || output == nil {
 		return C.DF_STATUS_ERROR
@@ -36,6 +36,7 @@ func bg_go_world_entity_spawn(context C.uint64_t, invocation C.DfInvocationId, w
 		Velocity: nativeEntityVec3(view.options.velocity), NameTag: string(nameTag), Text: string(text), Type: string(customType),
 		Owner: entityID(view.owner), Damage: float64(view.damage), FuseMilliseconds: uint64(view.fuse_milliseconds),
 		Experience: int32(view.experience), Potion: uint32(view.potion), Punch: int32(view.punch_level), Piercing: int32(view.piercing_level),
+		CustomInstance: uint64(view.custom_instance),
 	}
 	if view.item != nil {
 		item, ok := copyItemStackView(view.item)

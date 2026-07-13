@@ -122,6 +122,100 @@ const (
 type EntityTypeDefinition struct {
 	SaveID, NetworkID string
 	Min, Max          Vec3
+	TypeKey           uint64
+	Family            EntityFamily
+	CallbackFlags     uint32
+	InitialHealth     float64
+	MaxHealth         float64
+	Speed             float64
+	StateVersion      uint32
+	Physics           *EntityPhysics
+}
+
+type EntityFamily uint32
+
+const (
+	EntityFamilyBase EntityFamily = iota
+	EntityFamilyTicking
+	EntityFamilyLiving
+)
+
+const (
+	EntityCallbackState uint32 = 1 << iota
+	EntityCallbackTick
+	EntityCallbackHurt
+	EntityCallbackHeal
+	EntityCallbackDeath
+)
+
+type EntityPhysics struct {
+	Gravity, Drag     float64
+	DragBeforeGravity bool
+}
+
+// EntityInstanceID identifies plugin-owned state for one custom entity.
+// It is opaque outside the native runtime and is never reused by that runtime.
+type EntityInstanceID uint64
+
+type EntityLoadInput struct {
+	Data    []byte
+	Version uint32
+}
+
+type EntitySaveOutput struct {
+	Data    []byte
+	Version uint32
+}
+
+type EntityTickInput struct {
+	Invocation InvocationID
+	Entity     EntityID
+	Current    int64
+	Age        time.Duration
+}
+
+type EntityTickOutput struct {
+	Despawn bool
+}
+
+type EntityHurtInput struct {
+	Invocation InvocationID
+	Entity     EntityID
+	Source     DamageSource
+	Health     float64
+	MaxHealth  float64
+	Damage     float64
+}
+
+type EntityHurtOutput struct {
+	Damage    float64
+	Cancelled bool
+}
+
+type EntityHealInput struct {
+	Invocation InvocationID
+	Entity     EntityID
+	Source     HealingSource
+	Health     float64
+	MaxHealth  float64
+	Amount     float64
+}
+
+type EntityHealOutput struct {
+	Amount    float64
+	Cancelled bool
+}
+
+type EntityDeathInput struct {
+	Invocation InvocationID
+	Entity     EntityID
+	Source     DamageSource
+	Health     float64
+	Damage     float64
+}
+
+type EntityDeathOutput struct {
+	Cancelled bool
 }
 
 const (
@@ -148,6 +242,7 @@ type EntitySpawn struct {
 	Potion                      uint32
 	Item                        *ItemStack
 	Block                       *WorldBlock
+	CustomInstance              uint64
 }
 
 type EntityState struct {

@@ -2,7 +2,7 @@
 
 use crate::{Player, bytes_view, host_api};
 use core::{ffi::c_void, marker::PhantomData};
-use serde_json::{Value, json};
+pub use serde_json::{Value, json};
 
 mod private {
     pub trait Sealed {}
@@ -14,6 +14,35 @@ pub trait Form: private::Sealed + Send + 'static {
     fn request_json(&self) -> Vec<u8>;
     #[doc(hidden)]
     fn parse_response(&self, data: &[u8]) -> Option<Self::Response>;
+}
+
+/// An explicit escape hatch for forms not represented by the typed API.
+///
+/// Prefer [`Menu`], [`Modal`], or [`Custom`]. `Raw` exposes the Bedrock JSON
+/// request and response directly for experimental or custom form shapes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Raw {
+    request: Value,
+}
+
+impl Raw {
+    pub fn new(request: Value) -> Self {
+        Self { request }
+    }
+}
+
+impl private::Sealed for Raw {}
+
+impl Form for Raw {
+    type Response = Value;
+
+    fn request_json(&self) -> Vec<u8> {
+        serde_json::to_vec(&self.request).unwrap_or_default()
+    }
+
+    fn parse_response(&self, data: &[u8]) -> Option<Self::Response> {
+        serde_json::from_slice(data).ok()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -577,19 +606,121 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn menu_and_custom_round_trip() {
+    fn raw_form_round_trips_json_values() {
+        let form = Raw::new(json!({
+            "type": "modal",
+            "title": "Raw",
+            "content": "Escape hatch",
+            "button1": "Yes",
+            "button2": "No"
+        }));
+        assert_eq!(
+            serde_json::from_slice::<Value>(&form.request_json()).ok(),
+            Some(json!({
+                "type": "modal",
+                "title": "Raw",
+                "content": "Escape hatch",
+                "button1": "Yes",
+                "button2": "No"
+            }))
+        );
+        assert_eq!(
+            form.parse_response(br#"{"accepted":true}"#),
+            Some(json!({"accepted": true}))
+        );
+        assert_eq!(form.parse_response(b"not-json"), None);
+    }
+
+    #[test]
+    fn menu_response_returns_a_typed_button_id() {
         let mut menu = Menu::new("T").body("B");
+        menu.header("Header").divider().label("Label");
         let id = menu.button(Button::new("Go").image("https://example.com/a.png"));
+        assert_eq!(
+            serde_json::from_slice::<Value>(&menu.request_json()).ok(),
+            Some(json!({
+                "type": "form",
+                "title": "T",
+                "content": "B",
+                "elements": [
+                    {"type": "header", "text": "Header"},
+                    {"type": "divider", "text": ""},
+                    {"type": "label", "text": "Label"},
+                    {"type": "button", "text": "Go", "image": {"type": "url", "data": "https://example.com/a.png"}}
+                ]
+            }))
+        );
         assert_eq!(menu.parse_response(b"0").map(|v| v.selected()), Some(id));
+        assert_eq!(menu.parse_response(b"1"), None);
+    }
+
+    #[test]
+    fn modal_response_returns_a_typed_choice() {
+        let modal = Modal::yes_no("T").body("B");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&modal.request_json()).ok(),
+            Some(json!({
+                "type": "modal", "title": "T", "content": "B",
+                "button1": "gui.yes", "button2": "gui.no"
+            }))
+        );
+        assert_eq!(
+            modal.parse_response(b"true").map(|v| v.choice()),
+            Some(ModalChoice::First)
+        );
+        assert_eq!(
+            modal.parse_response(b"false").map(|v| v.choice()),
+            Some(ModalChoice::Second)
+        );
+        assert_eq!(modal.parse_response(b"0"), None);
+    }
+
+    #[test]
+    fn custom_response_returns_each_field_type() {
         let mut custom = Custom::new("C");
+        custom.header("Profile");
+        custom.label("Typed");
+        custom.divider();
         let name = custom.input(Input::new("Name"));
+        let enabled = custom.toggle(Toggle::new("Enabled", false));
+        let amount = custom.slider(Slider::new("Amount", 0.0, 10.0, 0.5, 0.0));
         let choice = custom.dropdown(Dropdown::new("Pick", ["A", "B"], 0));
-        let response = custom.parse_response(br#"["alex",1]"#);
+        let step = custom.step_slider(StepSlider::new("Step", ["A", "B"], 0));
+        assert_eq!(
+            serde_json::from_slice::<Value>(&custom.request_json()).ok(),
+            Some(json!({
+                "type": "custom_form", "title": "C", "content": [
+                    {"type": "header", "text": "Profile"},
+                    {"type": "label", "text": "Typed"},
+                    {"type": "divider", "text": ""},
+                    {"type": "input", "text": "Name", "default": "", "placeholder": ""},
+                    {"type": "toggle", "text": "Enabled", "default": false},
+                    {"type": "slider", "text": "Amount", "min": 0.0, "max": 10.0, "step": 0.5, "default": 0.0},
+                    {"type": "dropdown", "text": "Pick", "options": ["A", "B"], "default": 0},
+                    {"type": "step_slider", "text": "Step", "steps": ["A", "B"], "default": 0}
+                ]
+            }))
+        );
+        let response = custom.parse_response(br#"[null,null,null,"alex",true,2.5,1,0]"#);
         assert_eq!(
             response.as_ref().and_then(|r| r.get(name)),
             Some("alex".to_owned())
         );
-        assert_eq!(response.and_then(|r| r.get(choice)), Some(1));
+        assert_eq!(response.as_ref().and_then(|r| r.get(enabled)), Some(true));
+        assert_eq!(response.as_ref().and_then(|r| r.get(amount)), Some(2.5));
+        assert_eq!(response.as_ref().and_then(|r| r.get(choice)), Some(1));
+        assert_eq!(response.and_then(|r| r.get(step)), Some(0));
+        assert!(
+            custom
+                .parse_response(br#"[null,null,null,"alex",true,11,1,0]"#)
+                .is_none()
+        );
+        assert!(
+            custom
+                .parse_response(br#"[null,null,null,"alex",true,2.5,2,0]"#)
+                .is_none()
+        );
     }
 }

@@ -242,8 +242,8 @@ macro_rules! block_sounds {
         }
 
         impl $name {
-            pub const fn new(block: block::Block) -> Self {
-                Self { block }
+            pub fn new(block: impl Into<block::Block>) -> Self {
+                Self { block: block.into() }
             }
 
             pub const fn block(&self) -> &block::Block {
@@ -571,13 +571,13 @@ mod tests {
 
     #[test]
     fn block_view_lives_for_callback() {
-        let sound = DoorOpen::new(block::new("minecraft:oak_door").with_property("open_bit", true));
+        let sound = DoorOpen::new(block::WoodenDoor::new().with_open_bit(true));
         let result = sound.encode().with_raw(|raw| {
             assert!(!raw.block.is_null());
             let block = unsafe { &*raw.block };
             assert_eq!(
                 unsafe { crate::string_view(block.identifier) },
-                "minecraft:oak_door"
+                "minecraft:wooden_door"
             );
             assert_ne!(block.properties_nbt.len, 0);
         });

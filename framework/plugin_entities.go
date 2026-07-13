@@ -66,7 +66,14 @@ func (e *foreignBaseEntity) Close() error {
 	return nil
 }
 
-func buildEntityRegistry(base world.EntityRegistry, definitions []native.EntityTypeDefinition) (world.EntityRegistry, error) {
+func buildEntityRegistry(base world.EntityRegistry, definitions []native.EntityTypeDefinition, configured ...foreignEntityServices) (world.EntityRegistry, error) {
+	var services foreignEntityServices
+	if len(configured) != 0 {
+		services = configured[0]
+	}
+	if services.entities == nil && services.players != nil {
+		services.entities = services.players.EntityRegistry()
+	}
 	if len(base.Types()) == 0 {
 		base = entity.DefaultRegistry
 	}
@@ -91,10 +98,17 @@ func buildEntityRegistry(base world.EntityRegistry, definitions []native.EntityT
 			return world.EntityRegistry{}, fmt.Errorf("duplicate entity type %q", definition.SaveID)
 		}
 		seen[definition.SaveID] = struct{}{}
-		types = append(types, &foreignBaseEntityType{
-			saveID: definition.SaveID, networkID: definition.NetworkID,
-			bbox: cube.Box(definition.Min.X, definition.Min.Y, definition.Min.Z, definition.Max.X, definition.Max.Y, definition.Max.Z),
-		})
+		bbox := cube.Box(definition.Min.X, definition.Min.Y, definition.Min.Z, definition.Max.X, definition.Max.Y, definition.Max.Z)
+		switch definition.Family {
+		case native.EntityFamilyBase:
+			types = append(types, &foreignBaseEntityType{saveID: definition.SaveID, networkID: definition.NetworkID, bbox: bbox})
+		case native.EntityFamilyTicking:
+			types = append(types, &foreignTickingEntityType{foreignAdvancedEntityType: &foreignAdvancedEntityType{definition: definition, bbox: bbox, services: services}})
+		case native.EntityFamilyLiving:
+			types = append(types, &foreignLivingEntityType{foreignAdvancedEntityType: &foreignAdvancedEntityType{definition: definition, bbox: bbox, services: services}})
+		default:
+			return world.EntityRegistry{}, fmt.Errorf("invalid family for custom entity %q", definition.SaveID)
+		}
 	}
 	return base.Config().New(types), nil
 }

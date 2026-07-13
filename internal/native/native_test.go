@@ -2,6 +2,7 @@ package native
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -60,12 +61,74 @@ func TestRuntimeReadsStaticallyRegisteredEntityTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := EntityTypeDefinition{
+	want := []EntityTypeDefinition{{
 		SaveID: "entity-command-plugin:marker", NetworkID: "minecraft:armor_stand",
-		Min: Vec3{X: -0.25, Z: -0.25}, Max: Vec3{X: 0.25, Y: 1.975, Z: 0.25},
+		Min: Vec3{X: -0.25, Z: -0.25}, Max: Vec3{X: 0.25, Y: 1.975, Z: 0.25}, TypeKey: 1,
+	}, {
+		SaveID: "entity-command-plugin:training_dummy", NetworkID: "minecraft:iron_golem",
+		Min: Vec3{X: -0.7, Z: -0.7}, Max: Vec3{X: 0.7, Y: 2.7, Z: 0.7}, TypeKey: 2,
+		Family: EntityFamilyLiving, CallbackFlags: EntityCallbackState | EntityCallbackHurt,
+		InitialHealth: 40, MaxHealth: 40, Speed: 0.1, StateVersion: 1,
+		Physics: &EntityPhysics{Gravity: 0.08, Drag: 0.02, DragBeforeGravity: true},
+	}}
+	if !reflect.DeepEqual(types, want) {
+		t.Fatalf("EntityTypes() = %#v, want %#v", types, want)
 	}
-	if !reflect.DeepEqual(types, []EntityTypeDefinition{want}) {
-		t.Fatalf("EntityTypes() = %#v, want %#v", types, []EntityTypeDefinition{want})
+}
+
+func TestValidEntityTypeDefinition(t *testing.T) {
+	base := EntityTypeDefinition{
+		SaveID: "example:marker", NetworkID: "minecraft:armor_stand", TypeKey: 1,
+		Min: Vec3{X: -0.25, Z: -0.25}, Max: Vec3{X: 0.25, Y: 1.0, Z: 0.25},
+	}
+	ticking := base
+	ticking.Family = EntityFamilyTicking
+	ticking.CallbackFlags = EntityCallbackState | EntityCallbackTick
+	ticking.StateVersion = 1
+	ticking.Physics = &EntityPhysics{Gravity: 0.08, Drag: 0.02, DragBeforeGravity: true}
+	living := ticking
+	living.Family = EntityFamilyLiving
+	living.CallbackFlags |= EntityCallbackHurt | EntityCallbackHeal | EntityCallbackDeath
+	living.InitialHealth, living.MaxHealth, living.Speed = 20, 40, 0.1
+
+	for name, definition := range map[string]EntityTypeDefinition{
+		"base": base, "ticking": ticking, "living": living,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !validEntityTypeDefinition(definition) {
+				t.Fatalf("valid definition rejected: %#v", definition)
+			}
+		})
+	}
+
+	invalid := map[string]EntityTypeDefinition{
+		"zero type key":    func() EntityTypeDefinition { value := base; value.TypeKey = 0; return value }(),
+		"unknown family":   func() EntityTypeDefinition { value := base; value.Family = 99; return value }(),
+		"unknown callback": func() EntityTypeDefinition { value := ticking; value.CallbackFlags |= 1 << 31; return value }(),
+		"base callback":    func() EntityTypeDefinition { value := base; value.CallbackFlags = EntityCallbackTick; return value }(),
+		"base physics":     func() EntityTypeDefinition { value := base; value.Physics = &EntityPhysics{}; return value }(),
+		"ticking hurt":     func() EntityTypeDefinition { value := ticking; value.CallbackFlags |= EntityCallbackHurt; return value }(),
+		"state version unused": func() EntityTypeDefinition {
+			value := ticking
+			value.CallbackFlags &^= EntityCallbackState
+			return value
+		}(),
+		"living no health": func() EntityTypeDefinition { value := living; value.MaxHealth = 0; return value }(),
+		"health over max":  func() EntityTypeDefinition { value := living; value.InitialHealth = 41; return value }(),
+		"negative speed":   func() EntityTypeDefinition { value := living; value.Speed = -0.1; return value }(),
+		"infinite physics": func() EntityTypeDefinition { value := ticking; value.Physics.Gravity = math.Inf(1); return value }(),
+		"invalid drag": func() EntityTypeDefinition {
+			value := ticking
+			value.Physics = &EntityPhysics{Gravity: 0.08, Drag: 1.1}
+			return value
+		}(),
+	}
+	for name, definition := range invalid {
+		t.Run(name, func(t *testing.T) {
+			if validEntityTypeDefinition(definition) {
+				t.Fatalf("invalid definition accepted: %#v", definition)
+			}
+		})
 	}
 }
 
@@ -1071,17 +1134,52 @@ func TestEntityCommandHostCalls(t *testing.T) {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
 		}
 	}
+	output, err := runtime.HandleCommand(command.Index, CommandInput{
+		Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: "dummy",
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Spawner"}},
+	})
+	if err != nil || output.Failed {
+		t.Fatalf("dummy: output=%+v error=%v", output, err)
+	}
 	if host.entityStateID != (EntityID{UUID: player.UUID, Generation: player.Generation}) {
 		t.Fatalf("state entity = %#v", host.entityStateID)
 	}
-	if len(host.entitySpawns) != 2 || host.entitySpawns[0].Kind != EntityText || host.entitySpawns[0].Text != "Native Rust entity" || host.entitySpawns[0].Position.Y != 65.5 {
+	if len(host.entitySpawns) != 3 || host.entitySpawns[0].Kind != EntityText || host.entitySpawns[0].Text != "Native Rust entity" || host.entitySpawns[0].Position.Y != 65.5 {
 		t.Fatalf("text spawn = %#v", host.entitySpawns)
 	}
 	item := host.entitySpawns[1].Item
 	if item == nil || item.Identifier != "minecraft:diamond_sword" || item.Count != 1 {
 		t.Fatalf("item spawn = %#v", host.entitySpawns[1])
 	}
-	if len(host.texts) == 0 || host.texts[len(host.texts)-1] != "1 entities, 1 players." {
+	custom := host.entitySpawns[2]
+	if custom.Kind != EntityCustom || custom.Type != "entity-command-plugin:training_dummy" || custom.CustomInstance == 0 {
+		t.Fatalf("custom spawn = %#v", custom)
+	}
+	types, err := runtime.EntityTypes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dummy := slices.IndexFunc(types, func(definition EntityTypeDefinition) bool { return definition.SaveID == custom.Type })
+	if dummy < 0 {
+		t.Fatal("training dummy entity type missing")
+	}
+	instance, err := runtime.EntityAdopt(types[dummy].TypeKey, custom.CustomInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.EntityDestroy(instance)
+	hurt, err := runtime.EntityHurt(instance, EntityHurtInput{
+		Entity: EntityID{UUID: [16]byte{9}, Generation: 1}, Source: DamageSource{Kind: DamageSourceFall},
+		Health: 40, MaxHealth: 40, Damage: 8,
+	})
+	if err != nil || hurt.Cancelled || hurt.Damage != 5 {
+		t.Fatalf("hurt=%+v error=%v", hurt, err)
+	}
+	saved, err := runtime.EntitySave(instance)
+	if err != nil || saved.Version != 1 || len(saved.Data) == 0 {
+		t.Fatalf("saved=%+v error=%v", saved, err)
+	}
+	if !slices.Contains(host.texts, "1 entities, 1 players.") {
 		t.Fatalf("list message = %q", host.texts)
 	}
 }

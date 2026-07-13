@@ -42,7 +42,7 @@ impl Plugin for WorldCommand {
             context.source().message("Overworld is unavailable.");
             return;
         };
-        world.set_block(position, &block::new("minecraft:stone"));
+        world.set_block(position, block::Stone);
         context.source().message("Block queued.");
     }
 

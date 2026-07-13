@@ -135,8 +135,10 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(block: block::Block) -> Self {
-        Self { block }
+    pub fn new(block: impl Into<block::Block>) -> Self {
+        Self {
+            block: block.into(),
+        }
     }
 
     pub const fn block(&self) -> &block::Block {
@@ -656,7 +658,7 @@ mod tests {
 
     #[test]
     fn block_view_keeps_property_bytes_alive() {
-        let block = block::new("minecraft:oak_door").with_property("open_bit", true);
+        let block = block::new(block::WoodenDoor::new().with_open_bit(true));
         let source: Source<'_> = Block::new(block.clone()).into();
         source
             .with_raw(|raw| {

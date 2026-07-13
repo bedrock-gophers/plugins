@@ -48,6 +48,7 @@ endif
 
 generate:
 	go run ./cmd/abi-gen -root .
+	go run ./cmd/block-gen -root .
 	cargo fmt --all
 	cargo fmt --manifest-path $(MOVEMENT_MANIFEST)
 	cargo fmt --manifest-path $(CHAT_MANIFEST)
@@ -65,6 +66,7 @@ generate:
 
 check-generated:
 	go run ./cmd/abi-gen -root . -check
+	go run ./cmd/block-gen -root . -check
 	cargo fmt --all -- --check
 	cargo fmt --manifest-path $(MOVEMENT_MANIFEST) -- --check
 	cargo fmt --manifest-path $(CHAT_MANIFEST) -- --check

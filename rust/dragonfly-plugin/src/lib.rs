@@ -65,9 +65,12 @@ pub mod Event {
     pub use super::PlayerTeleportEventData as PlayerTeleport;
     pub use super::PlayerToggleSneakEventData as PlayerToggleSneak;
     pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
+    pub use crate::entity::Death as EntityDeath;
+    pub use crate::entity::Heal as EntityHeal;
+    pub use crate::entity::Hurt as EntityHurt;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV14> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV15> =
     AtomicPtr::new(core::ptr::null_mut());
 
 std::thread_local! {
@@ -116,7 +119,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV14) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV15) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -1435,7 +1438,7 @@ fn with_skin_view<R>(
 }
 
 fn read_skin_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV14,
+    host: &dragonfly_plugin_sys::DfHostApiV15,
     invocation: dragonfly_plugin_sys::DfInvocationId,
     snapshot: u64,
     info: dragonfly_plugin_sys::DfSkinInfo,
@@ -2165,13 +2168,13 @@ fn slice_pointer<T>(value: &[T]) -> *const T {
     }
 }
 
-fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV14> {
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV15> {
     unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
 }
 
 fn read_item_stack(
     open: impl FnOnce(
-        &dragonfly_plugin_sys::DfHostApiV14,
+        &dragonfly_plugin_sys::DfHostApiV15,
         *mut u64,
         *mut dragonfly_plugin_sys::DfItemStackInfo,
     ) -> Option<dragonfly_plugin_sys::DfStatus>,
@@ -2193,7 +2196,7 @@ fn read_item_stack(
 }
 
 fn read_item_stack_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV14,
+    host: &dragonfly_plugin_sys::DfHostApiV15,
     invocation: dragonfly_plugin_sys::DfInvocationId,
     snapshot_id: u64,
     info: dragonfly_plugin_sys::DfItemStackInfo,
@@ -3493,6 +3496,9 @@ pub trait Plugin: Default + Send + Sync + 'static {
     fn on_change_world(&self, _event: &Event::PlayerChangeWorld<'_>) {}
     fn on_respawn(&self, _event: &mut Event::PlayerRespawn<'_>) {}
     fn on_skin_change(&self, _event: &mut Event::PlayerSkinChange<'_>) {}
+    fn on_entity_hurt(&self, _event: &mut Event::EntityHurt<'_>) {}
+    fn on_entity_heal(&self, _event: &mut Event::EntityHeal<'_>) {}
+    fn on_entity_death(&self, _event: &mut Event::EntityDeath<'_>) {}
     fn commands(&self) -> &'static [Command] {
         &[]
     }

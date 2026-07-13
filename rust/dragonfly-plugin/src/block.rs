@@ -40,6 +40,16 @@ impl From<&str> for Property {
     }
 }
 
+/// An owned block state returned by the host.
+///
+/// Built-in states are changed through their generated typed values. Raw state mutation is kept
+/// on [`Custom`] so a built-in block cannot silently bypass its generated state types.
+///
+/// ```compile_fail
+/// use dragonfly::block;
+///
+/// let _ = block::new(block::Sand).with_property("invented", 1i32);
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Block {
     identifier: String,
@@ -47,10 +57,23 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(identifier: impl Into<String>) -> Self {
+    fn new(identifier: impl Into<String>) -> Self {
         Self {
             identifier: identifier.into(),
             properties: BTreeMap::new(),
+        }
+    }
+
+    fn from_properties<const N: usize>(
+        identifier: impl Into<String>,
+        properties: [(&str, Property); N],
+    ) -> Self {
+        Self {
+            identifier: identifier.into(),
+            properties: properties
+                .into_iter()
+                .map(|(name, value)| (name.to_owned(), value))
+                .collect(),
         }
     }
 
@@ -70,12 +93,16 @@ impl Block {
         self.properties.get(name)
     }
 
-    pub fn with_property(mut self, name: impl Into<String>, value: impl Into<Property>) -> Self {
-        self.properties.insert(name.into(), value.into());
+    pub(crate) fn with_property(
+        mut self,
+        name: impl Into<String>,
+        value: impl Into<Property>,
+    ) -> Self {
+        self.set_property(name, value);
         self
     }
 
-    pub fn set_property(&mut self, name: impl Into<String>, value: impl Into<Property>) {
+    pub(crate) fn set_property(&mut self, name: impl Into<String>, value: impl Into<Property>) {
         self.properties.insert(name.into(), value.into());
     }
 
@@ -140,17 +167,70 @@ impl Default for Block {
     }
 }
 
-pub fn new(identifier: impl Into<String>) -> Block {
-    Block::new(identifier)
+impl From<&Block> for Block {
+    fn from(value: &Block) -> Self {
+        value.clone()
+    }
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Custom {
+    block: Block,
+}
+
+impl Custom {
+    pub fn new(identifier: impl Into<String>) -> Self {
+        Self {
+            block: Block::new(identifier),
+        }
+    }
+
+    pub fn with_property(mut self, name: impl Into<String>, value: impl Into<Property>) -> Self {
+        self.block = self.block.with_property(name, value);
+        self
+    }
+}
+
+impl From<Custom> for Block {
+    fn from(value: Custom) -> Self {
+        value.block
+    }
+}
+
+pub fn new(block: impl Into<Block>) -> Block {
+    block.into()
+}
+
+include!("blocks_generated.rs");
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    fn typed_blocks_convert_to_owned_states() {
+        let sand = new(Sand);
+        assert_eq!(sand.identifier(), "minecraft:sand");
+        assert!(sand.properties().is_empty());
+
+        let log = new(OakLog::new(PillarAxis::Z));
+        assert_eq!(log.identifier(), "minecraft:oak_log");
+        assert_eq!(
+            log.property("pillar_axis"),
+            Some(&Property::String("z".to_owned()))
+        );
+    }
+
+    #[test]
+    fn custom_is_the_identifier_escape_hatch() {
+        let custom = new(Custom::new("example:machine").with_property("active", true));
+        assert_eq!(custom.identifier(), "example:machine");
+        assert_eq!(custom.property("active"), Some(&Property::Bool(true)));
+    }
+
+    #[test]
     fn block_properties_round_trip() {
-        let block = new("minecraft:oak_door")
+        let block = new(Custom::new("minecraft:oak_door"))
             .with_property("open_bit", true)
             .with_property("direction", 2i32)
             .with_property("age", 7u8)

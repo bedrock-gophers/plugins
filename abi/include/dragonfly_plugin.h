@@ -8,8 +8,8 @@
 extern "C" {
 #endif
 
-#define DF_ABI_VERSION 2u
-#define DF_HOST_ABI_VERSION 14u
+#define DF_ABI_VERSION 3u
+#define DF_HOST_ABI_VERSION 15u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -98,9 +98,35 @@ typedef struct { DfStringView name; uint32_t kind; uint8_t data; } DfHealingSour
 typedef struct { DfEntityId *data; uint64_t len; uint64_t capacity; } DfEntityIdBuffer;
 typedef struct { DfPlayerId *data; uint64_t len; uint64_t capacity; } DfPlayerIdBuffer;
 typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; DfStringView name_tag; } DfEntitySpawnOptions;
-typedef struct { DfStringView save_id; DfStringView network_id; DfVec3 min; DfVec3 max; } DfEntityTypeDescriptorV1;
-typedef struct { uint32_t kind; uint32_t flags; DfEntitySpawnOptions options; DfEntityId owner; double damage; uint64_t fuse_milliseconds; int32_t experience; uint32_t potion; int32_t punch_level; int32_t piercing_level; DfStringView text; DfStringView custom_type; const DfItemStackViewV3 *item; const DfBlockView *block; } DfEntitySpawnViewV2;
+#define DF_ENTITY_FAMILY_BASE 0u
+#define DF_ENTITY_FAMILY_TICKING 1u
+#define DF_ENTITY_FAMILY_LIVING 2u
+#define DF_ENTITY_CALLBACK_STATE 1u
+#define DF_ENTITY_CALLBACK_TICK 2u
+#define DF_ENTITY_CALLBACK_HURT 4u
+#define DF_ENTITY_CALLBACK_HEAL 8u
+#define DF_ENTITY_CALLBACK_DEATH 16u
+#define DF_ENTITY_PHYSICS_ENABLED 1u
+#define DF_ENTITY_PHYSICS_DRAG_BEFORE_GRAVITY 2u
+#define DF_ENTITY_OPERATION_ADOPT 0u
+#define DF_ENTITY_OPERATION_LOAD 1u
+#define DF_ENTITY_OPERATION_SAVE 2u
+#define DF_ENTITY_OPERATION_TICK 3u
+#define DF_ENTITY_OPERATION_HURT 4u
+#define DF_ENTITY_OPERATION_HEAL 5u
+#define DF_ENTITY_OPERATION_DEATH 6u
+#define DF_ENTITY_OPERATION_DESTROY 7u
+typedef uint64_t DfEntityInstanceId;
+typedef struct { const uint8_t *data; uint64_t len; } DfBytesView;
+typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfBytesBuffer;
+typedef struct { DfStringView save_id; DfStringView network_id; DfVec3 min; DfVec3 max; uint64_t type_key; uint32_t family; uint32_t callback_flags; double initial_health; double max_health; double speed; uint32_t state_version; uint32_t physics_flags; double gravity; double drag; } DfEntityTypeDescriptorV2;
+typedef struct { uint32_t kind; uint32_t flags; DfEntitySpawnOptions options; DfEntityId owner; double damage; uint64_t fuse_milliseconds; int32_t experience; uint32_t potion; int32_t punch_level; int32_t piercing_level; DfStringView text; DfStringView custom_type; DfEntityInstanceId custom_instance; const DfItemStackViewV3 *item; const DfBlockView *block; } DfEntitySpawnViewV3;
 typedef struct { DfVec3 position; DfRotation rotation; DfVec3 velocity; uint32_t capabilities; DfWorldId world; DfStringBuffer entity_type; DfStringBuffer name_tag; } DfEntityState;
+typedef struct { DfBytesView data; uint32_t version; uint32_t reserved; } DfEntityLoadInput;
+typedef struct { uint64_t instance; } DfEntityLoadState;
+typedef struct { DfBytesBuffer data; uint32_t version; uint32_t reserved; } DfEntitySaveState;
+typedef struct { DfInvocationId invocation; DfEntityId entity; int64_t current; uint64_t age_milliseconds; } DfEntityTickInput;
+typedef struct { uint8_t despawn; } DfEntityTickState;
 #define DF_PARTICLE_FLAME 0u
 #define DF_PARTICLE_DUST 1u
 #define DF_PARTICLE_BLOCK_BREAK 2u
@@ -328,7 +354,7 @@ typedef DfStatus (*DfHostWorldTimeGetFn)(uint64_t context, DfInvocationId invoca
 typedef DfStatus (*DfHostWorldTimeSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time);
 typedef DfStatus (*DfHostWorldSpawnGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
 typedef DfStatus (*DfHostWorldSpawnSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position);
-typedef DfStatus (*DfHostWorldEntitySpawnFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV2 *entity, DfEntityId *output);
+typedef DfStatus (*DfHostWorldEntitySpawnFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV3 *entity, DfEntityId *output);
 typedef DfStatus (*DfHostWorldEntitiesFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfEntityIdBuffer *output);
 typedef DfStatus (*DfHostWorldPlayersFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfPlayerIdBuffer *output);
 typedef DfStatus (*DfHostEntityStateFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state);
@@ -397,7 +423,7 @@ typedef struct {
     DfHostPlayerHurtFn player_hurt;
     DfHostSkinSnapshotInfoFn skin_snapshot_info;
     DfHostSkinSnapshotSetFn skin_snapshot_set;
-} DfHostApiV14;
+} DfHostApiV15;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -856,14 +882,60 @@ typedef struct {
     uint8_t cancelled;
 } DfPlayerSkinChangeState;
 
+#define DF_EVENT_ENTITY_HURT 35u
+
+typedef struct {
+    DfInvocationId invocation;
+    DfEntityId entity;
+    DfDamageSourceView source;
+    double health;
+    double max_health;
+} DfEntityHurtInput;
+
+typedef struct {
+    double damage;
+    uint8_t cancelled;
+} DfEntityHurtState;
+
+#define DF_EVENT_ENTITY_HEAL 36u
+
+typedef struct {
+    DfInvocationId invocation;
+    DfEntityId entity;
+    DfHealingSourceView source;
+    double health;
+    double max_health;
+} DfEntityHealInput;
+
+typedef struct {
+    double health;
+    uint8_t cancelled;
+} DfEntityHealState;
+
+#define DF_EVENT_ENTITY_DEATH 37u
+
+typedef struct {
+    DfInvocationId invocation;
+    DfEntityId entity;
+    DfDamageSourceView source;
+    double health;
+    double damage;
+} DfEntityDeathInput;
+
+typedef struct {
+    uint8_t cancelled;
+} DfEntityDeathState;
+
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
 typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
-typedef const DfEntityTypeDescriptorV1 *(*DfPluginEntityTypesFn)(void *instance, uint64_t *count);
+typedef uint64_t (*DfPluginEntityTypeCountFn)(void *instance);
+typedef DfStatus (*DfPluginEntityTypeAtFn)(void *instance, uint64_t index, DfEntityTypeDescriptorV2 *out);
+typedef DfStatus (*DfPluginHandleEntityFn)(void *instance, uint64_t local_type, uint32_t operation, uint64_t entity_instance, const void *input, void *state);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV14 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV15 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -873,18 +945,20 @@ typedef struct {
     DfPluginLifecycleFn enable;
     DfPluginLifecycleFn disable;
     DfPluginCommandsFn commands;
-    DfPluginEntityTypesFn entity_types;
+    DfPluginEntityTypeCountFn entity_type_count;
+    DfPluginEntityTypeAtFn entity_type_at;
+    DfPluginHandleEntityFn handle_entity;
     DfHandleCommandFn handle_command;
     DfCommandEnumOptionsFn command_enum_options;
     DfPluginSetHostFn set_host;
     DfPluginDestroyFn destroy;
     DfHandleEventFn handle_event;
-} DfPluginApiV2;
+} DfPluginApiV3;
 
-typedef const DfPluginApiV2 *(*DfPluginEntryV2Fn)(void);
+typedef const DfPluginApiV3 *(*DfPluginEntryV3Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV14 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV15 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);
@@ -893,7 +967,15 @@ void df_runtime_destroy(DfRuntime *runtime);
 uint64_t df_runtime_plugin_count(const DfRuntime *runtime);
 uint64_t df_runtime_subscriptions(const DfRuntime *runtime);
 uint64_t df_runtime_entity_type_count(const DfRuntime *runtime);
-DfStatus df_runtime_entity_type_at(const DfRuntime *runtime, uint64_t index, DfEntityTypeDescriptorV1 *out);
+DfStatus df_runtime_entity_type_at(const DfRuntime *runtime, uint64_t index, DfEntityTypeDescriptorV2 *out);
+DfStatus df_runtime_entity_adopt(DfRuntime *runtime, uint64_t type_key, uint64_t opaque, DfEntityInstanceId *out);
+DfStatus df_runtime_entity_load(DfRuntime *runtime, uint64_t type_key, const DfEntityLoadInput *input, DfEntityInstanceId *out);
+DfStatus df_runtime_entity_save(DfRuntime *runtime, DfEntityInstanceId instance, DfEntitySaveState *state);
+DfStatus df_runtime_entity_tick(DfRuntime *runtime, DfEntityInstanceId instance, const DfEntityTickInput *input, DfEntityTickState *state);
+DfStatus df_runtime_entity_hurt(DfRuntime *runtime, DfEntityInstanceId instance, const DfEntityHurtInput *input, DfEntityHurtState *state);
+DfStatus df_runtime_entity_heal(DfRuntime *runtime, DfEntityInstanceId instance, const DfEntityHealInput *input, DfEntityHealState *state);
+DfStatus df_runtime_entity_death(DfRuntime *runtime, DfEntityInstanceId instance, const DfEntityDeathInput *input, DfEntityDeathState *state);
+DfStatus df_runtime_entity_destroy(DfRuntime *runtime, DfEntityInstanceId instance);
 uint64_t df_runtime_command_count(const DfRuntime *runtime);
 DfStatus df_runtime_command_at(const DfRuntime *runtime, uint64_t index, DfCommandDescriptor *out);
 DfStatus df_runtime_handle_command(DfRuntime *runtime, uint64_t index, const DfCommandInput *input, DfCommandState *state);

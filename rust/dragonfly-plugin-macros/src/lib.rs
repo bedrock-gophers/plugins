@@ -112,6 +112,79 @@ fn snake_case_identifier(name: &Ident) -> String {
     output
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EntityFamily {
+    Ticking,
+    Living,
+}
+
+struct AdvancedEntity {
+    family: EntityFamily,
+    has_state: bool,
+    has_tick: bool,
+    has_hurt: bool,
+    has_heal: bool,
+    has_death: bool,
+}
+
+fn advanced_entity(implementation: &ItemImpl) -> syn::Result<AdvancedEntity> {
+    if !implementation.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &implementation.generics,
+            "entity types cannot be generic",
+        ));
+    }
+    let Some((_, trait_path, _)) = &implementation.trait_ else {
+        return Err(syn::Error::new_spanned(
+            implementation,
+            "advanced entities must implement `entity::Ticking` or `entity::Living`",
+        ));
+    };
+    let family = match trait_path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+    {
+        Some(name) if name == "Ticking" => EntityFamily::Ticking,
+        Some(name) if name == "Living" => EntityFamily::Living,
+        _ => {
+            return Err(syn::Error::new_spanned(
+                trait_path,
+                "`#[dragonfly::entity]` supports only `entity::Ticking` or `entity::Living` impls",
+            ));
+        }
+    };
+    let has_method = |name: &str| {
+        implementation
+            .items
+            .iter()
+            .any(|item| matches!(item, ImplItem::Fn(function) if function.sig.ident == name))
+    };
+    let has_const = |name: &str| {
+        implementation
+            .items
+            .iter()
+            .any(|item| matches!(item, ImplItem::Const(value) if value.ident == name))
+    };
+    let has_load = has_method("load");
+    let has_save = has_method("save");
+    let has_version = has_const("STATE_VERSION");
+    if has_load != has_save || (has_load != has_version) {
+        return Err(syn::Error::new_spanned(
+            implementation,
+            "persistent entity state requires `STATE_VERSION`, `load`, and `save` together",
+        ));
+    }
+    Ok(AdvancedEntity {
+        family,
+        has_state: has_load,
+        has_tick: has_method("tick"),
+        has_hurt: has_method("hurt"),
+        has_heal: has_method("heal"),
+        has_death: has_method("death"),
+    })
+}
+
 #[cfg(test)]
 mod entity_tests {
     use super::*;
@@ -152,24 +225,66 @@ mod entity_tests {
             .is_err()
         );
     }
+
+    #[test]
+    fn detects_advanced_entity_family_and_callbacks() {
+        let living: ItemImpl = syn::parse_quote! {
+            impl dragonfly::entity::Living for Dummy {
+                const STATE_VERSION: u32 = 1;
+                fn load(_: &dragonfly::entity::SavedState<'_>) -> Self { Self }
+                fn save(&self, _: &mut dragonfly::entity::SavedStateMut) {}
+                fn hurt(&mut self, _: &mut dragonfly::entity::Hurt<'_>) {}
+            }
+        };
+        let detected = advanced_entity(&living).unwrap();
+        assert_eq!(detected.family, EntityFamily::Living);
+        assert!(detected.has_state);
+        assert!(detected.has_hurt);
+        assert!(!detected.has_tick);
+
+        let ticking: ItemImpl = syn::parse_quote! {
+            impl dragonfly::entity::Ticking for Clock {
+                fn tick(&mut self, _: &mut dragonfly::entity::TickContext<'_>) {}
+            }
+        };
+        let detected = advanced_entity(&ticking).unwrap();
+        assert_eq!(detected.family, EntityFamily::Ticking);
+        assert!(detected.has_tick);
+    }
+
+    #[test]
+    fn rejects_half_state_codec() {
+        let implementation: ItemImpl = syn::parse_quote! {
+            impl dragonfly::entity::Ticking for Clock {
+                fn save(&self, _: &mut dragonfly::entity::SavedStateMut) {}
+            }
+        };
+        assert!(advanced_entity(&implementation).is_err());
+    }
 }
 
 #[proc_macro_attribute]
 pub fn entity(arguments: TokenStream, item: TokenStream) -> TokenStream {
     let arguments = parse_macro_input!(arguments as EntityArgs);
-    let entity = parse_macro_input!(item as ItemStruct);
-    if !entity.generics.params.is_empty() {
-        return syn::Error::new_spanned(&entity.generics, "entity types cannot be generic")
-            .to_compile_error()
+    if let Ok(entity) = syn::parse::<ItemStruct>(item.clone()) {
+        return expand_base_entity(arguments, entity)
+            .unwrap_or_else(syn::Error::into_compile_error)
             .into();
     }
-    if !matches!(entity.fields, Fields::Unit) {
-        return syn::Error::new_spanned(&entity.fields, "entity types must be unit structs")
-            .to_compile_error()
-            .into();
-    }
-    let name = &entity.ident;
-    let registration = format_ident!("__DRAGONFLY_ENTITY_TYPE_{}", name);
+    let implementation = parse_macro_input!(item as ItemImpl);
+    expand_advanced_entity(arguments, implementation)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+fn entity_definition(
+    arguments: EntityArgs,
+    name: &Ident,
+) -> (
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+) {
     let inferred = LitStr::new(&snake_case_identifier(name), name.span());
     let identifier = arguments
         .identifier
@@ -194,7 +309,29 @@ pub fn entity(arguments: TokenStream, item: TokenStream) -> TokenStream {
             (#width as f64) / 2.0,
         ])
     };
-    quote! {
+    (identifier, network, bounds)
+}
+
+fn expand_base_entity(
+    arguments: EntityArgs,
+    entity: ItemStruct,
+) -> syn::Result<proc_macro2::TokenStream> {
+    if !entity.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &entity.generics,
+            "entity types cannot be generic",
+        ));
+    }
+    if !matches!(entity.fields, Fields::Unit) {
+        return Err(syn::Error::new_spanned(
+            &entity.fields,
+            "base entity types must be unit structs; put `#[dragonfly::entity]` on an `entity::Ticking` or `entity::Living` impl for stateful entities",
+        ));
+    }
+    let name = &entity.ident;
+    let registration = format_ident!("__DRAGONFLY_ENTITY_TYPE_{}", name);
+    let (identifier, network, bounds) = entity_definition(arguments, name);
+    Ok(quote! {
         #entity
 
         impl ::dragonfly_plugin::entity::CustomType for #name {
@@ -215,8 +352,90 @@ pub fn entity(arguments: TokenStream, item: TokenStream) -> TokenStream {
             ::dragonfly_plugin::__private::RegisteredType::new(
                 <#name as ::dragonfly_plugin::entity::CustomType>::DEFINITION,
             );
-    }
-    .into()
+    })
+}
+
+fn expand_advanced_entity(
+    arguments: EntityArgs,
+    implementation: ItemImpl,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let detected = advanced_entity(&implementation)?;
+    let Type::Path(self_path) = implementation.self_ty.as_ref() else {
+        return Err(syn::Error::new_spanned(
+            &implementation.self_ty,
+            "entity self type must be a named type",
+        ));
+    };
+    let name = &self_path.path.segments.last().unwrap().ident;
+    let entity_type = implementation.self_ty.as_ref();
+    let registration = format_ident!("__DRAGONFLY_ENTITY_TYPE_{}", name);
+    let (identifier, network, bounds) = entity_definition(arguments, name);
+    let state_flag = u32::from(detected.has_state);
+    let tick_flag = u32::from(detected.has_tick);
+    let hurt_flag = u32::from(detected.has_hurt);
+    let heal_flag = u32::from(detected.has_heal);
+    let death_flag = u32::from(detected.has_death);
+    let callback_flags = quote! {
+        (#state_flag * ::dragonfly_plugin::__private::sys::DF_ENTITY_CALLBACK_STATE)
+        | (#tick_flag * ::dragonfly_plugin::__private::sys::DF_ENTITY_CALLBACK_TICK)
+        | (#hurt_flag * ::dragonfly_plugin::__private::sys::DF_ENTITY_CALLBACK_HURT)
+        | (#heal_flag * ::dragonfly_plugin::__private::sys::DF_ENTITY_CALLBACK_HEAL)
+        | (#death_flag * ::dragonfly_plugin::__private::sys::DF_ENTITY_CALLBACK_DEATH)
+    };
+    let (trait_name, family, initial_health, max_health, speed, physics, handler) =
+        match detected.family {
+            EntityFamily::Ticking => (
+                quote!(::dragonfly_plugin::entity::Ticking),
+                quote!(::dragonfly_plugin::__private::sys::DF_ENTITY_FAMILY_TICKING),
+                quote!(0.0),
+                quote!(0.0),
+                quote!(0.0),
+                quote!(<#entity_type as ::dragonfly_plugin::entity::Ticking>::PHYSICS),
+                quote!(::dragonfly_plugin::entity::handle_ticking::<#entity_type>),
+            ),
+            EntityFamily::Living => (
+                quote!(::dragonfly_plugin::entity::Living),
+                quote!(::dragonfly_plugin::__private::sys::DF_ENTITY_FAMILY_LIVING),
+                quote!(<#entity_type as ::dragonfly_plugin::entity::Living>::INITIAL_HEALTH),
+                quote!(<#entity_type as ::dragonfly_plugin::entity::Living>::MAX_HEALTH),
+                quote!(<#entity_type as ::dragonfly_plugin::entity::Living>::SPEED),
+                quote!(<#entity_type as ::dragonfly_plugin::entity::Living>::PHYSICS),
+                quote!(::dragonfly_plugin::entity::handle_living::<#entity_type>),
+            ),
+        };
+    Ok(quote! {
+        #implementation
+
+        impl ::dragonfly_plugin::entity::CustomType for #entity_type {
+            const DEFINITION: ::dragonfly_plugin::entity::Definition =
+                ::dragonfly_plugin::entity::Definition::new(#identifier, #network, #bounds);
+
+            fn encode_spawn(self) -> ::dragonfly_plugin::entity::EncodedSpawnable {
+                ::dragonfly_plugin::entity::EncodedSpawnable::custom_owned(
+                    <Self as ::dragonfly_plugin::entity::CustomType>::DEFINITION.identifier(),
+                    self,
+                )
+            }
+        }
+
+        #[::dragonfly_plugin::__private::linkme::distributed_slice(
+            ::dragonfly_plugin::__private::REGISTERED_TYPES
+        )]
+        #[linkme(crate = ::dragonfly_plugin::__private::linkme)]
+        #[allow(non_upper_case_globals)]
+        static #registration: ::dragonfly_plugin::__private::RegisteredType =
+            ::dragonfly_plugin::__private::RegisteredType::advanced(
+                <#entity_type as ::dragonfly_plugin::entity::CustomType>::DEFINITION,
+                #family,
+                #callback_flags,
+                #initial_health,
+                #max_health,
+                #speed,
+                <#entity_type as #trait_name>::STATE_VERSION,
+                #physics,
+                #handler,
+            );
+    })
 }
 
 fn command_method_path(attributes: &[Attribute]) -> syn::Result<Option<String>> {
@@ -1097,6 +1316,15 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
     let handles_skin_change = implementation.items.iter().any(
         |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_skin_change"),
     );
+    let handles_entity_hurt = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_entity_hurt"),
+    );
+    let handles_entity_heal = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_entity_heal"),
+    );
+    let handles_entity_death = implementation.items.iter().any(
+        |item| matches!(item, syn::ImplItem::Fn(function) if function.sig.ident == "on_entity_death"),
+    );
     let subscriptions = u64::from(handles_move)
         | (u64::from(handles_chat) << 1)
         | (u64::from(handles_join) << 2)
@@ -1130,7 +1358,10 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
         | (u64::from(handles_item_use_on_entity) << 30)
         | (u64::from(handles_change_world) << 31)
         | (u64::from(handles_respawn) << 32)
-        | (u64::from(handles_skin_change) << 33);
+        | (u64::from(handles_skin_change) << 33)
+        | (u64::from(handles_entity_hurt) << 34)
+        | (u64::from(handles_entity_heal) << 35)
+        | (u64::from(handles_entity_death) << 36);
 
     quote! {
         #[doc(hidden)]
@@ -1176,14 +1407,14 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
 
             unsafe extern "C" fn set_host(
                 instance: *mut ::dragonfly_plugin::__private::c_void,
-                host: *const ::dragonfly_plugin::__private::sys::DfHostApiV14,
+                host: *const ::dragonfly_plugin::__private::sys::DfHostApiV15,
             ) -> ::dragonfly_plugin::__private::sys::DfStatus {
                 if instance.is_null() || host.is_null() {
                     return ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR;
                 }
                 let host_header = unsafe { &*host };
                 if host_header.abi_version != ::dragonfly_plugin::__private::sys::DF_HOST_ABI_VERSION
-                    || host_header.struct_size < ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfHostApiV14>() as u32
+                    || host_header.struct_size < ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfHostApiV15>() as u32
                 {
                     return ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR;
                 }
@@ -1221,17 +1452,55 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            unsafe extern "C" fn entity_types(
+            unsafe extern "C" fn entity_type_count(
                 instance: *mut ::dragonfly_plugin::__private::c_void,
-                count: *mut u64,
-            ) -> *const ::dragonfly_plugin::__private::sys::DfEntityTypeDescriptorV1 {
-                if instance.is_null() || count.is_null() {
-                    return ::core::ptr::null();
+            ) -> u64 {
+                if instance.is_null() {
+                    return 0;
                 }
-                unsafe {
-                    *count = ::dragonfly_plugin::__private::REGISTERED_TYPES.len() as u64;
+                ::dragonfly_plugin::__private::REGISTERED_TYPES.len() as u64
+            }
+
+            unsafe extern "C" fn entity_type_at(
+                instance: *mut ::dragonfly_plugin::__private::c_void,
+                index: u64,
+                out: *mut ::dragonfly_plugin::__private::sys::DfEntityTypeDescriptorV2,
+            ) -> ::dragonfly_plugin::__private::sys::DfStatus {
+                use ::dragonfly_plugin::__private::sys;
+                if instance.is_null() || out.is_null() {
+                    return sys::DF_STATUS_ERROR;
                 }
-                ::dragonfly_plugin::__private::REGISTERED_TYPES.as_ptr().cast()
+                let Some(registered) = ::dragonfly_plugin::__private::REGISTERED_TYPES.get(index as usize) else {
+                    return sys::DF_STATUS_ERROR;
+                };
+                let mut descriptor = registered.descriptor();
+                descriptor.type_key = index;
+                unsafe { *out = descriptor };
+                sys::DF_STATUS_OK
+            }
+
+            unsafe extern "C" fn handle_entity(
+                instance: *mut ::dragonfly_plugin::__private::c_void,
+                local_type: u64,
+                operation: u32,
+                entity_instance: u64,
+                input: *const ::dragonfly_plugin::__private::c_void,
+                state: *mut ::dragonfly_plugin::__private::c_void,
+            ) -> ::dragonfly_plugin::__private::sys::DfStatus {
+                use ::dragonfly_plugin::__private::sys;
+                if instance.is_null() {
+                    return sys::DF_STATUS_ERROR;
+                }
+                let Some(handler) = ::dragonfly_plugin::__private::REGISTERED_TYPES
+                    .get(local_type as usize)
+                    .and_then(|registered| registered.handler())
+                else {
+                    return sys::DF_STATUS_ERROR;
+                };
+                ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| unsafe {
+                    handler(operation, entity_instance, input, state)
+                }))
+                .unwrap_or(sys::DF_STATUS_ERROR)
             }
 
             unsafe extern "C" fn handle_command(
@@ -1588,16 +1857,40 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                         <PluginType as ::dragonfly_plugin::Plugin>::on_skin_change(plugin, &mut event);
                         sys::DF_STATUS_OK
                     }
+                    sys::DF_EVENT_ENTITY_HURT => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfEntityHurtInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfEntityHurtState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::entity::Hurt::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_entity_hurt(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_ENTITY_HEAL => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfEntityHealInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfEntityHealState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::entity::Heal::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_entity_heal(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
+                    sys::DF_EVENT_ENTITY_DEATH => {
+                        let plugin = unsafe { &*instance.cast::<PluginType>() };
+                        let input = unsafe { &*input.cast::<sys::DfEntityDeathInput>() };
+                        let state = unsafe { &mut *state.cast::<sys::DfEntityDeathState>() };
+                        let mut event = unsafe { ::dragonfly_plugin::entity::Death::from_raw(input, state) };
+                        <PluginType as ::dragonfly_plugin::Plugin>::on_entity_death(plugin, &mut event);
+                        sys::DF_STATUS_OK
+                    }
                     _ => sys::DF_STATUS_ERROR,
                 })));
                 result.unwrap_or(sys::DF_STATUS_ERROR)
             }
 
-            static API: ::dragonfly_plugin::__private::sys::DfPluginApiV2 =
-                ::dragonfly_plugin::__private::sys::DfPluginApiV2 {
+            static API: ::dragonfly_plugin::__private::sys::DfPluginApiV3 =
+                ::dragonfly_plugin::__private::sys::DfPluginApiV3 {
                     header: ::dragonfly_plugin::__private::sys::DfAbiHeader {
                         abi_version: ::dragonfly_plugin::__private::sys::DF_ABI_VERSION,
-                        struct_size: ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfPluginApiV2>() as u32,
+                        struct_size: ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfPluginApiV3>() as u32,
                         subscriptions: #subscriptions,
                     },
                     plugin_id: ::dragonfly_plugin::__private::sys::DfStringView {
@@ -1608,7 +1901,9 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                     enable: Some(enable),
                     disable: Some(disable),
                     commands: Some(commands),
-                    entity_types: Some(entity_types),
+                    entity_type_count: Some(entity_type_count),
+                    entity_type_at: Some(entity_type_at),
+                    handle_entity: Some(handle_entity),
                     handle_command: Some(handle_command),
                     command_enum_options: Some(command_enum_options),
                     set_host: Some(set_host),
@@ -1617,7 +1912,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 };
 
             #[unsafe(no_mangle)]
-            pub extern "C" fn df_plugin_entry_v2() -> *const ::dragonfly_plugin::__private::sys::DfPluginApiV2 {
+            pub extern "C" fn df_plugin_entry_v3() -> *const ::dragonfly_plugin::__private::sys::DfPluginApiV3 {
                 &API
             }
         }

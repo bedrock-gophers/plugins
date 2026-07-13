@@ -185,8 +185,10 @@ pub struct BlockBreak {
 }
 
 impl BlockBreak {
-    pub const fn new(block: block::Block) -> Self {
-        Self { block }
+    pub fn new(block: impl Into<block::Block>) -> Self {
+        Self {
+            block: block.into(),
+        }
     }
 
     pub const fn block(&self) -> &block::Block {
@@ -212,8 +214,11 @@ pub struct PunchBlock {
 }
 
 impl PunchBlock {
-    pub const fn new(block: block::Block, face: BlockFace) -> Self {
-        Self { block, face }
+    pub fn new(block: impl Into<block::Block>, face: BlockFace) -> Self {
+        Self {
+            block: block.into(),
+            face,
+        }
     }
 
     pub const fn block(&self) -> &block::Block {
@@ -418,7 +423,7 @@ mod tests {
     #[test]
     fn block_particle_keeps_block_view_alive_during_call() {
         let particle = PunchBlock::new(
-            block::new("minecraft:oak_door").with_property("open_bit", true),
+            block::WoodenDoor::new().with_open_bit(true),
             BlockFace::North,
         );
         let result = particle.encode().with_raw(|raw| {
@@ -428,7 +433,7 @@ mod tests {
             let block = unsafe { &*raw.block };
             assert_eq!(
                 unsafe { crate::string_view(block.identifier) },
-                "minecraft:oak_door"
+                "minecraft:wooden_door"
             );
             assert_ne!(block.properties_nbt.len, 0);
         });

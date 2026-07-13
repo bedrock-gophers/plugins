@@ -67,7 +67,9 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		closeDragonflyProviders(dragonflyConfig, log)
 		return fmt.Errorf("configure Dragonfly: %w", err)
 	}
-	dragonflyConfig.Entities, err = buildEntityRegistry(dragonflyConfig.Entities, entityTypes)
+	dragonflyConfig.Entities, err = buildEntityRegistry(dragonflyConfig.Entities, entityTypes, foreignEntityServices{
+		runtime: pluginRuntime, players: players, entities: worlds.entityHandles,
+	})
 	if err != nil {
 		pluginRuntime.Close()
 		closeDragonflyProviders(dragonflyConfig, log)
@@ -77,9 +79,6 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	enabled := false
 	started := false
 	defer func() {
-		if enabled {
-			pluginRuntime.Disable()
-		}
 		if started {
 			if err := srv.Close(); err != nil {
 				log.Error("close Dragonfly server", "error", err)
@@ -96,6 +95,9 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		}
 		if err := worlds.CloseCustom(); err != nil {
 			log.Error("close custom worlds", "error", err)
+		}
+		if enabled {
+			pluginRuntime.Disable()
 		}
 		pluginRuntime.Close()
 	}()
