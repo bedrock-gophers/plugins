@@ -394,6 +394,7 @@ type Host interface {
 	OpenWorldSpec(InvocationID, string, WorldOpenSpec) (WorldID, bool)
 	UnloadWorld(InvocationID, WorldID) bool
 	WorldBlock(InvocationID, WorldID, BlockPos) (WorldBlock, bool)
+	WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool)
 	SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock) bool
 	WorldTime(InvocationID, WorldID) (int64, bool)
 	SetWorldTime(InvocationID, WorldID, int64) bool
@@ -466,6 +467,9 @@ func (noopHost) OpenWorldSpec(InvocationID, string, WorldOpenSpec) (WorldID, boo
 }
 func (noopHost) UnloadWorld(InvocationID, WorldID) bool { return false }
 func (noopHost) WorldBlock(InvocationID, WorldID, BlockPos) (WorldBlock, bool) {
+	return WorldBlock{}, false
+}
+func (noopHost) WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool) {
 	return WorldBlock{}, false
 }
 func (noopHost) SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock) bool { return false }

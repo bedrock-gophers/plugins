@@ -106,18 +106,45 @@ func bg_go_world_block_get(context C.uint64_t, invocation C.DfInvocationId, worl
 		return C.DF_STATUS_ERROR
 	}
 	block, ok := host.WorldBlock(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position))
-	identifier, properties := []byte(block.Identifier), block.PropertiesNBT
-	if !ok || len(identifier) == 0 || len(identifier) > maxBlockIdentifierBytes || !utf8.Valid(identifier) || len(properties) > maxBlockPropertiesBytes {
+	return writeWorldBlock(output, block, ok)
+}
+
+//export bg_go_world_liquid_get
+func bg_go_world_liquid_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, output *C.DfBlockData) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	block, ok := host.WorldLiquid(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position))
+	return writeWorldBlock(output, block, ok)
+}
+
+func writeWorldBlock(output *C.DfBlockData, block WorldBlock, ok bool) C.DfStatus {
+	identifier, properties, valid := worldBlockPayload(block, ok)
+	if !valid {
 		return C.DF_STATUS_ERROR
 	}
 	output.identifier.len = C.uint64_t(len(identifier))
 	output.properties_nbt.len = C.uint64_t(len(properties))
-	if !canWriteSkinBuffer(&output.identifier, identifier) || !canWriteSkinBuffer(&output.properties_nbt, properties) {
+	if !worldBlockFits(identifier, properties, uint64(output.identifier.capacity), uint64(output.properties_nbt.capacity)) ||
+		!canWriteSkinBuffer(&output.identifier, identifier) || !canWriteSkinBuffer(&output.properties_nbt, properties) {
 		return C.DF_STATUS_ERROR
 	}
 	writeSkinBuffer(&output.identifier, identifier)
 	writeSkinBuffer(&output.properties_nbt, properties)
 	return C.DF_STATUS_OK
+}
+
+func worldBlockPayload(block WorldBlock, ok bool) ([]byte, []byte, bool) {
+	identifier, properties := []byte(block.Identifier), block.PropertiesNBT
+	if !ok || len(identifier) == 0 || len(identifier) > maxBlockIdentifierBytes || !utf8.Valid(identifier) || len(properties) > maxBlockPropertiesBytes {
+		return nil, nil, false
+	}
+	return identifier, properties, true
+}
+
+func worldBlockFits(identifier, properties []byte, identifierCapacity, propertiesCapacity uint64) bool {
+	return uint64(len(identifier)) <= identifierCapacity && uint64(len(properties)) <= propertiesCapacity
 }
 
 //export bg_go_world_block_set

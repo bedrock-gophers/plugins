@@ -596,6 +596,27 @@ func (m *WorldManager) WorldBlock(invocation native.InvocationID, id native.Worl
 	})
 }
 
+func (m *WorldManager) WorldLiquid(invocation native.InvocationID, id native.WorldID, position native.BlockPos) (native.WorldBlock, bool) {
+	entry, ok := m.entryByHandle(id)
+	if !ok {
+		return native.WorldBlock{}, false
+	}
+	entry.lifecycle.RLock()
+	defer entry.lifecycle.RUnlock()
+	if entry.closed {
+		return native.WorldBlock{}, false
+	}
+	return m.readTx(invocation, entry, func(tx *world.Tx) (native.WorldBlock, bool) {
+		liquid, ok := tx.Liquid(blockPosition(position))
+		if !ok {
+			return native.WorldBlock{}, false
+		}
+		name, properties := liquid.EncodeBlock()
+		encoded, ok := encodeBlockProperties(properties)
+		return native.WorldBlock{Identifier: name, PropertiesNBT: encoded}, ok
+	})
+}
+
 func (m *WorldManager) SetWorldBlock(invocation native.InvocationID, id native.WorldID, position native.BlockPos, value native.WorldBlock) bool {
 	entry, ok := m.entryByHandle(id)
 	if !ok || value.Identifier == "" {

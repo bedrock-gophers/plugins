@@ -92,7 +92,7 @@ pub mod Event {
     pub use crate::entity::Hurt as EntityHurt;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV18> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV19> =
     AtomicPtr::new(core::ptr::null_mut());
 
 #[cfg(test)]
@@ -169,7 +169,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV18) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV19) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -1510,7 +1510,7 @@ fn with_skin_view<R>(
 }
 
 fn read_skin_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV18,
+    host: &dragonfly_plugin_sys::DfHostApiV19,
     invocation: dragonfly_plugin_sys::DfInvocationId,
     snapshot: u64,
     info: dragonfly_plugin_sys::DfSkinInfo,
@@ -2507,13 +2507,13 @@ fn slice_pointer<T>(value: &[T]) -> *const T {
     }
 }
 
-fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV18> {
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV19> {
     unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
 }
 
 fn read_item_stack(
     open: impl FnOnce(
-        &dragonfly_plugin_sys::DfHostApiV18,
+        &dragonfly_plugin_sys::DfHostApiV19,
         *mut u64,
         *mut dragonfly_plugin_sys::DfItemStackInfo,
     ) -> Option<dragonfly_plugin_sys::DfStatus>,
@@ -2535,7 +2535,7 @@ fn read_item_stack(
 }
 
 fn read_item_stack_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV18,
+    host: &dragonfly_plugin_sys::DfHostApiV19,
     invocation: dragonfly_plugin_sys::DfInvocationId,
     snapshot_id: u64,
     info: dragonfly_plugin_sys::DfItemStackInfo,

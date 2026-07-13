@@ -10,6 +10,8 @@ import (
 
 	"github.com/bedrock-gophers/plugins/internal/host"
 	"github.com/bedrock-gophers/plugins/internal/native"
+	"github.com/df-mc/dragonfly/server/block"
+	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
@@ -136,6 +138,18 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 		if !ok || got.Identifier != name {
 			t.Fatalf("WorldBlock() = %#v, %v", got, ok)
 		}
+		bars := block.IronBars{}
+		tx.SetBlock(cube.Pos{2, 3, 4}, bars, nil)
+		tx.SetLiquid(cube.Pos{2, 3, 4}, block.Water{Still: true, Depth: 8})
+		liquid, ok := manager.WorldLiquid(invocation, id, native.BlockPos{X: 2, Y: 3, Z: 4})
+		if !ok || liquid.Identifier != "minecraft:water" {
+			t.Fatalf("WorldLiquid() = %#v, %v", liquid, ok)
+		}
+		foreground, ok := manager.WorldBlock(invocation, id, native.BlockPos{X: 2, Y: 3, Z: 4})
+		barsName, _ := bars.EncodeBlock()
+		if !ok || foreground.Identifier != barsName {
+			t.Fatalf("waterlogged foreground = %#v, %v", foreground, ok)
+		}
 		if manager.SaveWorld(invocation, id) {
 			t.Fatal("SaveWorld succeeded from owner transaction")
 		}
@@ -178,6 +192,13 @@ func TestWorldManagerInvocationCannotBorrowAnotherWorldTransaction(t *testing.T)
 		if _, ok := manager.WorldBlock(invocation, secondID, position); ok {
 			t.Fatal("cross-world synchronous read succeeded")
 		}
+		if _, ok := manager.WorldLiquid(invocation, secondID, position); ok {
+			t.Fatal("cross-world synchronous liquid read succeeded")
+		}
+		tx.SetLiquid(cube.Pos{1, 2, 3}, block.Water{Still: true, Depth: 8})
+		if _, ok := manager.WorldLiquid(invocation, firstID, position); !ok {
+			t.Fatal("same-world liquid read did not use invocation transaction")
+		}
 		if _, ok := manager.WorldBlock(invocation, firstID, position); !ok {
 			t.Fatal("same-world read did not use invocation transaction")
 		}
@@ -187,6 +208,9 @@ func TestWorldManagerInvocationCannotBorrowAnotherWorldTransaction(t *testing.T)
 	}
 	if _, ok := manager.WorldBlock(stale, firstID, position); ok {
 		t.Fatal("stale invocation still resolves")
+	}
+	if _, ok := manager.WorldLiquid(stale, firstID, position); ok {
+		t.Fatal("stale invocation still resolves liquid")
 	}
 }
 

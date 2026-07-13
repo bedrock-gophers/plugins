@@ -205,15 +205,16 @@ Every ABI structure must:
 - Avoid platform-sized `long`, `size_t` in persisted layouts, and C bitfields.
 - Have generated size, alignment, and offset tests.
 
-The ABI is intentionally strict while the project is WIP. Host ABI v18 retains
-the complete v17 prefix (`world_open_spec` at offset 448 and stable player
-transfer at offset 456), then appends player effect snapshot and clear-all calls
-at offsets 464 and 472. Plugin ABI v4 adds the bounded fallible-enable callback.
+The ABI is intentionally strict while the project is WIP. Host ABI v19 retains
+the complete v18 prefix (including player effect snapshot and clear-all calls at
+offsets 464 and 472), then appends `world_liquid_get` at offset 480. The host
+table is 488 bytes on supported 64-bit targets. Plugin ABI v4 adds the bounded
+fallible-enable callback.
 A breaking layout or callback change increments its owning ABI version, and
 mismatched runtimes/plugins fail to load. Compatibility shims are deferred until
 the API is stable enough to justify them. Independent ABI branches must never
 publish different layouts under one version; the transferable-entity prototype
-must rebase and append as host v19 if integrated.
+must rebase and append as host v20 if integrated.
 
 ## Runtime
 
@@ -529,9 +530,9 @@ Current host actions include:
 - Read and mutate common entity capabilities through stable handles.
 - Add/remove typed lasting, ambient, infinite, and instant player effects.
 
-Every synchronous player callback registers one invocation ID for its exact transaction. Same-world block operations use that `world.Tx` directly. Calls with no invocation are off-owner: writes enqueue through `World.Do` and reads use `world.Call`. Cross-world writes from callbacks enqueue, while cross-world synchronous block reads are rejected because reciprocal owner calls can deadlock. Save/unload are rejected from callbacks and run only off-owner. Transaction values never cross or survive the ABI; the asynchronous task API will provide callback-safe cross-world reads and lifecycle operations.
+Every synchronous player callback registers one invocation ID for its exact transaction. Same-world block and liquid reads use that `world.Tx` directly, so `World::liquid` preserves liquids stored behind waterloggable foreground blocks. Calls with no invocation are off-owner: writes enqueue through `World.Do` and reads use `world.Call`. Cross-world writes from callbacks enqueue, while cross-world synchronous block and liquid reads are rejected because reciprocal owner calls can deadlock. Save/unload are rejected from callbacks and run only off-owner. Transaction values never cross or survive the ABI; the asynchronous task API will provide callback-safe cross-world reads and lifecycle operations.
 
-The host ABI is currently v18 and the plugin ABI is v4. WIP releases
+The host ABI is currently v19 and the plugin ABI is v4. WIP releases
 intentionally make breaking ABI changes instead of retaining compatibility
 shims; runtime and plugins must be compiled from the same revision.
 

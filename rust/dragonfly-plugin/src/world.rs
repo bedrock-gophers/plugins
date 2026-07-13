@@ -9,6 +9,10 @@ mod world_spec_test;
 #[path = "world_block_test.rs"]
 mod world_block_test;
 
+#[cfg(test)]
+#[path = "world_liquid_test.rs"]
+mod world_liquid_test;
+
 const MAX_WORLD_NAME_BYTES: usize = 256;
 const MAX_BLOCK_IDENTIFIER_BYTES: usize = 256;
 const MAX_BLOCK_PROPERTIES_BYTES: usize = 64 << 10;
@@ -333,8 +337,21 @@ impl World {
     }
 
     pub fn block(&self, position: BlockPos) -> Option<block::Block> {
+        self.read_block(position, crate::host_api()?.world_block_get?)
+    }
+
+    /// Returns the liquid at `position`, including a liquid stored behind a
+    /// waterloggable foreground block.
+    pub fn liquid(&self, position: BlockPos) -> Option<block::Block> {
+        self.read_block(position, crate::host_api()?.world_liquid_get?)
+    }
+
+    fn read_block(
+        &self,
+        position: BlockPos,
+        get: dragonfly_plugin_sys::DfHostWorldBlockGetFn,
+    ) -> Option<block::Block> {
         let host = crate::host_api()?;
-        let get = host.world_block_get?;
         let mut identifier = [0; MAX_BLOCK_IDENTIFIER_BYTES];
         let mut properties = [0; 1024];
         let mut data = dragonfly_plugin_sys::DfBlockData {

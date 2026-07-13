@@ -183,6 +183,8 @@ type recordingHost struct {
 	worldName          string
 	worldBlock         WorldBlock
 	worldBlockOK       bool
+	worldLiquid        WorldBlock
+	worldLiquidOK      bool
 	worldBlockPos      BlockPos
 	worldBlockSet      WorldBlock
 	worldSaved         bool
@@ -345,6 +347,10 @@ func (h *recordingHost) WorldName(_ InvocationID, id WorldID) (string, bool) {
 func (h *recordingHost) WorldBlock(_ InvocationID, id WorldID, position BlockPos) (WorldBlock, bool) {
 	h.worldBlockPos = position
 	return h.worldBlock, id == h.worldID && h.worldBlockOK
+}
+func (h *recordingHost) WorldLiquid(_ InvocationID, id WorldID, position BlockPos) (WorldBlock, bool) {
+	h.worldBlockPos = position
+	return h.worldLiquid, id == h.worldID && h.worldLiquidOK
 }
 func (h *recordingHost) SetWorldBlock(_ InvocationID, id WorldID, position BlockPos, value WorldBlock) bool {
 	h.worldBlockPos, h.worldBlockSet = position, value
