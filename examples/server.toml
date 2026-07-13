@@ -4,6 +4,14 @@
 [worlds]
   directory = ".data/worlds"
 
+  [worlds.core]
+    read-only = false
+    random-ticks = "per-subchunk"
+    random-tick-rate = 3
+    time = "preserve"
+    fixed-time = 0
+    weather = "preserve"
+
 [dragonfly]
 
   [dragonfly.Network]

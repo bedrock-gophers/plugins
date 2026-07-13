@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-pub const DF_ABI_VERSION: u32 = 3;
+pub const DF_ABI_VERSION: u32 = 4;
 pub const DF_HOST_ABI_VERSION: u32 = 18;
 pub const DF_STATUS_OK: DfStatus = 0;
 pub const DF_STATUS_ERROR: DfStatus = 1;
@@ -1113,7 +1113,8 @@ pub struct DfEntityDeathState {
 }
 
 pub type DfPluginCreateFn = unsafe extern "C" fn() -> *mut c_void;
-pub type DfPluginLifecycleFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
+pub type DfPluginEnableFn = unsafe extern "C" fn(instance: *mut c_void, error: *mut DfStringBuffer) -> DfStatus;
+pub type DfPluginDisableFn = unsafe extern "C" fn(instance: *mut c_void) -> DfStatus;
 pub type DfPluginCommandsFn = unsafe extern "C" fn(instance: *mut c_void, count: *mut u64) -> *const DfCommandDescriptor;
 pub type DfPluginEntityTypeCountFn = unsafe extern "C" fn(instance: *mut c_void) -> u64;
 pub type DfPluginEntityTypeAtFn = unsafe extern "C" fn(instance: *mut c_void, index: u64, out: *mut DfEntityTypeDescriptorV2) -> DfStatus;
@@ -1125,12 +1126,12 @@ pub type DfPluginDestroyFn = unsafe extern "C" fn(instance: *mut c_void);
 pub type DfHandleEventFn = unsafe extern "C" fn(instance: *mut c_void, event_id: DfEventId, input: *const c_void, state: *mut c_void) -> DfStatus;
 
 #[repr(C)]
-pub struct DfPluginApiV3 {
+pub struct DfPluginApiV4 {
     pub header: DfAbiHeader,
     pub plugin_id: DfStringView,
     pub create: Option<DfPluginCreateFn>,
-    pub enable: Option<DfPluginLifecycleFn>,
-    pub disable: Option<DfPluginLifecycleFn>,
+    pub enable: Option<DfPluginEnableFn>,
+    pub disable: Option<DfPluginDisableFn>,
     pub commands: Option<DfPluginCommandsFn>,
     pub entity_type_count: Option<DfPluginEntityTypeCountFn>,
     pub entity_type_at: Option<DfPluginEntityTypeAtFn>,
@@ -1142,6 +1143,6 @@ pub struct DfPluginApiV3 {
     pub handle_event: Option<DfHandleEventFn>,
 }
 
-pub type DfPluginEntryV3Fn = unsafe extern "C" fn() -> *const DfPluginApiV3;
+pub type DfPluginEntryV4Fn = unsafe extern "C" fn() -> *const DfPluginApiV4;
 
-unsafe impl Sync for DfPluginApiV3 {}
+unsafe impl Sync for DfPluginApiV4 {}

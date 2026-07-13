@@ -1422,13 +1422,33 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            unsafe extern "C" fn enable(instance: *mut ::dragonfly_plugin::__private::c_void) -> ::dragonfly_plugin::__private::sys::DfStatus {
+            unsafe extern "C" fn enable(
+                instance: *mut ::dragonfly_plugin::__private::c_void,
+                error: *mut ::dragonfly_plugin::__private::sys::DfStringBuffer,
+            ) -> ::dragonfly_plugin::__private::sys::DfStatus {
+                if instance.is_null() || error.is_null() {
+                    return ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR;
+                }
+                unsafe { (*error).len = 0 };
                 let plugin = unsafe { &*instance.cast::<PluginType>() };
                 match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
-                    <PluginType as ::dragonfly_plugin::Plugin>::on_enable(plugin);
+                    <PluginType as ::dragonfly_plugin::Plugin>::on_enable(plugin)
+                        .map_err(|failure| failure.to_string())
                 })) {
-                    Ok(()) => ::dragonfly_plugin::__private::sys::DF_STATUS_OK,
-                    Err(_) => ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR,
+                    Ok(Ok(())) => ::dragonfly_plugin::__private::sys::DF_STATUS_OK,
+                    Ok(Err(message)) => {
+                        unsafe { ::dragonfly_plugin::__write_plugin_error(error, &message) };
+                        ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR
+                    }
+                    Err(_) => {
+                        unsafe {
+                            ::dragonfly_plugin::__write_plugin_error(
+                                error,
+                                "plugin panicked during enable",
+                            )
+                        };
+                        ::dragonfly_plugin::__private::sys::DF_STATUS_ERROR
+                    }
                 }
             }
 
@@ -1923,11 +1943,11 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 result.unwrap_or(sys::DF_STATUS_ERROR)
             }
 
-            static API: ::dragonfly_plugin::__private::sys::DfPluginApiV3 =
-                ::dragonfly_plugin::__private::sys::DfPluginApiV3 {
+            static API: ::dragonfly_plugin::__private::sys::DfPluginApiV4 =
+                ::dragonfly_plugin::__private::sys::DfPluginApiV4 {
                     header: ::dragonfly_plugin::__private::sys::DfAbiHeader {
                         abi_version: ::dragonfly_plugin::__private::sys::DF_ABI_VERSION,
-                        struct_size: ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfPluginApiV3>() as u32,
+                        struct_size: ::core::mem::size_of::<::dragonfly_plugin::__private::sys::DfPluginApiV4>() as u32,
                         subscriptions: #subscriptions,
                     },
                     plugin_id: ::dragonfly_plugin::__private::sys::DfStringView {
@@ -1949,7 +1969,7 @@ pub fn plugin(attributes: TokenStream, input: TokenStream) -> TokenStream {
                 };
 
             #[unsafe(no_mangle)]
-            pub extern "C" fn df_plugin_entry_v3() -> *const ::dragonfly_plugin::__private::sys::DfPluginApiV3 {
+            pub extern "C" fn df_plugin_entry_v4() -> *const ::dragonfly_plugin::__private::sys::DfPluginApiV4 {
                 &API
             }
         }

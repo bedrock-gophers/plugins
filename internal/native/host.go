@@ -510,6 +510,11 @@ var (
 	formHostState        = map[uint64]*formState{}
 )
 
+type registeredHost struct {
+	host   Host
+	active atomic.Bool
+}
+
 const maxSkinSnapshotsPerHost = 32
 const maxItemSnapshotsPerHost = 64
 const maxFormsPerHost = 128
@@ -685,6 +690,18 @@ func drainHostForms(host uint64, closing bool) {
 	}
 }
 
+func activateHostForms(host uint64) {
+	formMu.Lock()
+	state := formHostState[host]
+	if state == nil {
+		formHostState[host] = &formState{players: map[PlayerID]int{}}
+	} else {
+		state.closing = false
+		state.draining = false
+	}
+	formMu.Unlock()
+}
+
 type skinSnapshot struct {
 	host       uint64
 	invocation InvocationID
@@ -698,12 +715,31 @@ type itemSnapshot struct {
 }
 
 func registerHost(host Host) uint64 {
+	return registerHostState(host, true)
+}
+
+func registerInactiveHost(host Host) uint64 {
+	return registerHostState(host, false)
+}
+
+func registerHostState(host Host, active bool) uint64 {
 	if host == nil {
 		host = noopHost{}
 	}
 	id := hostSequence.Add(1)
-	hosts.Store(id, host)
+	registered := &registeredHost{host: host}
+	registered.active.Store(active)
+	hosts.Store(id, registered)
 	return id
+}
+
+func setHostActive(id uint64, active bool) bool {
+	value, ok := hosts.Load(id)
+	if !ok {
+		return false
+	}
+	value.(*registeredHost).active.Store(active)
+	return true
 }
 
 func unregisterHost(id uint64) {
@@ -733,11 +769,15 @@ func unregisterHost(id uint64) {
 }
 
 func resolveHost(id uint64) (Host, bool) {
-	host, ok := hosts.Load(id)
+	value, ok := hosts.Load(id)
 	if !ok {
 		return nil, false
 	}
-	return host.(Host), true
+	host := value.(*registeredHost)
+	if !host.active.Load() {
+		return nil, false
+	}
+	return host.host, true
 }
 
 func registerSkinSnapshot(host uint64, invocation InvocationID, skin PlayerSkin, eventOwned bool) (uint64, bool) {

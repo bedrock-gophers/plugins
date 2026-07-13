@@ -5,8 +5,15 @@ struct LifecycleLogger;
 
 #[plugin]
 impl Plugin for LifecycleLogger {
-    fn on_enable(&self) {
+    fn on_enable(&self) -> dragonfly::PluginResult {
+        if let Ok(message) = std::env::var("BEDROCK_GOPHERS_LIFECYCLE_ERROR") {
+            return Err(message.into());
+        }
+        if std::env::var_os("BEDROCK_GOPHERS_LIFECYCLE_PANIC").is_some() {
+            panic!("requested lifecycle panic");
+        }
         eprintln!("lifecycle-logger enabled");
+        Ok(())
     }
 
     fn on_disable(&self) {

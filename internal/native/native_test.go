@@ -532,6 +532,107 @@ func TestClosingFormDrainKeepsRegistrationGateClosed(t *testing.T) {
 	unregisterHost(host)
 }
 
+func TestInactiveHostRejectsNewWork(t *testing.T) {
+	host := registerHost(noopHost{})
+	t.Cleanup(func() { unregisterHost(host) })
+	if _, ok := resolveHost(host); !ok {
+		t.Fatal("new host is inactive")
+	}
+	if !setHostActive(host, false) {
+		t.Fatal("could not deactivate host")
+	}
+	if _, ok := resolveHost(host); ok {
+		t.Fatal("inactive host resolved")
+	}
+	if !setHostActive(host, true) {
+		t.Fatal("could not reactivate host")
+	}
+	if _, ok := resolveHost(host); !ok {
+		t.Fatal("reactivated host did not resolve")
+	}
+}
+
+func TestRuntimeHostActivatesOnlyWhileEnabled(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	runtime, err := Open(library, plugins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if _, ok := resolveHost(runtime.hostContext); ok {
+		t.Fatal("runtime host active before enable")
+	}
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := resolveHost(runtime.hostContext); !ok {
+		t.Fatal("runtime host inactive after enable")
+	}
+	runtime.BeginDisable()
+	if _, ok := resolveHost(runtime.hostContext); !ok {
+		t.Fatal("runtime host inactive before entity shutdown finished")
+	}
+	if _, ok := registerForm(runtime.hostContext, PlayerID{Generation: 11}, func(InvocationID, PlayerID, bool, []byte) bool {
+		return true
+	}, func() {}); ok {
+		t.Fatal("runtime admitted a form after begin disable")
+	}
+	if _, err := runtime.HandlePlayerMove(0, PlayerMoveInput{}, false); err == nil {
+		t.Fatal("runtime admitted an ordinary callback after begin disable")
+	}
+	runtime.FinishDisable()
+	if _, ok := resolveHost(runtime.hostContext); ok {
+		t.Fatal("runtime host active after disable")
+	}
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	if id, ok := registerForm(runtime.hostContext, PlayerID{Generation: 12}, func(InvocationID, PlayerID, bool, []byte) bool {
+		return true
+	}, func() {}); !ok {
+		t.Fatal("runtime did not reopen form admission after re-enable")
+	} else {
+		CancelPlayerForm(id)
+	}
+}
+
+func TestEnableReportsPluginErrorAndKeepsHostUntilFinish(t *testing.T) {
+	t.Setenv("BEDROCK_GOPHERS_LIFECYCLE_ERROR", "missing FFA arena database")
+	library, plugins := nativeArtifacts(t)
+	runtime, err := Open(library, plugins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	err = runtime.Enable()
+	want := "enable native plugins: plugin \"lifecycle-logger-plugin\" failed to enable: missing FFA arena database"
+	if err == nil || err.Error() != want {
+		t.Fatalf("Enable() error = %v, want %q", err, want)
+	}
+	if _, ok := resolveHost(runtime.hostContext); !ok {
+		t.Fatal("failed runtime host was deactivated before entity cleanup")
+	}
+	runtime.FinishDisable()
+	if _, ok := resolveHost(runtime.hostContext); ok {
+		t.Fatal("failed runtime host remained active after finish")
+	}
+}
+
+func TestEnableContainsPluginPanic(t *testing.T) {
+	t.Setenv("BEDROCK_GOPHERS_LIFECYCLE_PANIC", "1")
+	library, plugins := nativeArtifacts(t)
+	runtime, err := Open(library, plugins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	err = runtime.Enable()
+	want := "enable native plugins: plugin \"lifecycle-logger-plugin\" failed to enable: plugin panicked during enable"
+	if err == nil || err.Error() != want {
+		t.Fatalf("Enable() error = %v, want %q", err, want)
+	}
+}
+
 func TestFormRejectsWrongPlayerAndOversizedResponse(t *testing.T) {
 	host := registerHost(noopHost{})
 	t.Cleanup(func() { unregisterHost(host) })
@@ -1893,8 +1994,8 @@ func TestLifecycleControlsDispatch(t *testing.T) {
 	runtime := openTestRuntime(t)
 	runtime.Disable()
 	cancelled, err := runtime.HandlePlayerMove(0, PlayerMoveInput{NewPosition: Vec3{Y: -65}}, false)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("disabled runtime admitted movement")
 	}
 	if cancelled {
 		t.Fatal("disabled plugin handled movement")

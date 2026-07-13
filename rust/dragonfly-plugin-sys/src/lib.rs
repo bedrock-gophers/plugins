@@ -143,7 +143,7 @@ mod tests {
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn entity_v3_layout_is_stable() {
-        assert_eq!(DF_ABI_VERSION, 3);
+        assert_eq!(DF_ABI_VERSION, 4);
         assert_eq!(DF_HOST_ABI_VERSION, 18);
         assert_eq!(size_of::<DfEntityTypeDescriptorV2>(), 144);
         assert_eq!(offset_of!(DfEntityTypeDescriptorV2, type_key), 80);
@@ -161,10 +161,10 @@ mod tests {
         assert_eq!(size_of::<DfEntityHealState>(), 16);
         assert_eq!(size_of::<DfEntityDeathInput>(), 136);
         assert_eq!(size_of::<DfEntityDeathState>(), 1);
-        assert_eq!(size_of::<DfPluginApiV3>(), 128);
-        assert_eq!(offset_of!(DfPluginApiV3, entity_type_count), 64);
-        assert_eq!(offset_of!(DfPluginApiV3, entity_type_at), 72);
-        assert_eq!(offset_of!(DfPluginApiV3, handle_entity), 80);
-        assert_eq!(offset_of!(DfPluginApiV3, handle_event), 120);
+        assert_eq!(size_of::<DfPluginApiV4>(), 128);
+        assert_eq!(offset_of!(DfPluginApiV4, entity_type_count), 64);
+        assert_eq!(offset_of!(DfPluginApiV4, entity_type_at), 72);
+        assert_eq!(offset_of!(DfPluginApiV4, handle_entity), 80);
+        assert_eq!(offset_of!(DfPluginApiV4, handle_event), 120);
     }
 }

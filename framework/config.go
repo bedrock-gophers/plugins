@@ -18,7 +18,8 @@ type PluginConfig struct {
 }
 
 type WorldConfig struct {
-	Directory string `toml:"directory"`
+	Directory string          `toml:"directory"`
+	Core      CoreWorldConfig `toml:"core"`
 }
 
 type Config struct {
@@ -32,7 +33,10 @@ func DefaultConfig() Config {
 		Plugins: PluginConfig{
 			Directory: "plugins",
 		},
-		Worlds:    WorldConfig{Directory: ".data/worlds"},
+		Worlds: WorldConfig{
+			Directory: ".data/worlds",
+			Core:      defaultCoreWorldConfig(),
+		},
 		Dragonfly: server.DefaultConfig(),
 	}
 }
@@ -42,6 +46,9 @@ func LoadConfig(path string) (Config, error) {
 	config := DefaultConfig()
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
+		if err := validateConfig(config); err != nil {
+			return Config{}, err
+		}
 		data, err = toml.Marshal(config)
 		if err != nil {
 			return Config{}, fmt.Errorf("encode default config: %w", err)
@@ -60,13 +67,23 @@ func LoadConfig(path string) (Config, error) {
 	if err := toml.Unmarshal(data, &config); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
-	if config.Plugins.Directory == "" {
-		return Config{}, fmt.Errorf("plugins.directory is required")
-	}
-	if config.Worlds.Directory == "" {
-		return Config{}, fmt.Errorf("worlds.directory is required")
+	if err := validateConfig(config); err != nil {
+		return Config{}, err
 	}
 	return config, nil
+}
+
+func validateConfig(config Config) error {
+	if config.Plugins.Directory == "" {
+		return fmt.Errorf("plugins.directory is required")
+	}
+	if config.Worlds.Directory == "" {
+		return fmt.Errorf("worlds.directory is required")
+	}
+	if err := config.Worlds.Core.validate(); err != nil {
+		return fmt.Errorf("worlds.core: %w", err)
+	}
+	return nil
 }
 
 func runtimeLibraryFilename() string {

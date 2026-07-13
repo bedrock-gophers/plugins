@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define DF_ABI_VERSION 3u
+#define DF_ABI_VERSION 4u
 #define DF_HOST_ABI_VERSION 18u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
@@ -952,7 +952,8 @@ typedef struct {
 
 typedef DfStatus (*DfHandleEventFn)(void *instance, DfEventId event_id, const void *input, void *state);
 typedef void *(*DfPluginCreateFn)(void);
-typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
+typedef DfStatus (*DfPluginEnableFn)(void *instance, DfStringBuffer *error);
+typedef DfStatus (*DfPluginDisableFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef uint64_t (*DfPluginEntityTypeCountFn)(void *instance);
 typedef DfStatus (*DfPluginEntityTypeAtFn)(void *instance, uint64_t index, DfEntityTypeDescriptorV2 *out);
@@ -966,8 +967,8 @@ typedef struct {
     DfAbiHeader header;
     DfStringView plugin_id;
     DfPluginCreateFn create;
-    DfPluginLifecycleFn enable;
-    DfPluginLifecycleFn disable;
+    DfPluginEnableFn enable;
+    DfPluginDisableFn disable;
     DfPluginCommandsFn commands;
     DfPluginEntityTypeCountFn entity_type_count;
     DfPluginEntityTypeAtFn entity_type_at;
@@ -977,15 +978,17 @@ typedef struct {
     DfPluginSetHostFn set_host;
     DfPluginDestroyFn destroy;
     DfHandleEventFn handle_event;
-} DfPluginApiV3;
+} DfPluginApiV4;
 
-typedef const DfPluginApiV3 *(*DfPluginEntryV3Fn)(void);
+typedef const DfPluginApiV4 *(*DfPluginEntryV4Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
 typedef struct { DfStringView plugin_directory; const DfHostApiV18 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
-DfStatus df_runtime_enable(DfRuntime *runtime);
+DfStatus df_runtime_enable(DfRuntime *runtime, uint8_t *error, uint64_t error_capacity);
+void df_runtime_begin_disable(DfRuntime *runtime);
+void df_runtime_finish_disable(DfRuntime *runtime);
 void df_runtime_disable(DfRuntime *runtime);
 void df_runtime_destroy(DfRuntime *runtime);
 uint64_t df_runtime_plugin_count(const DfRuntime *runtime);

@@ -17,7 +17,9 @@ DfStatus bg_runtime_open(
 );
 
 void bg_runtime_close(BgRuntimeLibrary *library);
-DfStatus bg_runtime_enable(BgRuntimeLibrary *library);
+DfStatus bg_runtime_enable(BgRuntimeLibrary *library, uint8_t *error, uint64_t error_capacity);
+void bg_runtime_begin_disable(BgRuntimeLibrary *library);
+void bg_runtime_finish_disable(BgRuntimeLibrary *library);
 void bg_runtime_disable(BgRuntimeLibrary *library);
 uint64_t bg_runtime_plugin_count(const BgRuntimeLibrary *library);
 uint64_t bg_runtime_subscriptions(const BgRuntimeLibrary *library);

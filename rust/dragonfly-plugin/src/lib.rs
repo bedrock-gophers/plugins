@@ -5,6 +5,8 @@ mod command_descriptor_test;
 #[cfg(test)]
 mod items_generated_test;
 #[cfg(test)]
+mod lifecycle_test;
+#[cfg(test)]
 mod player_effect_snapshot_test;
 #[cfg(test)]
 mod player_transfer_test;
@@ -23,6 +25,7 @@ pub mod healing;
 mod item_nbt;
 pub mod particle;
 pub mod sound;
+pub mod task;
 pub mod world;
 
 pub use entity::{Entity, EntityId};
@@ -32,6 +35,13 @@ pub use world::{
 };
 
 pub use dragonfly_plugin_macros::{Command, CommandEnum, entity, plugin};
+
+/// Result returned while enabling a plugin.
+///
+/// Plugin errors remain ordinary Rust errors. The generated ABI adapter turns
+/// them into a bounded startup diagnostic for the server owner.
+pub type PluginResult<T = ()> =
+    std::result::Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 #[doc(hidden)]
 pub mod __private {
@@ -112,6 +122,31 @@ pub fn with_invocation<R>(
     let previous = CURRENT_INVOCATION.replace(invocation);
     let _restore = Restore(previous);
     function()
+}
+
+#[doc(hidden)]
+/// Writes one bounded UTF-8 diagnostic into a caller-owned ABI buffer.
+///
+/// # Safety
+/// `buffer` must be null or writable for this call. Its data pointer must be
+/// writable for `capacity` bytes when capacity is non-zero.
+pub unsafe fn __write_plugin_error(
+    buffer: *mut dragonfly_plugin_sys::DfStringBuffer,
+    message: &str,
+) {
+    let Some(buffer) = (unsafe { buffer.as_mut() }) else {
+        return;
+    };
+    buffer.len = 0;
+    if buffer.capacity == 0 || buffer.data.is_null() {
+        return;
+    }
+    let mut length = message.len().min(buffer.capacity as usize);
+    while !message.is_char_boundary(length) {
+        length -= 1;
+    }
+    unsafe { core::ptr::copy_nonoverlapping(message.as_ptr(), buffer.data, length) };
+    buffer.len = length as u64;
 }
 
 const MAX_SKIN_DATA_BYTES: u64 = 64 << 20;
@@ -3768,7 +3803,9 @@ impl<'a> PlayerSkinChangeEventData<'a> {
 }
 
 pub trait Plugin: Default + Send + Sync + 'static {
-    fn on_enable(&self) {}
+    fn on_enable(&self) -> PluginResult {
+        Ok(())
+    }
     fn on_disable(&self) {}
     fn on_move(&self, _event: &mut Event::PlayerMove<'_>) {}
     fn on_chat(&self, _event: &mut Event::PlayerChat<'_>) {}

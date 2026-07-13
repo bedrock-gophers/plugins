@@ -54,7 +54,8 @@ use dragonfly_plugin_sys::{
     DfPlayerSkinChangeState, DfPlayerSleepInput, DfPlayerSleepState, DfPlayerStartBreakInput,
     DfPlayerStartBreakState, DfPlayerTeleportInput, DfPlayerTeleportState,
     DfPlayerToggleSneakInput, DfPlayerToggleSneakState, DfPlayerToggleSprintInput,
-    DfPlayerToggleSprintState, DfPluginApiV3, DfPluginEntryV3Fn, DfStatus, DfStringView,
+    DfPlayerToggleSprintState, DfPluginApiV4, DfPluginEntryV4Fn, DfStatus, DfStringBuffer,
+    DfStringView,
 };
 use libloading::{Library, Symbol};
 use std::collections::HashMap;
@@ -64,11 +65,15 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::ptr;
 use std::slice;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, RwLock};
+
+#[cfg(test)]
+mod lifecycle_test;
 
 const MAX_ABI_SLICE_ITEMS: u64 = 1024;
 const MAX_ENTITY_TYPES: u64 = MAX_ABI_SLICE_ITEMS;
+const MAX_LIFECYCLE_ERROR_BYTES: usize = 4096;
 
 #[repr(C)]
 pub struct DfRuntimeConfig {
@@ -81,14 +86,162 @@ pub struct DfRuntime {
     entity_types: Vec<RuntimeEntityType>,
     entity_instances: RwLock<HashMap<DfEntityInstanceId, Arc<RuntimeEntityInstance>>>,
     next_entity_instance: AtomicU64,
-    commands: Vec<RuntimeCommand>,
+    commands: RwLock<Vec<RuntimeCommand>>,
     subscriptions: u64,
+    lifecycle: Mutex<()>,
+    admission: Admission,
 }
 
+#[derive(Clone, Copy)]
 struct RuntimeCommand {
     plugin: usize,
     local: u64,
     descriptor: DfCommandDescriptor,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimePhase {
+    Loaded,
+    Starting,
+    Running,
+    Stopping,
+    Finishing,
+    Disabled,
+}
+
+#[derive(Debug)]
+struct AdmissionState {
+    phase: RuntimePhase,
+    ordinary: usize,
+    entities: usize,
+}
+
+#[derive(Debug)]
+struct Admission {
+    state: Mutex<AdmissionState>,
+    drained: Condvar,
+}
+
+#[derive(Clone, Copy)]
+enum AdmissionKind {
+    Ordinary,
+    Entity,
+}
+
+struct AdmissionGuard<'a> {
+    admission: &'a Admission,
+    kind: AdmissionKind,
+}
+
+impl Admission {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(AdmissionState {
+                phase: RuntimePhase::Loaded,
+                ordinary: 0,
+                entities: 0,
+            }),
+            drained: Condvar::new(),
+        }
+    }
+
+    fn state(&self) -> MutexGuard<'_, AdmissionState> {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn enter(&self, kind: AdmissionKind) -> Option<AdmissionGuard<'_>> {
+        let mut state = self.state();
+        let admitted = match kind {
+            AdmissionKind::Ordinary => state.phase == RuntimePhase::Running,
+            AdmissionKind::Entity => matches!(
+                state.phase,
+                RuntimePhase::Starting | RuntimePhase::Running | RuntimePhase::Stopping
+            ),
+        };
+        if !admitted {
+            return None;
+        }
+        match kind {
+            AdmissionKind::Ordinary => state.ordinary += 1,
+            AdmissionKind::Entity => state.entities += 1,
+        }
+        Some(AdmissionGuard {
+            admission: self,
+            kind,
+        })
+    }
+
+    fn start_enable(&self) -> Result<bool, String> {
+        let mut state = self.state();
+        match state.phase {
+            RuntimePhase::Running => Ok(false),
+            RuntimePhase::Loaded | RuntimePhase::Disabled => {
+                state.phase = RuntimePhase::Starting;
+                Ok(true)
+            }
+            RuntimePhase::Starting | RuntimePhase::Stopping | RuntimePhase::Finishing => {
+                Err("native plugin runtime is stopping".to_owned())
+            }
+        }
+    }
+
+    fn finish_enable(&self) {
+        self.state().phase = RuntimePhase::Running;
+    }
+
+    fn fail_enable(&self) {
+        self.state().phase = RuntimePhase::Stopping;
+    }
+
+    fn begin_stopping(&self) -> bool {
+        let mut state = self.state();
+        match state.phase {
+            RuntimePhase::Disabled | RuntimePhase::Finishing => return false,
+            RuntimePhase::Stopping => {}
+            RuntimePhase::Loaded | RuntimePhase::Starting | RuntimePhase::Running => {
+                state.phase = RuntimePhase::Stopping;
+            }
+        }
+        while state.ordinary != 0 {
+            state = self
+                .drained
+                .wait(state)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        true
+    }
+
+    fn begin_finishing(&self) -> bool {
+        let mut state = self.state();
+        if state.phase == RuntimePhase::Disabled {
+            return false;
+        }
+        state.phase = RuntimePhase::Finishing;
+        while state.ordinary != 0 || state.entities != 0 {
+            state = self
+                .drained
+                .wait(state)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        true
+    }
+
+    fn finish(&self) {
+        self.state().phase = RuntimePhase::Disabled;
+    }
+}
+
+impl Drop for AdmissionGuard<'_> {
+    fn drop(&mut self) {
+        let mut state = self.admission.state();
+        match self.kind {
+            AdmissionKind::Ordinary => state.ordinary -= 1,
+            AdmissionKind::Entity => state.entities -= 1,
+        }
+        self.admission.drained.notify_all();
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -176,10 +329,10 @@ impl Drop for EntityCallGuard<'_> {
 }
 
 struct LoadedPlugin {
-    api: &'static DfPluginApiV3,
+    api: &'static DfPluginApiV4,
     instance: *mut c_void,
     id: String,
-    enabled: bool,
+    enabled: AtomicBool,
     _library: Library,
 }
 
@@ -282,8 +435,10 @@ impl DfRuntime {
             entity_types,
             entity_instances: RwLock::new(HashMap::new()),
             next_entity_instance: AtomicU64::new(1),
-            commands: Vec::new(),
+            commands: RwLock::new(Vec::new()),
             subscriptions,
+            lifecycle: Mutex::new(()),
+            admission: Admission::new(),
         })
     }
 
@@ -424,7 +579,8 @@ impl DfRuntime {
 
     fn handle_move(&self, input: &DfPlayerMoveInput, state: &mut DfPlayerMoveState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_MOVE == 0
+            if !plugin.enabled.load(Ordering::Acquire)
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_MOVE == 0
             {
                 continue;
             }
@@ -452,40 +608,111 @@ impl DfRuntime {
         DF_STATUS_OK
     }
 
-    fn enable(&mut self) -> DfStatus {
+    fn enable(&self) -> Result<(), String> {
+        let _lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !self.admission.start_enable()? {
+            return Ok(());
+        }
         for index in 0..self.plugins.len() {
-            let plugin = &mut self.plugins[index];
-            if plugin.enabled {
+            let plugin = &self.plugins[index];
+            if plugin.enabled.load(Ordering::Acquire) {
                 continue;
             }
-            let status = plugin.api.enable.map_or(DF_STATUS_OK, |enable| {
-                // SAFETY: instance belongs to this plugin and callback is ABI-validated.
-                unsafe { enable(plugin.instance) }
-            });
-            if status != DF_STATUS_OK {
-                for previous in self.plugins[..index].iter_mut().rev() {
+            if let Err(message) = plugin.enable() {
+                plugin.rollback_enable();
+                for previous in self.plugins[..index].iter().rev() {
                     previous.disable();
                 }
-                return status;
+                self.commands
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clear();
+                self.admission.fail_enable();
+                return Err(message);
             }
-            plugin.enabled = true;
         }
         let status = self.rebuild_commands();
         if status != DF_STATUS_OK {
-            self.disable();
+            for plugin in self.plugins.iter().rev() {
+                plugin.disable();
+            }
+            self.commands
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clear();
+            self.admission.fail_enable();
+            return Err("enabled plugins returned invalid command descriptors".to_owned());
         }
-        status
+        self.admission.finish_enable();
+        Ok(())
     }
 
-    fn disable(&mut self) {
-        self.commands.clear();
-        for plugin in self.plugins.iter_mut().rev() {
+    fn begin_disable(&self) {
+        let _lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.begin_disable_locked();
+    }
+
+    fn begin_disable_locked(&self) {
+        if !self.admission.begin_stopping() {
+            return;
+        }
+        self.commands
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+        for plugin in self.plugins.iter().rev() {
             plugin.disable();
         }
     }
 
-    fn rebuild_commands(&mut self) -> DfStatus {
-        self.commands.clear();
+    fn finish_disable(&self) {
+        let _lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.begin_disable_locked();
+        if !self.admission.begin_finishing() {
+            return;
+        }
+        let ids: Vec<_> = self
+            .entity_instances
+            .read()
+            .map(|instances| instances.keys().copied().collect())
+            .unwrap_or_default();
+        for id in ids {
+            let _ = self.destroy_entity_instance(id);
+        }
+        self.admission.finish();
+    }
+
+    fn disable(&self) {
+        let _lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.begin_disable_locked();
+        if !self.admission.begin_finishing() {
+            return;
+        }
+        let ids: Vec<_> = self
+            .entity_instances
+            .read()
+            .map(|instances| instances.keys().copied().collect())
+            .unwrap_or_default();
+        for id in ids {
+            let _ = self.destroy_entity_instance(id);
+        }
+        self.admission.finish();
+    }
+
+    fn rebuild_commands(&self) -> DfStatus {
+        let mut rebuilt = Vec::new();
         for (plugin_index, plugin) in self.plugins.iter().enumerate() {
             let Some(commands) = plugin.api.commands else {
                 continue;
@@ -503,7 +730,7 @@ impl DfRuntime {
                     return DF_STATUS_ERROR;
                 };
                 if name.is_empty()
-                    || self.commands.iter().any(|command| {
+                    || rebuilt.iter().any(|command: &RuntimeCommand| {
                         unsafe { string_view(command.descriptor.name) }
                             .is_ok_and(|existing| existing == name)
                     })
@@ -516,13 +743,17 @@ impl DfRuntime {
                 if !valid_command_descriptor(&descriptor) {
                     return DF_STATUS_ERROR;
                 }
-                self.commands.push(RuntimeCommand {
+                rebuilt.push(RuntimeCommand {
                     plugin: plugin_index,
                     local: local as u64,
                     descriptor,
                 });
             }
         }
+        *self
+            .commands
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = rebuilt;
         DF_STATUS_OK
     }
 
@@ -532,11 +763,17 @@ impl DfRuntime {
         input: &DfCommandInput,
         state: &mut DfCommandState,
     ) -> DfStatus {
-        let Some(command) = self.commands.get(index) else {
+        let command = self
+            .commands
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(index)
+            .copied();
+        let Some(command) = command else {
             return DF_STATUS_ERROR;
         };
         let plugin = &self.plugins[command.plugin];
-        if !plugin.enabled {
+        if !plugin.enabled.load(Ordering::Acquire) {
             return DF_STATUS_ERROR;
         }
         let Some(handle) = plugin.api.handle_command else {
@@ -557,11 +794,17 @@ impl DfRuntime {
         context: &dragonfly_plugin_sys::DfCommandEnumContext,
         output: &mut dragonfly_plugin_sys::DfStringBuffer,
     ) -> DfStatus {
-        let Some(command) = self.commands.get(index) else {
+        let command = self
+            .commands
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(index)
+            .copied();
+        let Some(command) = command else {
             return DF_STATUS_ERROR;
         };
         let plugin = &self.plugins[command.plugin];
-        if !plugin.enabled {
+        if !plugin.enabled.load(Ordering::Acquire) {
             return DF_STATUS_ERROR;
         }
         let Some(options) = plugin.api.command_enum_options else {
@@ -594,7 +837,8 @@ impl DfRuntime {
 
     fn handle_chat(&self, input: &DfPlayerChatInput, state: &mut DfPlayerChatState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_CHAT == 0
+            if !plugin.enabled.load(Ordering::Acquire)
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_CHAT == 0
             {
                 continue;
             }
@@ -623,7 +867,8 @@ impl DfRuntime {
 
     fn handle_join(&self, input: &DfPlayerJoinInput, state: &mut DfPlayerJoinState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_JOIN == 0
+            if !plugin.enabled.load(Ordering::Acquire)
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_JOIN == 0
             {
                 continue;
             }
@@ -651,7 +896,8 @@ impl DfRuntime {
 
     fn handle_quit(&self, input: &DfPlayerQuitInput, state: &mut DfPlayerQuitState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_QUIT == 0
+            if !plugin.enabled.load(Ordering::Acquire)
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_QUIT == 0
             {
                 continue;
             }
@@ -675,7 +921,8 @@ impl DfRuntime {
 
     fn handle_hurt(&self, input: &DfPlayerHurtInput, state: &mut DfPlayerHurtState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_HURT == 0
+            if !plugin.enabled.load(Ordering::Acquire)
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_HURT == 0
             {
                 continue;
             }
@@ -704,7 +951,8 @@ impl DfRuntime {
 
     fn handle_heal(&self, input: &DfPlayerHealInput, state: &mut DfPlayerHealState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_HEAL == 0
+            if !plugin.enabled.load(Ordering::Acquire)
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_HEAL == 0
             {
                 continue;
             }
@@ -737,7 +985,7 @@ impl DfRuntime {
         state: &mut DfPlayerBlockBreakState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_BLOCK_BREAK == 0
             {
                 continue;
@@ -771,7 +1019,7 @@ impl DfRuntime {
         state: &mut DfPlayerBlockPlaceState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_BLOCK_PLACE == 0
             {
                 continue;
@@ -804,7 +1052,7 @@ impl DfRuntime {
         state: &mut DfPlayerFoodLossState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_FOOD_LOSS == 0
             {
                 continue;
@@ -834,7 +1082,7 @@ impl DfRuntime {
 
     fn handle_death(&self, input: &DfPlayerDeathInput, state: &mut DfPlayerDeathState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_DEATH == 0
             {
                 continue;
@@ -863,7 +1111,7 @@ impl DfRuntime {
         state: &mut DfPlayerStartBreakState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_START_BREAK == 0
             {
                 continue;
@@ -896,7 +1144,7 @@ impl DfRuntime {
         state: &mut DfPlayerFireExtinguishState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_FIRE_EXTINGUISH == 0
             {
                 continue;
@@ -929,7 +1177,7 @@ impl DfRuntime {
         state: &mut DfPlayerToggleSprintState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_TOGGLE_SPRINT == 0
             {
                 continue;
@@ -962,7 +1210,7 @@ impl DfRuntime {
         state: &mut DfPlayerToggleSneakState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_TOGGLE_SNEAK == 0
             {
                 continue;
@@ -991,7 +1239,8 @@ impl DfRuntime {
 
     fn handle_jump(&self, input: &DfPlayerJumpInput, state: &mut DfPlayerJumpState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_JUMP == 0
+            if !plugin.enabled.load(Ordering::Acquire)
+                || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_JUMP == 0
             {
                 continue;
             }
@@ -1019,7 +1268,7 @@ impl DfRuntime {
         state: &mut DfPlayerTeleportState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_TELEPORT == 0
             {
                 continue;
@@ -1052,7 +1301,7 @@ impl DfRuntime {
         state: &mut DfPlayerExperienceGainState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_EXPERIENCE_GAIN == 0
             {
                 continue;
@@ -1086,7 +1335,7 @@ impl DfRuntime {
         state: &mut DfPlayerPunchAirState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_PUNCH_AIR == 0
             {
                 continue;
@@ -1119,7 +1368,7 @@ impl DfRuntime {
         state: &mut DfPlayerHeldSlotChangeState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_HELD_SLOT_CHANGE == 0
             {
                 continue;
@@ -1148,7 +1397,7 @@ impl DfRuntime {
 
     fn handle_sleep(&self, input: &DfPlayerSleepInput, state: &mut DfPlayerSleepState) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_SLEEP == 0
             {
                 continue;
@@ -1181,7 +1430,7 @@ impl DfRuntime {
         state: &mut DfPlayerBlockPickState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_BLOCK_PICK == 0
             {
                 continue;
@@ -1214,7 +1463,7 @@ impl DfRuntime {
         state: &mut DfPlayerLecternPageTurnState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_LECTERN_PAGE_TURN == 0
             {
                 continue;
@@ -1248,7 +1497,7 @@ impl DfRuntime {
         state: &mut DfPlayerSignEditState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_SIGN_EDIT == 0
             {
                 continue;
@@ -1281,7 +1530,7 @@ impl DfRuntime {
         state: &mut DfPlayerItemUseState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ITEM_USE == 0
             {
                 continue;
@@ -1314,7 +1563,7 @@ impl DfRuntime {
         state: &mut DfPlayerItemUseOnBlockState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ITEM_USE_ON_BLOCK == 0
             {
                 continue;
@@ -1347,7 +1596,7 @@ impl DfRuntime {
         state: &mut DfPlayerItemConsumeState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ITEM_CONSUME == 0
             {
                 continue;
@@ -1380,7 +1629,7 @@ impl DfRuntime {
         state: &mut DfPlayerItemReleaseState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ITEM_RELEASE == 0
             {
                 continue;
@@ -1413,7 +1662,7 @@ impl DfRuntime {
         state: &mut DfPlayerItemDamageState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ITEM_DAMAGE == 0
             {
                 continue;
@@ -1447,7 +1696,7 @@ impl DfRuntime {
         state: &mut DfPlayerItemDropState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ITEM_DROP == 0
             {
                 continue;
@@ -1480,7 +1729,7 @@ impl DfRuntime {
         state: &mut DfPlayerAttackEntityState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ATTACK_ENTITY == 0
             {
                 continue;
@@ -1524,7 +1773,7 @@ impl DfRuntime {
         state: &mut DfPlayerItemUseOnEntityState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_ITEM_USE_ON_ENTITY == 0
             {
                 continue;
@@ -1557,7 +1806,7 @@ impl DfRuntime {
         state: &mut DfPlayerChangeWorldState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_CHANGE_WORLD == 0
             {
                 continue;
@@ -1586,7 +1835,7 @@ impl DfRuntime {
         state: &mut DfPlayerRespawnState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_RESPAWN == 0
             {
                 continue;
@@ -1618,7 +1867,7 @@ impl DfRuntime {
         state: &mut DfPlayerSkinChangeState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions & DF_SUBSCRIPTION_PLAYER_SKIN_CHANGE == 0
             {
                 continue;
@@ -1654,7 +1903,7 @@ impl DfRuntime {
         state: &mut DfEntityHurtState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions
                     & dragonfly_plugin_sys::DF_SUBSCRIPTION_ENTITY_HURT
                     == 0
@@ -1689,7 +1938,7 @@ impl DfRuntime {
         state: &mut DfEntityHealState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions
                     & dragonfly_plugin_sys::DF_SUBSCRIPTION_ENTITY_HEAL
                     == 0
@@ -1724,7 +1973,7 @@ impl DfRuntime {
         state: &mut DfEntityDeathState,
     ) -> DfStatus {
         for plugin in &self.plugins {
-            if !plugin.enabled
+            if !plugin.enabled.load(Ordering::Acquire)
                 || plugin.api.header.subscriptions
                     & dragonfly_plugin_sys::DF_SUBSCRIPTION_ENTITY_DEATH
                     == 0
@@ -1839,14 +2088,6 @@ fn valid_entity_type_descriptor(descriptor: &DfEntityTypeDescriptorV2) -> Result
 
 impl Drop for DfRuntime {
     fn drop(&mut self) {
-        let ids: Vec<_> = self
-            .entity_instances
-            .read()
-            .map(|instances| instances.keys().copied().collect())
-            .unwrap_or_default();
-        for id in ids {
-            let _ = self.destroy_entity_instance(id);
-        }
         self.disable();
     }
 }
@@ -1909,23 +2150,67 @@ fn valid_command_state(state: &DfCommandState) -> bool {
 }
 
 impl LoadedPlugin {
-    fn disable(&mut self) {
-        if !self.enabled {
+    fn enable(&self) -> Result<(), String> {
+        let Some(enable) = self.api.enable else {
+            self.enabled.store(true, Ordering::Release);
+            return Ok(());
+        };
+        let mut diagnostic = [0u8; MAX_LIFECYCLE_ERROR_BYTES];
+        let mut output = DfStringBuffer {
+            data: diagnostic.as_mut_ptr(),
+            len: 0,
+            capacity: diagnostic.len() as u64,
+        };
+        // SAFETY: instance belongs to this plugin. The buffer is writable for this call.
+        let status = unsafe { enable(self.instance, &mut output) };
+        let valid_length = usize::try_from(output.len)
+            .ok()
+            .filter(|length| *length <= diagnostic.len());
+        let message =
+            valid_length.and_then(|length| std::str::from_utf8(&diagnostic[..length]).ok());
+        if status == DF_STATUS_OK && message == Some("") {
+            self.enabled.store(true, Ordering::Release);
+            return Ok(());
+        }
+        if status == DF_STATUS_OK || message.is_none() {
+            return Err(format!(
+                "plugin {:?} returned an invalid enable diagnostic",
+                self.id
+            ));
+        }
+        let message = message.unwrap_or_default();
+        if message.is_empty() {
+            Err(format!("plugin {:?} failed to enable", self.id))
+        } else {
+            Err(format!("plugin {:?} failed to enable: {message}", self.id))
+        }
+    }
+
+    fn rollback_enable(&self) {
+        self.call_disable();
+        self.enabled.store(false, Ordering::Release);
+    }
+
+    fn disable(&self) {
+        if !self.enabled.swap(false, Ordering::AcqRel) {
             return;
         }
+        self.call_disable();
+    }
+
+    fn call_disable(&self) {
         if let Some(disable) = self.api.disable {
             // SAFETY: instance belongs to this plugin and callback is ABI-validated.
             let _ = unsafe { disable(self.instance) };
         }
-        self.enabled = false;
     }
 
     unsafe fn open(path: &Path, host: *const DfHostApiV18) -> Result<Self, String> {
         // SAFETY: loading native plugins is the purpose of this trusted plugin runtime.
         let library = unsafe { Library::new(path) }
             .map_err(|err| format!("load {}: {err}", path.display()))?;
-        // SAFETY: symbol name and function signature are fixed by ABI v3.
-        let entry: Symbol<DfPluginEntryV3Fn> = unsafe { library.get(b"df_plugin_entry_v3\0") }
+        // SAFETY: symbol name and function signature are fixed by ABI v4.
+        let entry: Symbol<DfPluginEntryV4Fn> = unsafe { library.get(b"df_plugin_entry_v4\0") }
             .map_err(|err| format!("load entry from {}: {err}", path.display()))?;
         // SAFETY: entry has no arguments and returns a static API descriptor.
         let api_ptr = unsafe { entry() };
@@ -1940,7 +2225,7 @@ impl LoadedPlugin {
                 DF_ABI_VERSION
             ));
         }
-        if api.header.struct_size < size_of::<DfPluginApiV3>() as u32 {
+        if api.header.struct_size < size_of::<DfPluginApiV4>() as u32 {
             return Err(format!(
                 "{} returned a truncated plugin API",
                 path.display()
@@ -1964,7 +2249,7 @@ impl LoadedPlugin {
             api,
             instance,
             id,
-            enabled: false,
+            enabled: AtomicBool::new(false),
             _library: library,
         };
         let Some(set_host) = api.set_host else {
@@ -2143,7 +2428,10 @@ fn write_error(buffer: *mut u8, capacity: u64, message: &str) {
     if buffer.is_null() || capacity == 0 {
         return;
     }
-    let count = message.len().min(capacity.saturating_sub(1) as usize);
+    let mut count = message.len().min(capacity.saturating_sub(1) as usize);
+    while !message.is_char_boundary(count) {
+        count -= 1;
+    }
     // SAFETY: caller provides writable buffer of capacity bytes.
     unsafe {
         ptr::copy_nonoverlapping(message.as_ptr(), buffer, count);
@@ -2203,22 +2491,61 @@ pub unsafe extern "C" fn df_runtime_create(
 /// Enables loaded plugins in deterministic order.
 ///
 /// # Safety
-/// `runtime` must point to a live runtime and must not be used concurrently during this call.
-pub unsafe extern "C" fn df_runtime_enable(runtime: *mut DfRuntime) -> DfStatus {
-    let Some(runtime) = (unsafe { runtime.as_mut() }) else {
+/// `runtime` must point to a live runtime.
+pub unsafe extern "C" fn df_runtime_enable(
+    runtime: *mut DfRuntime,
+    error: *mut u8,
+    error_capacity: u64,
+) -> DfStatus {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
+        write_error(error, error_capacity, "null runtime");
         return DF_STATUS_ERROR;
     };
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runtime.enable()))
-        .unwrap_or(DF_STATUS_ERROR)
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runtime.enable())) {
+        Ok(Ok(())) => DF_STATUS_OK,
+        Ok(Err(message)) => {
+            write_error(error, error_capacity, &message);
+            DF_STATUS_ERROR
+        }
+        Err(_) => {
+            let _ =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runtime.begin_disable()));
+            write_error(error, error_capacity, "panic while enabling native plugins");
+            DF_STATUS_ERROR
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+/// Rejects and drains ordinary callbacks, then disables plugins in reverse order.
+/// Entity callbacks remain admitted until [`df_runtime_finish_disable`].
+///
+/// # Safety
+/// `runtime` must be null or point to a live runtime.
+pub unsafe extern "C" fn df_runtime_begin_disable(runtime: *mut DfRuntime) {
+    if let Some(runtime) = unsafe { runtime.as_ref() } {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runtime.begin_disable()));
+    }
+}
+
+#[unsafe(no_mangle)]
+/// Rejects and drains entity callbacks, destroys leaked entity state, and completes shutdown.
+///
+/// # Safety
+/// `runtime` must be null or point to a live runtime.
+pub unsafe extern "C" fn df_runtime_finish_disable(runtime: *mut DfRuntime) {
+    if let Some(runtime) = unsafe { runtime.as_ref() } {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runtime.finish_disable()));
+    }
 }
 
 #[unsafe(no_mangle)]
 /// Disables enabled plugins in reverse order.
 ///
 /// # Safety
-/// `runtime` must be null or point to a live runtime and must not be used concurrently during this call.
+/// `runtime` must be null or point to a live runtime.
 pub unsafe extern "C" fn df_runtime_disable(runtime: *mut DfRuntime) {
-    if let Some(runtime) = unsafe { runtime.as_mut() } {
+    if let Some(runtime) = unsafe { runtime.as_ref() } {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runtime.disable()));
     }
 }
@@ -2299,6 +2626,9 @@ pub unsafe extern "C" fn df_runtime_entity_adopt(
     let (Some(runtime), Some(out)) = (unsafe { runtime.as_ref() }, unsafe { out.as_mut() }) else {
         return DF_STATUS_ERROR;
     };
+    let Some(_admission) = runtime.admission.enter(AdmissionKind::Entity) else {
+        return DF_STATUS_ERROR;
+    };
     *out = 0;
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let Some(entity_type) = runtime.entity_type(type_key) else {
@@ -2340,6 +2670,9 @@ pub unsafe extern "C" fn df_runtime_entity_load(
         unsafe { input.as_ref() },
         unsafe { out.as_mut() },
     ) else {
+        return DF_STATUS_ERROR;
+    };
+    let Some(_admission) = runtime.admission.enter(AdmissionKind::Entity) else {
         return DF_STATUS_ERROR;
     };
     *out = 0;
@@ -2392,6 +2725,9 @@ pub unsafe extern "C" fn df_runtime_entity_save(
     else {
         return DF_STATUS_ERROR;
     };
+    let Some(_admission) = runtime.admission.enter(AdmissionKind::Entity) else {
+        return DF_STATUS_ERROR;
+    };
     if state.data.len > state.data.capacity
         || (state.data.capacity != 0 && state.data.data.is_null())
     {
@@ -2426,6 +2762,9 @@ macro_rules! entity_operation {
                 unsafe { input.as_ref() },
                 unsafe { state.as_mut() },
             ) else {
+                return DF_STATUS_ERROR;
+            };
+            let Some(_admission) = runtime.admission.enter(AdmissionKind::Entity) else {
                 return DF_STATUS_ERROR;
             };
             if !($validate)(input, state) {
@@ -2507,6 +2846,9 @@ pub unsafe extern "C" fn df_runtime_entity_destroy(
     let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         return DF_STATUS_ERROR;
     };
+    let Some(_admission) = runtime.admission.enter(AdmissionKind::Entity) else {
+        return DF_STATUS_ERROR;
+    };
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         runtime.destroy_entity_instance(instance)
     }))
@@ -2520,7 +2862,13 @@ pub unsafe extern "C" fn df_runtime_entity_destroy(
 /// `runtime` must be null or point to a live runtime for this call.
 pub unsafe extern "C" fn df_runtime_command_count(runtime: *const DfRuntime) -> u64 {
     // SAFETY: null is handled; non-null pointer is owned by caller.
-    unsafe { runtime.as_ref() }.map_or(0, |runtime| runtime.commands.len() as u64)
+    unsafe { runtime.as_ref() }.map_or(0, |runtime| {
+        runtime
+            .commands
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len() as u64
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -2536,7 +2884,11 @@ pub unsafe extern "C" fn df_runtime_command_at(
     let (Some(runtime), Some(out)) = (unsafe { runtime.as_ref() }, unsafe { out.as_mut() }) else {
         return DF_STATUS_ERROR;
     };
-    let Some(command) = runtime.commands.get(index as usize) else {
+    let commands = runtime
+        .commands
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(command) = commands.get(index as usize) else {
         return DF_STATUS_ERROR;
     };
     *out = command.descriptor;
@@ -2560,6 +2912,9 @@ pub unsafe extern "C" fn df_runtime_handle_command(
         unsafe { input.as_ref() },
         unsafe { state.as_mut() },
     ) else {
+        return DF_STATUS_ERROR;
+    };
+    let Some(_admission) = runtime.admission.enter(AdmissionKind::Ordinary) else {
         return DF_STATUS_ERROR;
     };
     if unsafe { string_view(input.source) }.is_err()
@@ -2607,6 +2962,9 @@ pub unsafe extern "C" fn df_runtime_command_enum_options(
     ) else {
         return DF_STATUS_ERROR;
     };
+    let Some(_admission) = runtime.admission.enter(AdmissionKind::Ordinary) else {
+        return DF_STATUS_ERROR;
+    };
     if unsafe { string_view(context.source) }.is_err() {
         return DF_STATUS_ERROR;
     }
@@ -2637,6 +2995,12 @@ pub unsafe extern "C" fn df_runtime_handle_event(
     input: *const c_void,
     state: *mut c_void,
 ) -> DfStatus {
+    let Some(runtime_ref) = (unsafe { runtime.as_ref() }) else {
+        return DF_STATUS_ERROR;
+    };
+    let Some(_admission) = runtime_ref.admission.enter(AdmissionKind::Ordinary) else {
+        return DF_STATUS_ERROR;
+    };
     if event_id == DF_EVENT_PLAYER_MOVE {
         let (Some(runtime), Some(input), Some(state)) = (
             unsafe { runtime.as_ref() },
@@ -3471,6 +3835,21 @@ mod tests {
     use super::*;
     use dragonfly_plugin_sys::*;
 
+    fn empty_runtime() -> DfRuntime {
+        let runtime = DfRuntime {
+            plugins: Vec::new(),
+            entity_types: Vec::new(),
+            entity_instances: RwLock::new(HashMap::new()),
+            next_entity_instance: AtomicU64::new(1),
+            commands: RwLock::new(Vec::new()),
+            subscriptions: 0,
+            lifecycle: Mutex::new(()),
+            admission: Admission::new(),
+        };
+        runtime.enable().unwrap();
+        runtime
+    }
+
     #[test]
     fn empty_directory_loads() {
         let directory =
@@ -3555,14 +3934,7 @@ mod tests {
 
     #[test]
     fn generic_dispatch_accepts_item_use_on_entity() {
-        let mut runtime = DfRuntime {
-            plugins: Vec::new(),
-            entity_types: Vec::new(),
-            entity_instances: RwLock::new(HashMap::new()),
-            next_entity_instance: AtomicU64::new(1),
-            commands: Vec::new(),
-            subscriptions: 0,
-        };
+        let mut runtime = empty_runtime();
         let input = DfPlayerItemUseOnEntityInput::default();
         let mut state = DfPlayerItemUseOnEntityState::default();
         let status = unsafe {
@@ -3588,14 +3960,7 @@ mod tests {
 
     #[test]
     fn generic_dispatch_validates_change_world_handles() {
-        let mut runtime = DfRuntime {
-            plugins: Vec::new(),
-            entity_types: Vec::new(),
-            entity_instances: RwLock::new(HashMap::new()),
-            next_entity_instance: AtomicU64::new(1),
-            commands: Vec::new(),
-            subscriptions: 0,
-        };
+        let mut runtime = empty_runtime();
         let mut input = DfPlayerChangeWorldInput {
             player: dragonfly_plugin_sys::DfPlayerId {
                 generation: 1,
@@ -3640,14 +4005,7 @@ mod tests {
 
     #[test]
     fn generic_dispatch_validates_respawn_state() {
-        let mut runtime = DfRuntime {
-            plugins: Vec::new(),
-            entity_types: Vec::new(),
-            entity_instances: RwLock::new(HashMap::new()),
-            next_entity_instance: AtomicU64::new(1),
-            commands: Vec::new(),
-            subscriptions: 0,
-        };
+        let mut runtime = empty_runtime();
         let mut input = DfPlayerRespawnInput {
             player: dragonfly_plugin_sys::DfPlayerId {
                 generation: 1,
@@ -3692,14 +4050,7 @@ mod tests {
 
     #[test]
     fn generic_dispatch_validates_skin_change_state() {
-        let mut runtime = DfRuntime {
-            plugins: Vec::new(),
-            entity_types: Vec::new(),
-            entity_instances: RwLock::new(HashMap::new()),
-            next_entity_instance: AtomicU64::new(1),
-            commands: Vec::new(),
-            subscriptions: 0,
-        };
+        let mut runtime = empty_runtime();
         let mut input = DfPlayerSkinChangeInput {
             invocation: 7,
             player: DfPlayerId {

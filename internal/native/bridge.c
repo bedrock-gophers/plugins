@@ -52,9 +52,9 @@ _Static_assert(sizeof(DfEntityTypeDescriptorV2) == 144, "DfEntityTypeDescriptorV
 _Static_assert(offsetof(DfEntityTypeDescriptorV2, type_key) == 80, "DfEntityTypeDescriptorV2.type_key ABI offset changed");
 _Static_assert(sizeof(DfEntitySpawnViewV3) == 200, "DfEntitySpawnViewV3 ABI layout changed");
 _Static_assert(offsetof(DfEntitySpawnViewV3, custom_instance) == 176, "DfEntitySpawnViewV3.custom_instance ABI offset changed");
-_Static_assert(sizeof(DfPluginApiV3) == 128, "DfPluginApiV3 ABI layout changed");
-_Static_assert(offsetof(DfPluginApiV3, entity_type_count) == 64, "DfPluginApiV3.entity_type_count ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV3, handle_entity) == 80, "DfPluginApiV3.handle_entity ABI offset changed");
+_Static_assert(sizeof(DfPluginApiV4) == 128, "DfPluginApiV4 ABI layout changed");
+_Static_assert(offsetof(DfPluginApiV4, entity_type_count) == 64, "DfPluginApiV4.entity_type_count ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV4, handle_entity) == 80, "DfPluginApiV4.handle_entity ABI offset changed");
 _Static_assert(sizeof(DfEntityState) == 128, "DfEntityState ABI layout changed");
 _Static_assert(offsetof(DfEntityState, world) == 72, "DfEntityState.world ABI offset changed");
 _Static_assert(sizeof(DfParticleViewV1) == 40, "DfParticleViewV1 ABI layout changed");
@@ -272,7 +272,7 @@ static DfStatus host_player_sound_play(uint64_t context, DfInvocationId invocati
 
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
 typedef void (*RuntimeDestroyFn)(DfRuntime *);
-typedef DfStatus (*RuntimeEnableFn)(DfRuntime *);
+typedef DfStatus (*RuntimeEnableFn)(DfRuntime *, uint8_t *, uint64_t);
 typedef void (*RuntimeDisableFn)(DfRuntime *);
 typedef uint64_t (*RuntimeCountFn)(const DfRuntime *);
 typedef DfStatus (*RuntimeEntityTypeAtFn)(const DfRuntime *, uint64_t, DfEntityTypeDescriptorV2 *);
@@ -295,6 +295,8 @@ struct BgRuntimeLibrary {
     DfHostApiV18 host_api;
     RuntimeDestroyFn destroy;
     RuntimeEnableFn enable;
+    RuntimeDisableFn begin_disable;
+    RuntimeDisableFn finish_disable;
     RuntimeDisableFn disable;
     RuntimeCountFn plugin_count;
     RuntimeCountFn subscriptions;
@@ -355,6 +357,8 @@ DfStatus bg_runtime_open(
     RuntimeCreateFn create = (RuntimeCreateFn) load_symbol(handle, "df_runtime_create", error, error_capacity);
     RuntimeDestroyFn destroy = (RuntimeDestroyFn) load_symbol(handle, "df_runtime_destroy", error, error_capacity);
     RuntimeEnableFn enable = (RuntimeEnableFn) load_symbol(handle, "df_runtime_enable", error, error_capacity);
+    RuntimeDisableFn begin_disable = (RuntimeDisableFn) load_symbol(handle, "df_runtime_begin_disable", error, error_capacity);
+    RuntimeDisableFn finish_disable = (RuntimeDisableFn) load_symbol(handle, "df_runtime_finish_disable", error, error_capacity);
     RuntimeDisableFn disable = (RuntimeDisableFn) load_symbol(handle, "df_runtime_disable", error, error_capacity);
     RuntimeCountFn plugin_count = (RuntimeCountFn) load_symbol(handle, "df_runtime_plugin_count", error, error_capacity);
     RuntimeCountFn subscriptions = (RuntimeCountFn) load_symbol(handle, "df_runtime_subscriptions", error, error_capacity);
@@ -373,7 +377,7 @@ DfStatus bg_runtime_open(
     RuntimeCommandFn handle_command = (RuntimeCommandFn) load_symbol(handle, "df_runtime_handle_command", error, error_capacity);
     RuntimeCommandEnumFn command_enum_options = (RuntimeCommandEnumFn) load_symbol(handle, "df_runtime_command_enum_options", error, error_capacity);
     RuntimeEventFn handle_event = (RuntimeEventFn) load_symbol(handle, "df_runtime_handle_event", error, error_capacity);
-    if (create == NULL || destroy == NULL || enable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || entity_type_count == NULL || entity_type_at == NULL || entity_adopt == NULL || entity_load == NULL || entity_save == NULL || entity_tick == NULL || entity_hurt == NULL || entity_heal == NULL || entity_death == NULL || entity_destroy == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_event == NULL) {
+    if (create == NULL || destroy == NULL || enable == NULL || begin_disable == NULL || finish_disable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || entity_type_count == NULL || entity_type_at == NULL || entity_adopt == NULL || entity_load == NULL || entity_save == NULL || entity_tick == NULL || entity_hurt == NULL || entity_heal == NULL || entity_death == NULL || entity_destroy == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_event == NULL) {
         dlclose(handle);
         return DF_STATUS_ERROR;
     }
@@ -464,6 +468,8 @@ DfStatus bg_runtime_open(
     library->handle = handle;
     library->destroy = destroy;
     library->enable = enable;
+    library->begin_disable = begin_disable;
+    library->finish_disable = finish_disable;
     library->disable = disable;
     library->plugin_count = plugin_count;
     library->subscriptions = subscriptions;
@@ -495,13 +501,29 @@ void bg_runtime_close(BgRuntimeLibrary *library) {
     free(library);
 }
 
-DfStatus bg_runtime_enable(BgRuntimeLibrary *library) {
-    return library == NULL ? DF_STATUS_ERROR : library->enable(library->runtime);
+DfStatus bg_runtime_enable(BgRuntimeLibrary *library, uint8_t *error, uint64_t error_capacity) {
+    if (library == NULL) {
+        write_error(error, error_capacity, "native runtime is closed");
+        return DF_STATUS_ERROR;
+    }
+    return library->enable(library->runtime, error, error_capacity);
 }
 
 void bg_runtime_disable(BgRuntimeLibrary *library) {
     if (library != NULL) {
         library->disable(library->runtime);
+    }
+}
+
+void bg_runtime_begin_disable(BgRuntimeLibrary *library) {
+    if (library != NULL) {
+        library->begin_disable(library->runtime);
+    }
+}
+
+void bg_runtime_finish_disable(BgRuntimeLibrary *library) {
+    if (library != NULL) {
+        library->finish_disable(library->runtime);
     }
 }
 

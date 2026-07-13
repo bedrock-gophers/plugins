@@ -33,6 +33,37 @@ make run
 
 Framework creates Dragonfly, installs world/player handlers, owns accept loop, and closes cleanly on `SIGINT`/`SIGTERM`.
 
+Plugin enable is a readiness gate and may return any ordinary thread-safe Rust
+error. Failure is shown as a bounded startup diagnostic and prevents Dragonfly
+from listening. Background work belongs in `task::TaskGroup`; plugin disable
+cancels and joins it before returning:
+
+```rust
+use dragonfly::{Plugin, PluginResult, plugin, task::TaskGroup};
+
+#[derive(Default)]
+struct Core {
+    tasks: TaskGroup,
+}
+
+#[plugin]
+impl Plugin for Core {
+    fn on_enable(&self) -> PluginResult {
+        self.tasks.spawn(|cancelled| cancelled.wait())?;
+        Ok(())
+    }
+
+    fn on_disable(&self) {
+        self.tasks.shutdown();
+    }
+}
+```
+
+The framework drains Dragonfly's ordinary callbacks, runs reverse `on_disable`
+and joins plugin work, closes custom worlds while entity save/destroy callbacks
+remain admitted, then drains entity callbacks and unloads native libraries.
+Custom worlds and host calls remain available during `on_disable`.
+
 Framework world manager protects `minecraft:overworld`, `minecraft:nether`, and `minecraft:end`; custom worlds use namespaced IDs such as `example:lobby`. It installs handlers before publication and owns save/unload cleanup.
 
 Rust can look up core worlds, open persistent custom worlds with typed creation policies, read/write typed block states, and manage time/spawn:
@@ -57,6 +88,11 @@ if let Some(world) = world {
 ```
 
 `WorldSpec::persistent` defaults to overworld, open-or-create, writable, automatic saves every ten minutes, three random ticks per subchunk, preserved time/weather, and two-minute chunk unloading. Provider paths are slash-separated and relative to `worlds.directory`; absolute, escaping, or existing symlink paths are rejected. This organization is not a security sandbox—native plugins already run with the server process's filesystem access.
+
+Dragonfly's three core worlds share one typed `[worlds.core]` policy. The
+provider path remains `[dragonfly.World].Folder`. Defaults preserve raw
+Dragonfly behaviour; servers may instead configure read-only worlds, disabled
+ticks, fixed time, and clear weather before `server.Config.New`.
 
 Specifications are immutable after publication. The same world name and normalized specification returns the same handle, a mismatch fails, and two names cannot own one provider path. `OpenExisting` requires an existing MCDB provider, while `CreateNew` rejects anything already at the path. Read-only always canonicalizes to manual saving regardless of builder order. Opens are synchronous and valid from lifecycle or event callbacks; no callback transaction is retained. Invalid input and host/provider failures remain private as `None`.
 

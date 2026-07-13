@@ -205,7 +205,15 @@ Every ABI structure must:
 - Avoid platform-sized `long`, `size_t` in persisted layouts, and C bitfields.
 - Have generated size, alignment, and offset tests.
 
-The ABI is intentionally strict while the project is WIP. Host ABI v18 retains the complete v17 prefix (`world_open_spec` at offset 448 and stable player transfer at offset 456), then appends player effect snapshot and clear-all calls at offsets 464 and 472; plugin ABI remains v3. A breaking layout or callback change increments the host ABI version, and mismatched runtimes/plugins fail to load. Compatibility shims are deferred until the API is stable enough to justify them. Independent ABI branches must never publish different layouts under one version; the transferable-entity prototype must rebase and append as v19 if integrated.
+The ABI is intentionally strict while the project is WIP. Host ABI v18 retains
+the complete v17 prefix (`world_open_spec` at offset 448 and stable player
+transfer at offset 456), then appends player effect snapshot and clear-all calls
+at offsets 464 and 472. Plugin ABI v4 adds the bounded fallible-enable callback.
+A breaking layout or callback change increments its owning ABI version, and
+mismatched runtimes/plugins fail to load. Compatibility shims are deferred until
+the API is stable enough to justify them. Independent ABI branches must never
+publish different layouts under one version; the transferable-entity prototype
+must rebase and append as host v19 if integrated.
 
 ## Runtime
 
@@ -221,11 +229,16 @@ Runtime responsibilities:
 - Sort handlers by priority, then plugin ID.
 - Dispatch events and carry mutable event state between handlers.
 - Catch Rust panics before they cross FFI.
-- Track plugin lifecycle and disabled state.
+- Track plugin lifecycle, active host access, and disabled state.
+- Roll failed enable back and preserve a bounded user-safe error message.
+- Join all plugin-owned work before unloading native code.
 - Prefix plugin logs.
 - Expose event subscription bitsets to Go.
 
-The runtime must not unload plugin libraries. Rust threads, TLS, function pointers, and static destructors make hot `dlclose` unsafe. Reload means server restart. A plugin may be logically disabled by removing it from subscriber arrays.
+The runtime never hot-reloads plugin libraries. Rust threads, TLS, function
+pointers, and static destructors make live `dlclose` unsafe. Shutdown first
+drains Dragonfly callbacks, then disables plugins and joins their task groups;
+only then may runtime destruction unload libraries. Reload means server restart.
 
 ## Server ownership
 
@@ -239,15 +252,18 @@ Internal startup sequence:
 
 1. Read base server configuration.
 2. Discover and validate native plugins.
-3. Run plugin bootstrap callbacks and collect a declarative `ServerPlan`.
-4. Resolve configuration and world-definition conflicts deterministically.
-5. Build Dragonfly `server.Config` and call `Config.New`.
+3. Copy and validate plugin entity descriptors.
+4. Build Dragonfly `server.Config`, apply typed core-world policy, and wrap its
+   eager listener factories behind the readiness gate.
+5. Call `Config.New` without binding network sockets.
 6. Register the three Dragonfly core worlds with the world manager.
-7. Create plugin-defined worlds.
-8. Install all player, world, and inventory dispatchers automatically.
-9. Run plugin enable callbacks.
+7. Run fallible plugin enable callbacks; plugins open their owned worlds here.
+8. Register commands from the successfully enabled runtime.
+9. Bind every listener synchronously; rollback all listeners if any bind fails.
 10. Call `Listen` and own the `Accept` loop.
-11. On shutdown, stop accepting players, disable plugins in reverse order, close worlds, then destroy the Rust runtime.
+11. On shutdown, close Dragonfly to reject and drain ordinary callbacks, begin
+    reverse plugin disable, close custom worlds with entity callbacks admitted,
+    finish plugin disable, then destroy the Rust runtime.
 
 No public `AttachWorld` or `AttachPlayer` API exists. A world cannot enter the registry without its dispatcher already installed. A player receives its dispatcher before plugin-visible join processing.
 
@@ -515,7 +531,9 @@ Current host actions include:
 
 Every synchronous player callback registers one invocation ID for its exact transaction. Same-world block operations use that `world.Tx` directly. Calls with no invocation are off-owner: writes enqueue through `World.Do` and reads use `world.Call`. Cross-world writes from callbacks enqueue, while cross-world synchronous block reads are rejected because reciprocal owner calls can deadlock. Save/unload are rejected from callbacks and run only off-owner. Transaction values never cross or survive the ABI; the asynchronous task API will provide callback-safe cross-world reads and lifecycle operations.
 
-The host ABI is currently v16 and the plugin ABI is v3. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+The host ABI is currently v18 and the plugin ABI is v4. WIP releases
+intentionally make breaking ABI changes instead of retaining compatibility
+shims; runtime and plugins must be compiled from the same revision.
 
 ## Entities
 
@@ -538,7 +556,14 @@ The save ID defaults to `<cargo-package>:<snake_case_type>`. An explicit `id = "
 
 The base proxy implements only `world.Entity`, name tag, and teleport capabilities. Ticking and living definitions use distinct proxy types so optional Dragonfly interfaces remain exact. Rust owns one opaque state value per advanced entity; Go owns `entity.Ent`, movement, health, effects, speed, viewer updates, and world membership. Versioned Rust state and Dragonfly living state persist through providers. Spawn adoption transfers a Rust value into a runtime instance ID only after the host accepts it, with exactly-once destruction on every path.
 
-Shutdown closes Dragonfly sessions and core worlds, then custom worlds, then disables plugins and unloads the native runtime. Descriptor/code pointers remain valid until every entity provider finishes encoding.
+Shutdown closes Dragonfly sessions and core worlds first so their callbacks
+finish while plugin code is live. Begin-disable then rejects/drains ordinary
+callbacks and runs `on_disable`, which joins plugin work while custom worlds and
+host calls remain available. Custom worlds close with entity callbacks still
+admitted. Final disable rejects/drains those callbacks before the native runtime
+unloads. Descriptor/code pointers remain valid through every provider encode and
+close path. Startup-failure cleanup uses the same phases but closes unstarted core
+worlds before final disable.
 
 Common entity state is capability-based. Every managed entity exposes its `World`; position and rotation exist on every `world.Entity`, while velocity, teleport, and name tag are optional capabilities. Rust getters return `Option`, while unsupported/stale setters silently no-op and never expose host transport errors. Dragonfly v0.11 has no exported generic rotation setter, so only spawn-time rotation and rotation reads are supported. Reflection or unsafe access to private `entity.Ent` state is forbidden.
 

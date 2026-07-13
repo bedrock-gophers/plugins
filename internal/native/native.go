@@ -404,7 +404,7 @@ func OpenWithHost(runtimeLibrary, pluginDirectory string, host Host) (*Runtime, 
 	pluginPath := C.CString(pluginDirectory)
 	defer C.free(unsafe.Pointer(pluginPath))
 
-	hostContext := registerHost(host)
+	hostContext := registerInactiveHost(host)
 	var ptr *C.BgRuntimeLibrary
 	var errorBuffer [1024]C.uint8_t
 	status := C.bg_runtime_open(
@@ -432,6 +432,8 @@ func (r *Runtime) Close() {
 	if r == nil || r.ptr == nil {
 		return
 	}
+	r.BeginDisable()
+	r.FinishDisable()
 	drainHostForms(r.hostContext, true)
 	C.bg_runtime_close(r.ptr)
 	unregisterHost(r.hostContext)
@@ -444,17 +446,45 @@ func (r *Runtime) Enable() error {
 	if r == nil || r.ptr == nil {
 		return errors.New("native runtime is closed")
 	}
-	if status := C.bg_runtime_enable(r.ptr); status != C.DF_STATUS_OK {
-		return fmt.Errorf("enable native plugins: status %d", int32(status))
+	if !setHostActive(r.hostContext, true) {
+		return errors.New("native runtime host is closed")
+	}
+	activateHostForms(r.hostContext)
+	var errorBuffer [4096]C.uint8_t
+	if status := C.bg_runtime_enable(
+		r.ptr,
+		&errorBuffer[0],
+		C.uint64_t(len(errorBuffer)),
+	); status != C.DF_STATUS_OK {
+		message := C.GoString((*C.char)(unsafe.Pointer(&errorBuffer[0])))
+		if message == "" {
+			message = "native plugins failed to enable"
+		}
+		return fmt.Errorf("enable native plugins: %s", message)
 	}
 	return nil
 }
 
-func (r *Runtime) Disable() {
+// BeginDisable rejects and drains ordinary plugin calls before running on_disable.
+// The host remains active so custom worlds may close and dispatch entity callbacks.
+func (r *Runtime) BeginDisable() {
 	if r != nil && r.ptr != nil {
-		drainHostForms(r.hostContext, false)
-		C.bg_runtime_disable(r.ptr)
+		drainHostForms(r.hostContext, true)
+		C.bg_runtime_begin_disable(r.ptr)
 	}
+}
+
+// FinishDisable rejects and drains entity callbacks, then deactivates the host.
+func (r *Runtime) FinishDisable() {
+	if r != nil && r.ptr != nil {
+		C.bg_runtime_finish_disable(r.ptr)
+		setHostActive(r.hostContext, false)
+	}
+}
+
+func (r *Runtime) Disable() {
+	r.BeginDisable()
+	r.FinishDisable()
 }
 
 func (r *Runtime) PluginCount() uint64 {

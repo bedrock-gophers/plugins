@@ -44,6 +44,9 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if log == nil {
 		log = slog.Default()
 	}
+	if err := validateConfig(config); err != nil {
+		return err
+	}
 	players := host.NewPlayers()
 	worlds, err := NewPersistentWorldManager(config.Worlds.Directory, log, players)
 	if err != nil {
@@ -75,32 +78,42 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		closeDragonflyProviders(dragonflyConfig, log)
 		return fmt.Errorf("configure plugin entities: %w", err)
 	}
+	if err := applyCoreWorldPolicy(&dragonflyConfig, config.Worlds.Core); err != nil {
+		pluginRuntime.Close()
+		closeDragonflyProviders(dragonflyConfig, log)
+		return fmt.Errorf("configure core worlds: %w", err)
+	}
+	listenerGate := deferListenerCreation(&dragonflyConfig)
 	var srv *server.Server
-	enabled := false
-	started := false
-	defer func() {
-		if started {
-			if err := srv.Close(); err != nil {
-				log.Error("close Dragonfly server", "error", err)
+	cleanup := runCleanup{
+		log: log,
+		closeStarted: func() error {
+			return srv.Close()
+		},
+		beginPlugins:  pluginRuntime.BeginDisable,
+		closeCustom:   worlds.CloseCustom,
+		finishPlugins: pluginRuntime.FinishDisable,
+		closeUnstarted: func() {
+			if err := listenerGate.closeAll(); err != nil {
+				log.Error("close unstarted Dragonfly listeners", "error", err)
 			}
-		} else if srv != nil {
+			if srv == nil {
+				return
+			}
 			for _, managed := range []*world.World{srv.End(), srv.Nether(), srv.World()} {
 				if err := managed.Close(); err != nil {
 					log.Error("close unstarted Dragonfly world", "error", err)
 				}
 			}
-			if err := dragonflyConfig.PlayerProvider.Close(); err != nil {
-				log.Error("close unstarted player provider", "error", err)
+			if dragonflyConfig.PlayerProvider != nil {
+				if err := dragonflyConfig.PlayerProvider.Close(); err != nil {
+					log.Error("close unstarted player provider", "error", err)
+				}
 			}
-		}
-		if err := worlds.CloseCustom(); err != nil {
-			log.Error("close custom worlds", "error", err)
-		}
-		if enabled {
-			pluginRuntime.Disable()
-		}
-		pluginRuntime.Close()
-	}()
+		},
+		closeRuntime: pluginRuntime.Close,
+	}
+	defer cleanup.close()
 	srv = dragonflyConfig.New()
 	if err := worlds.RegisterCore(OverworldID, srv.World()); err != nil {
 		return err
@@ -114,12 +127,14 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if err := pluginRuntime.Enable(); err != nil {
 		return err
 	}
-	enabled = true
 	if err := host.RegisterCommands(pluginRuntime, players); err != nil {
 		return err
 	}
+	if err := listenerGate.openAll(); err != nil {
+		return fmt.Errorf("open Dragonfly listeners: %w", err)
+	}
 	srv.Listen()
-	started = true
+	cleanup.started = true
 
 	stopped := make(chan struct{})
 	defer close(stopped)
