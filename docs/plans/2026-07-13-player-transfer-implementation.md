@@ -46,27 +46,29 @@ Files:
 
 Red-green sequence:
 
-1. Write focused tests for generation-checked player handle lookup.
-2. Add `Players.Handle(PlayerID)` and public departure cleanup needed only for
+1. [x] Write focused tests for generation-checked player handle lookup.
+2. [x] Add `Players.Handle(PlayerID)` and public departure cleanup needed only for
    rollback.
-3. Write same-world tests proving ordinary teleport semantics and invalid
+3. [x] Write same-world tests proving ordinary teleport semantics and invalid
    request rejection.
-4. Write cross-world tests proving exact handle, exact `PlayerID`, exact
+4. [x] Write cross-world tests proving exact handle, exact `PlayerID`, exact
    position, a source mutation performed after `TransferPlayer` in the same
    callback, and an invocation-zero transfer followed by a handle-based
    mutation in the destination.
-5. Implement source/destination lifecycle leases and deferred handoff.
-6. Write and pass tests for destination `ErrWorldClosed` restoration, stale
+5. [x] Implement non-blocking source/destination lifecycle leases and deferred handoff.
+6. [x] Write and pass tests for destination `ErrWorldClosed` restoration, stale
    generation, player quit/closed handle, unload waiting, and idempotent lease
    release under `-race`.
-7. Write a first-destination-tick test proving exactly one natural
+7. [x] Write a first-destination-tick test proving exactly one natural
    `PlayerChangeWorld` event and no event on rollback.
-8. Commit the framework milestone.
+8. [x] Add a public Dragonfly session fixture proving loader switch and
+   connection teardown while the player handle is worldless.
+9. [x] Add terminal double-world-close eviction and logging coverage.
+10. Commit the framework milestone.
 
-The preferred integration fixture uses Dragonfly's real player entity type,
-world owners, handlers, and ticks. A network-backed session is attempted only
-if it can be constructed through public Dragonfly APIs; private session setup
-will not be copied into this library.
+The integration fixture uses Dragonfly's real player entity type, world owners,
+handlers, ticks, and public `session.Config.New`/`SetHandle`/`Spawn` APIs with a
+fake network connection. No private session setup is copied.
 
 ## Milestone 3: Host ABI v17
 

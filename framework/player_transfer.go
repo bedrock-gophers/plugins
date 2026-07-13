@@ -1,6 +1,7 @@
 package framework
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -48,7 +49,7 @@ func (m *WorldManager) TransferPlayer(invocation native.InvocationID, id native.
 				m.transferPlayerFromTransaction(tx, connected, handle, destinationID, position)
 			}
 		})
-		return task.Err() == nil
+		return task.Wait(context.Background()) == nil
 	}
 	tx, ok := m.players.InvocationTx(invocation)
 	if !ok {
@@ -85,23 +86,20 @@ func (m *WorldManager) transferPlayerFromTransaction(tx *world.Tx, connected *pl
 
 func (m *WorldManager) acquireTransferLeases(sourceWorld *world.World, destinationID native.WorldID) (*managedWorld, *managedWorld, *worldTransferLeases, bool) {
 	m.mu.RLock()
+	defer m.mu.RUnlock()
 	source := m.byWorld[sourceWorld]
 	destination := m.handles[destinationID]
 	if source == nil || destination == nil || source.unloading || destination.unloading {
-		m.mu.RUnlock()
 		return nil, nil, nil, false
 	}
-	m.mu.RUnlock()
-
-	source.lifecycle.RLock()
-	if destination != source {
-		destination.lifecycle.RLock()
+	if !source.lifecycle.TryRLock() {
+		return nil, nil, nil, false
 	}
-	m.mu.RLock()
-	sourceCurrent := m.byWorld[sourceWorld] == source && m.handles[source.id] == source && !source.unloading
-	destinationCurrent := m.handles[destinationID] == destination && !destination.unloading
-	m.mu.RUnlock()
-	if !sourceCurrent || !destinationCurrent || source.closed || destination.closed {
+	if destination != source && !destination.lifecycle.TryRLock() {
+		source.lifecycle.RUnlock()
+		return nil, nil, nil, false
+	}
+	if source.closed || destination.closed {
 		if destination != source {
 			destination.lifecycle.RUnlock()
 		}
@@ -158,10 +156,19 @@ func (m *WorldManager) finishPlayerTransfer(err error, sourceTx *world.Tx, handl
 	})
 	select {
 	case <-task.Done():
-		leases.release()
+		m.finishPlayerRestore(task.Err(), handle, source, leases)
 	default:
-		task.OnDone(func(error) { leases.release() })
+		task.OnDone(func(err error) { m.finishPlayerRestore(err, handle, source, leases) })
 	}
+}
+
+func (m *WorldManager) finishPlayerRestore(err error, handle *world.EntityHandle, source *managedWorld, leases *worldTransferLeases) {
+	if errors.Is(err, world.ErrWorldClosed) || errors.Is(err, world.ErrTaskCancelled) || errors.Is(err, world.ErrEntityClosed) {
+		m.players.UnregisterHandle(handle)
+		_ = handle.Close()
+		m.log.Error("player transfer lost both worlds; evicted player handle", "source", source.name, "error", err)
+	}
+	leases.release()
 }
 
 func (m *WorldManager) restoreTransferredPlayer(tx *world.Tx, handle *world.EntityHandle) {

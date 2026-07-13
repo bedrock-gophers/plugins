@@ -24,3 +24,14 @@ func TestPlayersHandleRequiresExactLiveGeneration(t *testing.T) {
 		}
 	})
 }
+
+func TestPlayersUnregistersWorldlessHandle(t *testing.T) {
+	withPlayer(t, func(connected *player.Player) {
+		players := NewPlayers()
+		id := players.Register(connected, 48)
+		players.UnregisterHandle(connected.H())
+		if _, ok := players.Handle(id); ok {
+			t.Fatal("worldless handle remained registered")
+		}
+	})
+}

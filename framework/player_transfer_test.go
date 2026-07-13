@@ -2,6 +2,7 @@ package framework
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -31,10 +32,34 @@ type transferChangeRecorder struct {
 	before, after *world.World
 }
 
+type cancellingTeleportHandler struct {
+	player.NopHandler
+	calls int
+}
+
+func (h *cancellingTeleportHandler) HandleTeleport(ctx *player.Context, _ mgl64.Vec3) {
+	h.calls++
+	ctx.Cancel()
+}
+
 type blockingPlayerSpawnHandler struct {
 	*host.WorldHandler
 	entered chan struct{}
 	release chan struct{}
+}
+
+type blockingPlayerDespawnHandler struct {
+	*host.WorldHandler
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (h *blockingPlayerDespawnHandler) HandleEntityDespawn(tx *world.Tx, entity world.Entity) {
+	h.WorldHandler.HandleEntityDespawn(tx, entity)
+	if _, ok := entity.(*player.Player); ok {
+		close(h.entered)
+		<-h.release
+	}
 }
 
 func (h *blockingPlayerSpawnHandler) HandleEntitySpawn(tx *world.Tx, entity world.Entity) {
@@ -86,18 +111,24 @@ func newTransferFixture(t *testing.T) *transferFixture {
 func TestTransferPlayerSameWorldUsesOrdinaryTeleport(t *testing.T) {
 	fixture := newTransferFixture(t)
 	want := native.Vec3{X: 8, Y: 72, Z: -3}
+	handler := new(cancellingTeleportHandler)
 	if err := fixture.source.Do(func(tx *world.Tx) {
 		invocation, end := fixture.players.BeginInvocation(tx)
 		defer end()
+		entity, _ := fixture.handle.Entity(tx)
+		entity.(*player.Player).Handle(handler)
 		if !fixture.manager.TransferPlayer(invocation, fixture.playerID, fixture.sourceID, want) {
 			t.Fatal("same-world transfer was rejected")
 		}
 		connected, ok := fixture.handle.Entity(tx)
-		if !ok || connected.(*player.Player).Position() != (mgl64.Vec3{8, 72, -3}) {
+		if !ok || connected.(*player.Player).Position() != (mgl64.Vec3{1, 65, 2}) {
 			t.Fatalf("same-world position = %v, %v", connected, ok)
 		}
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	if handler.calls != 1 {
+		t.Fatalf("teleport handler calls = %d", handler.calls)
 	}
 }
 
@@ -186,6 +217,142 @@ func TestTransferPlayerOffCallbackFollowsHandleAndOrdersMutations(t *testing.T) 
 	}
 }
 
+func TestTransferPlayerOffCallbackMutationWaitsWhileHandleWorldless(t *testing.T) {
+	players := host.NewPlayers()
+	manager := newWorldManager("", nil, players)
+	source := world.Config{Synchronous: true}.New()
+	if err := manager.RegisterCore(OverworldID, source); err != nil {
+		t.Fatal(err)
+	}
+	target, err := manager.Create("example:async-target", world.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	barrier := target.Do(func(*world.Tx) {
+		close(entered)
+		<-release
+	})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+		_ = manager.CloseCustom()
+		_ = source.Close()
+	})
+	targetID, _ := manager.WorldByName(0, "example:async-target")
+	playerUUID := uuid.MustParse("2c0f8607-c1ad-4c19-9ab4-3d8a6f5fa994")
+	handle := world.EntitySpawnOpts{ID: playerUUID}.New(player.Type, player.Config{UUID: playerUUID, Name: "Ordered"})
+	var id native.PlayerID
+	if err := source.Do(func(tx *world.Tx) {
+		id = players.Register(tx.AddEntity(handle).(*player.Player), 93)
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("destination barrier did not start")
+	}
+	if !manager.TransferPlayer(0, id, targetID, native.Vec3{Y: 70}) {
+		t.Fatal("off-callback transfer was rejected")
+	}
+	if !players.TransformPlayer(0, id, native.PlayerTransformVelocity, native.Vec3{Y: 0.75}, 0, 0) {
+		t.Fatal("worldless mutation was rejected")
+	}
+	close(release)
+	if err := barrier.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		velocity, err := world.Call(context.Background(), target, func(tx *world.Tx) (mgl64.Vec3, error) {
+			entity, ok := handle.Entity(tx)
+			if !ok {
+				return mgl64.Vec3{}, nil
+			}
+			return entity.(*player.Player).Velocity(), nil
+		})
+		if err == nil && velocity == (mgl64.Vec3{0, 0.75, 0}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("queued mutation velocity = %v, error = %v", velocity, err)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestTransferPlayerOffCallbackWaitsForAsyncSourceSubmission(t *testing.T) {
+	players := host.NewPlayers()
+	manager := newWorldManager("", nil, players)
+	source := world.Config{}.New()
+	if err := manager.RegisterCore(OverworldID, source); err != nil {
+		t.Fatal(err)
+	}
+	despawn := &blockingPlayerDespawnHandler{
+		WorldHandler: source.Handler().(*host.WorldHandler),
+		entered:      make(chan struct{}),
+		release:      make(chan struct{}),
+	}
+	source.Handle(despawn)
+	target, err := manager.Create("example:async-source-target", world.Config{Synchronous: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		select {
+		case <-despawn.release:
+		default:
+			close(despawn.release)
+		}
+		_ = manager.CloseCustom()
+		_ = source.Close()
+	})
+	targetID, _ := manager.WorldByName(0, "example:async-source-target")
+	playerUUID := uuid.MustParse("0beb95eb-c78d-44fe-a5c5-69685873d2e0")
+	handle := world.EntitySpawnOpts{ID: playerUUID}.New(player.Type, player.Config{UUID: playerUUID, Name: "AsyncSource"})
+	var id native.PlayerID
+	if err := source.Do(func(tx *world.Tx) {
+		id = players.Register(tx.AddEntity(handle).(*player.Player), 94)
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan bool, 1)
+	go func() {
+		result <- manager.TransferPlayer(0, id, targetID, native.Vec3{Y: 70})
+	}()
+	select {
+	case <-despawn.entered:
+	case <-time.After(time.Second):
+		t.Fatal("source despawn did not reach barrier")
+	}
+	select {
+	case accepted := <-result:
+		t.Fatalf("transfer returned before destination submission: %v", accepted)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(despawn.release)
+	select {
+	case accepted := <-result:
+		if !accepted {
+			t.Fatal("transfer was rejected after source submission")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("transfer did not return after source submission")
+	}
+	if err := target.Do(func(tx *world.Tx) {
+		if _, ok := handle.Entity(tx); !ok {
+			t.Fatal("player did not reach destination")
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTransferPlayerEmitsOneNaturalChangeWorldEvent(t *testing.T) {
 	fixture := newTransferFixture(t)
 	recorder := new(transferChangeRecorder)
@@ -251,7 +418,7 @@ func TestTransferPlayerRestoresExactHandleWhenDestinationClosed(t *testing.T) {
 	}
 }
 
-func TestTransferPlayerQuitBeforeDeferredHandoffFailsClosed(t *testing.T) {
+func TestTransferPlayerNopSessionCloseBeforeDeferredHandoffFailsClosed(t *testing.T) {
 	fixture := newTransferFixture(t)
 	if err := fixture.source.Do(func(tx *world.Tx) {
 		invocation, end := fixture.players.BeginInvocation(tx)
@@ -266,6 +433,34 @@ func TestTransferPlayerQuitBeforeDeferredHandoffFailsClosed(t *testing.T) {
 	}
 	if _, ok := fixture.players.Handle(fixture.playerID); ok || !fixture.handle.Closed() {
 		t.Fatal("quit player remained transferable")
+	}
+}
+
+func TestTransferPlayerRejectsBusyDestinationWithoutBlockingOwner(t *testing.T) {
+	fixture := newTransferFixture(t)
+	destination, ok := fixture.manager.entryByHandle(fixture.targetID)
+	if !ok {
+		t.Fatal("destination missing")
+	}
+	destination.lifecycle.Lock()
+	result := make(chan bool, 1)
+	go func() {
+		_ = fixture.source.Do(func(tx *world.Tx) {
+			invocation, end := fixture.players.BeginInvocation(tx)
+			defer end()
+			result <- fixture.manager.TransferPlayer(invocation, fixture.playerID, fixture.targetID, native.Vec3{Y: 70})
+		}).Wait(context.Background())
+	}()
+	select {
+	case accepted := <-result:
+		destination.lifecycle.Unlock()
+		if accepted {
+			t.Fatal("transfer acquired a destination with an active lifecycle writer")
+		}
+	case <-time.After(50 * time.Millisecond):
+		destination.lifecycle.Unlock()
+		<-result
+		t.Fatal("transfer blocked the source owner on destination lifecycle")
 	}
 }
 
@@ -324,5 +519,78 @@ func TestTransferPlayerLeaseMakesUnloadWaitForHandoff(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("unload did not resume after handoff")
+	}
+}
+
+func TestTransferPlayerEvictsHandleWhenBothWorldsClose(t *testing.T) {
+	players := host.NewPlayers()
+	manager := newWorldManager("", nil, players)
+	source := world.Config{}.New()
+	if err := manager.RegisterCore(OverworldID, source); err != nil {
+		t.Fatal(err)
+	}
+	target, err := manager.Create("example:closing-target", world.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	barrier := target.Do(func(*world.Tx) {
+		close(entered)
+		<-release
+	})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+		_ = manager.CloseCustom()
+		_ = source.Close()
+	})
+	targetID, _ := manager.WorldByName(0, "example:closing-target")
+	playerUUID := uuid.MustParse("015606a4-46a4-493f-9eab-952126fe8800")
+	handle := world.EntitySpawnOpts{ID: playerUUID}.New(player.Type, player.Config{UUID: playerUUID, Name: "Orphan"})
+	var id native.PlayerID
+	if err := source.Do(func(tx *world.Tx) {
+		id = players.Register(tx.AddEntity(handle).(*player.Player), 95)
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("destination barrier did not start")
+	}
+	if !manager.TransferPlayer(0, id, targetID, native.Vec3{Y: 70}) {
+		t.Fatal("transfer was rejected")
+	}
+	targetClosed := make(chan error, 1)
+	go func() { targetClosed <- target.Close() }()
+	if err := source.Close(); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := barrier.Wait(context.Background()); err != nil && !errors.Is(err, world.ErrWorldClosed) {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-targetClosed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("destination did not close")
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		_, registered := players.Handle(id)
+		if !registered && handle.Closed() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("terminal handle registered=%v closed=%v", registered, handle.Closed())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

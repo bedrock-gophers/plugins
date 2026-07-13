@@ -65,18 +65,29 @@ func (p *Players) Register(player *player.Player, generation uint64) native.Play
 }
 
 func (p *Players) Unregister(player *player.Player) {
+	if player != nil {
+		p.UnregisterHandle(player.H())
+	}
+}
+
+// UnregisterHandle expires the player entry for an exact handle. It is used
+// when a transfer loses both worlds and no transaction-scoped Player remains.
+func (p *Players) UnregisterHandle(handle *world.EntityHandle) {
+	if handle == nil {
+		return
+	}
 	p.mu.Lock()
 	var id native.PlayerID
 	var registered bool
-	if entry, ok := p.entries[player.H()]; ok {
+	if entry, ok := p.entries[handle]; ok {
 		id, registered = entry.id, true
 		delete(p.byID, entry.id)
-		delete(p.entries, player.H())
+		delete(p.entries, handle)
 	}
-	delete(p.departedWorlds, player.H())
+	delete(p.departedWorlds, handle)
 	p.mu.Unlock()
 	if registered {
-		p.entities.unregisterHandle(player.H())
+		p.entities.unregisterHandle(handle)
 		native.CancelPlayerForms(id)
 	}
 }

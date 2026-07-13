@@ -22,7 +22,9 @@ session-backed and must not pass through a detached-token API.
 
 - Unknown/stale player IDs, unknown/unloading world IDs, stale nonzero
   invocations, and non-finite coordinates are ignored. Invocation zero is the
-  valid off-callback/scoped-task mode.
+  valid off-callback/scoped-task mode. It waits for its handle-owner task
+  through deferred removal and destination submission before returning, so a
+  subsequent handle mutation cannot overtake the transfer.
 - A transfer to the player's current world calls ordinary
   `player.Player.Teleport`, including Dragonfly's cancellable teleport event.
 - A transfer to another world moves the exact existing
@@ -72,7 +74,10 @@ No transaction or transaction-scoped `*player.Player` is retained. The only
 long-lived Dragonfly value is the stable `*world.EntityHandle`, which is the
 documented cross-world ownership object.
 
-The source and destination lifecycle leases remain held until the handle is
+Lifecycle leases are acquired with non-blocking `TryRLock` while managed-world
+identity is stable. A busy source or destination rejects the request promptly;
+a world-owner callback never waits behind another world's unload. Accepted
+source and destination lifecycle leases remain held until the handle is
 attached to one side or a terminal closed-handle/source-close path is reached.
 Framework unload therefore waits for an accepted handoff rather than closing a
 world between removal and addition. Calls never wait for another world owner.
@@ -97,7 +102,10 @@ Quit, close, and stale-generation races fail closed:
 - destination `ErrWorldClosed` restores to source when source remains open;
 - no rollback is attempted after destination code ran and returned another
   error, because the player may already be live in the destination;
-- every lifecycle lease has a single idempotent release path.
+- every lifecycle lease has a single idempotent release path;
+- if destination addition and source restoration both fail because their
+  worlds closed, the framework expires the player registry entry, closes the
+  orphaned handle, and logs the terminal eviction.
 
 ## Change-world events
 
@@ -152,8 +160,8 @@ exact destination position, post-request source operations, stale player and
 world handles, non-finite positions, quit/close races, destination-close
 rollback, unload waiting, and one natural change-world event.
 
-A true network session fixture is only added if Dragonfly exposes one without
-duplicating its private session bootstrap. Otherwise the integration test uses
-a real `player.Type` entity, real world owners/transactions, real player/world
-handlers, and first-destination tick behavior, and this limitation is recorded
-in the implementation plan and final verification notes.
+A public session-backed fixture uses `session.Config.New`, `SetHandle`, and
+`Spawn` with a fake `session.Conn`. It proves a nether transfer switches the
+session loader by emitting Dragonfly's `ChangeDimension`, then closes the
+connection during a blocked worldless return handoff and observes exactly one
+quit, one session stop, handle closure, and player-registry eviction.
