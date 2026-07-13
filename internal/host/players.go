@@ -112,6 +112,12 @@ func (p *Players) forgetWorldDeparture(handle *world.EntityHandle) {
 	p.mu.Unlock()
 }
 
+// ForgetWorldDeparture clears transfer bookkeeping after a failed handoff is
+// restored to its source world.
+func (p *Players) ForgetWorldDeparture(handle *world.EntityHandle) {
+	p.forgetWorldDeparture(handle)
+}
+
 // EntityRegistry returns the generic entity registry shared by player IDs.
 func (p *Players) EntityRegistry() *Entities { return p.entities }
 
@@ -194,6 +200,18 @@ func (p *Players) ResolveUUID(uuid [16]byte) (native.PlayerID, bool) {
 		}
 	}
 	return native.PlayerID{}, false
+}
+
+// Handle returns the exact live Dragonfly handle registered for id. The full
+// player generation is checked so a stale ID cannot address a later session.
+func (p *Players) Handle(id native.PlayerID) (*world.EntityHandle, bool) {
+	p.mu.RLock()
+	entry, ok := p.byID[id]
+	p.mu.RUnlock()
+	if !ok || entry.handle == nil || entry.handle.Closed() {
+		return nil, false
+	}
+	return entry.handle, true
 }
 
 func (p *Players) ResolveID(id native.PlayerID, invocation native.InvocationID) (*player.Player, bool) {

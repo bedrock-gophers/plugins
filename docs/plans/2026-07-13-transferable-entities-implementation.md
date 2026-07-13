@@ -1,6 +1,6 @@
 # Transferable Entities Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Steps use checkbox (`- [ ]`) syntax for tracking implementation progress.
 
 **Goal:** Expose safe, move-only non-player entity removal and re-addition across managed Dragonfly worlds.
 

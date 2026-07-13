@@ -20,6 +20,8 @@ ordinary Dragonfly teleport. Tests live in separate focused files.
 - Retain the exact player `*world.EntityHandle` and existing player registry
   entry.
 - Never block one world owner waiting for another.
+- Invocation zero schedules through the stable handle; only stale nonzero
+  invocations are rejected.
 - Public Rust returns `()` and hides native status.
 - Do not use or cherry-pick the transferable-entities experiment.
 - Add production behavior test-first and commit coherent local milestones.
@@ -50,8 +52,9 @@ Red-green sequence:
 3. Write same-world tests proving ordinary teleport semantics and invalid
    request rejection.
 4. Write cross-world tests proving exact handle, exact `PlayerID`, exact
-   position, and a source mutation performed after `TransferPlayer` in the same
-   callback.
+   position, a source mutation performed after `TransferPlayer` in the same
+   callback, and an invocation-zero transfer followed by a handle-based
+   mutation in the destination.
 5. Implement source/destination lifecycle leases and deferred handoff.
 6. Write and pass tests for destination `ErrWorldClosed` restoration, stale
    generation, player quit/closed handle, unload waiting, and idempotent lease

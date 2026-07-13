@@ -20,8 +20,9 @@ session-backed and must not pass through a detached-token API.
 
 `Player::transfer(world: World, position: Vec3)` returns `()`.
 
-- Unknown/stale player IDs, unknown/unloading world IDs, dead invocations, and
-  non-finite coordinates are ignored.
+- Unknown/stale player IDs, unknown/unloading world IDs, stale nonzero
+  invocations, and non-finite coordinates are ignored. Invocation zero is the
+  valid off-callback/scoped-task mode.
 - A transfer to the player's current world calls ordinary
   `player.Player.Teleport`, including Dragonfly's cancellable teleport event.
 - A transfer to another world moves the exact existing
@@ -35,12 +36,17 @@ session-backed and must not pass through a detached-token API.
 The operation is accepted synchronously but a cross-world handoff completes
 after the current Dragonfly callback. Later operations in the same plugin
 callback, such as healing or changing a kit, therefore still execute against
-the live source player and source transaction.
+the live source player and source transaction. Off-callback calls schedule
+through the stable entity handle; subsequent handle-based mutations wait while
+it is worldless and follow it into the destination.
 
 ## Transaction choreography
 
-The framework validates the invocation, exact player generation, destination
-world, finite position, and current source player before changing anything.
+The framework validates the exact player generation, destination world, finite
+position, and current source player before changing anything. A nonzero
+invocation must resolve to its exact live transaction. Invocation zero
+schedules through `EntityHandle.Do` and discovers the current source owner in
+that callback.
 
 For a same-world destination it invokes `Player.Teleport` immediately.
 
@@ -86,7 +92,7 @@ handoff.
 Quit, close, and stale-generation races fail closed:
 
 - a stale ID can never obtain the handle;
-- a player absent from the fresh source transaction is not removed;
+- a player absent from the fresh source/handle transaction is not removed;
 - a closed handle is never added;
 - destination `ErrWorldClosed` restores to source when source remains open;
 - no rollback is attempted after destination code ran and returned another
