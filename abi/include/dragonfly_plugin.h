@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 1u
-#define DF_HOST_ABI_VERSION 3u
+#define DF_HOST_ABI_VERSION 4u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -155,6 +155,7 @@ typedef struct { DfStringView identifier; int32_t metadata; uint32_t count; uint
 #define DF_SOUND_WAXED_SIGN_FAILED_INTERACTION 63u
 
 typedef struct { DfStringView text; DfStringView subtitle; DfStringView action_text; uint64_t fade_in_milliseconds; uint64_t duration_milliseconds; uint64_t fade_out_milliseconds; } DfTitleView;
+typedef struct { DfStringView name; const DfStringView *lines; uint64_t line_count; uint8_t padding; uint8_t descending; } DfScoreboardView;
 typedef struct { double number; int64_t integer; } DfPlayerStateValue;
 #define DF_PLAYER_EFFECT_ADD 0u
 #define DF_PLAYER_EFFECT_REMOVE 1u
@@ -166,6 +167,8 @@ typedef struct { uint32_t width; uint32_t height; uint32_t animation_type; int64
 typedef struct { uint32_t width; uint32_t height; uint8_t persona; DfStringView play_fab_id; DfStringView full_id; DfStringView pixels; DfStringView model_default; DfStringView model_animated_face; DfStringView model; uint32_t cape_width; uint32_t cape_height; DfStringView cape_pixels; const DfSkinAnimationView *animations; uint64_t animation_count; } DfSkinView;
 typedef DfStatus (*DfHostPlayerTextFn)(uint64_t context, DfPlayerId player, uint32_t kind, DfStringView message);
 typedef DfStatus (*DfHostPlayerTitleFn)(uint64_t context, DfPlayerId player, DfTitleView title);
+typedef DfStatus (*DfHostPlayerScoreboardFn)(uint64_t context, DfPlayerId player, DfScoreboardView scoreboard);
+typedef DfStatus (*DfHostPlayerScoreboardRemoveFn)(uint64_t context, DfPlayerId player);
 typedef DfStatus (*DfHostPlayerTransformFn)(uint64_t context, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch);
 typedef DfStatus (*DfHostPlayerRotationFn)(uint64_t context, DfPlayerId player, DfRotation *rotation);
 typedef DfStatus (*DfHostPlayerStateSetFn)(uint64_t context, DfPlayerId player, uint32_t kind, DfPlayerStateValue value);
@@ -218,7 +221,9 @@ typedef struct {
     DfHostInventoryClearFn inventory_clear;
     DfHostPlayerHeldItemsSetFn player_held_items_set;
     DfHostPlayerHeldSlotSetFn player_held_slot_set;
-} DfHostApiV3;
+    DfHostPlayerScoreboardFn player_scoreboard;
+    DfHostPlayerScoreboardRemoveFn player_scoreboard_remove;
+} DfHostApiV4;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -590,7 +595,7 @@ typedef DfStatus (*DfPluginLifecycleFn)(void *instance);
 typedef const DfCommandDescriptor *(*DfPluginCommandsFn)(void *instance, uint64_t *count);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV3 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV4 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -610,7 +615,7 @@ typedef struct {
 typedef const DfPluginApiV1 *(*DfPluginEntryV1Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV3 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV4 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);

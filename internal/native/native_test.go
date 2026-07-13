@@ -46,27 +46,29 @@ func openTestRuntime(t testing.TB) *Runtime {
 }
 
 type recordingHost struct {
-	player        PlayerID
-	texts         []string
-	kinds         []PlayerTextKind
-	title         PlayerTitle
-	rotation      Rotation
-	transforms    []PlayerTransformKind
-	vectors       []Vec3
-	yaws          []float64
-	pitches       []float64
-	states        []PlayerStateKind
-	values        []PlayerStateValue
-	state         PlayerStateValue
-	reads         []PlayerStateKind
-	effectOps     []PlayerEffectOperation
-	effects       []PlayerEffect
-	entities      []EntityID
-	visible       []bool
-	skin          PlayerSkin
-	setSkins      []PlayerSkin
-	inventoryItem ItemStack
-	inventorySets []struct {
+	player            PlayerID
+	texts             []string
+	kinds             []PlayerTextKind
+	title             PlayerTitle
+	scoreboard        PlayerScoreboard
+	scoreboardRemoved bool
+	rotation          Rotation
+	transforms        []PlayerTransformKind
+	vectors           []Vec3
+	yaws              []float64
+	pitches           []float64
+	states            []PlayerStateKind
+	values            []PlayerStateValue
+	state             PlayerStateValue
+	reads             []PlayerStateKind
+	effectOps         []PlayerEffectOperation
+	effects           []PlayerEffect
+	entities          []EntityID
+	visible           []bool
+	skin              PlayerSkin
+	setSkins          []PlayerSkin
+	inventoryItem     ItemStack
+	inventorySets     []struct {
 		Inventory InventoryID
 		Slot      uint32
 		Item      ItemStack
@@ -83,6 +85,16 @@ func (h *recordingHost) SendPlayerText(player PlayerID, kind PlayerTextKind, mes
 
 func (h *recordingHost) SendPlayerTitle(player PlayerID, title PlayerTitle) bool {
 	h.player, h.title = player, title
+	return true
+}
+
+func (h *recordingHost) SendPlayerScoreboard(player PlayerID, scoreboard PlayerScoreboard) bool {
+	h.player, h.scoreboard = player, scoreboard
+	return true
+}
+
+func (h *recordingHost) RemovePlayerScoreboard(player PlayerID) bool {
+	h.player, h.scoreboardRemoved = player, true
 	return true
 }
 
@@ -174,12 +186,24 @@ func TestPluginCanMessagePlayer(t *testing.T) {
 	if host.title.Text != "Rust plugin" || host.title.Subtitle != "Native Dragonfly" || host.title.Duration != 2*time.Second {
 		t.Fatalf("title = %+v", host.title)
 	}
+	wantScoreboard := PlayerScoreboard{
+		Name: "Rust scoreboard", Lines: []string{"Welcome, TestPlayer", "Native plugins"}, Padding: false, Descending: true,
+	}
+	if !reflect.DeepEqual(host.scoreboard, wantScoreboard) {
+		t.Fatalf("scoreboard = %+v, want %+v", host.scoreboard, wantScoreboard)
+	}
+	if err := runtime.HandlePlayerQuit(PlayerQuitInput{Player: id, Name: "TestPlayer"}); err != nil {
+		t.Fatal(err)
+	}
+	if !host.scoreboardRemoved {
+		t.Fatal("scoreboard was not removed on quit")
+	}
 }
 
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 6 {
-		t.Fatalf("plugin count = %d, want 6", runtime.PluginCount())
+	if runtime.PluginCount() != 7 {
+		t.Fatalf("plugin count = %d, want 7", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")

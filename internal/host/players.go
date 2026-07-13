@@ -9,6 +9,7 @@ import (
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/entity/effect"
 	"github.com/df-mc/dragonfly/server/player"
+	"github.com/df-mc/dragonfly/server/player/scoreboard"
 	"github.com/df-mc/dragonfly/server/player/skin"
 	"github.com/df-mc/dragonfly/server/player/title"
 	"github.com/df-mc/dragonfly/server/world"
@@ -219,6 +220,34 @@ func (p *Players) SendPlayerTitle(id native.PlayerID, value native.PlayerTitle) 
 		WithDuration(value.Duration).
 		WithFadeOutDuration(value.FadeOut)
 	connected.SendTitle(t)
+	return true
+}
+
+func (p *Players) SendPlayerScoreboard(id native.PlayerID, value native.PlayerScoreboard) bool {
+	connected, ok := p.ResolveID(id)
+	if !ok || len(value.Lines) > 15 {
+		return false
+	}
+	board := scoreboard.New(value.Name)
+	for index, line := range value.Lines {
+		board.Set(index, line)
+	}
+	if !value.Padding {
+		board.RemovePadding()
+	}
+	if value.Descending {
+		board.SetDescending()
+	}
+	connected.SendScoreboard(board)
+	return true
+}
+
+func (p *Players) RemovePlayerScoreboard(id native.PlayerID) bool {
+	connected, ok := p.ResolveID(id)
+	if !ok {
+		return false
+	}
+	connected.RemoveScoreboard()
 	return true
 }
 

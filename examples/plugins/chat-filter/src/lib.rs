@@ -12,8 +12,8 @@ impl Plugin for ChatFilter {
         }
 
         let filtered = event.message().replace("foo", "bar");
-        event
-            .replace_message(&filtered)
-            .expect("filtered message exceeds host capacity");
+        if event.replace_message(&filtered).is_err() {
+            event.cancel();
+        }
     }
 }

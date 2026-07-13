@@ -47,11 +47,12 @@ pub mod Event {
     pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV3> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV4> =
     AtomicPtr::new(core::ptr::null_mut());
 
 const MAX_SKIN_DATA_BYTES: u64 = 64 << 20;
 const MAX_SKIN_ANIMATIONS: usize = 256;
+pub const MAX_SCOREBOARD_LINES: usize = 15;
 
 struct SkinSnapshot {
     context: u64,
@@ -68,7 +69,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV3) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV4) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -716,6 +717,31 @@ pub struct Title {
     fade_out: std::time::Duration,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Scoreboard {
+    name: String,
+    lines: Vec<String>,
+    padding: bool,
+    descending: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScoreboardLineOutOfBounds {
+    pub index: usize,
+}
+
+impl core::fmt::Display for ScoreboardLineOutOfBounds {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            formatter,
+            "scoreboard line index {} exceeds the maximum of {} lines",
+            self.index, MAX_SCOREBOARD_LINES
+        )
+    }
+}
+
+impl std::error::Error for ScoreboardLineOutOfBounds {}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Skin {
     pub width: u32,
@@ -806,6 +832,87 @@ impl Title {
     }
 }
 
+impl Scoreboard {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            lines: Vec::new(),
+            padding: true,
+            descending: false,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn lines(&self) -> &[String] {
+        &self.lines
+    }
+
+    pub const fn padding(&self) -> bool {
+        self.padding
+    }
+
+    pub const fn is_descending(&self) -> bool {
+        self.descending
+    }
+
+    pub fn push_line(
+        &mut self,
+        line: impl Into<String>,
+    ) -> Result<&mut Self, ScoreboardLineOutOfBounds> {
+        let index = self.lines.len();
+        if index >= MAX_SCOREBOARD_LINES {
+            return Err(ScoreboardLineOutOfBounds { index });
+        }
+        self.lines.push(normalize_scoreboard_line(line.into()));
+        Ok(self)
+    }
+
+    pub fn set_line(
+        &mut self,
+        index: usize,
+        line: impl Into<String>,
+    ) -> Result<&mut Self, ScoreboardLineOutOfBounds> {
+        if index >= MAX_SCOREBOARD_LINES {
+            return Err(ScoreboardLineOutOfBounds { index });
+        }
+        if self.lines.len() <= index {
+            self.lines.resize(index + 1, String::new());
+        }
+        self.lines[index] = normalize_scoreboard_line(line.into());
+        Ok(self)
+    }
+
+    pub fn remove_line(&mut self, index: usize) -> Option<String> {
+        (index < self.lines.len()).then(|| self.lines.remove(index))
+    }
+
+    pub fn clear(&mut self) {
+        self.lines.clear();
+    }
+
+    pub fn remove_padding(&mut self) -> &mut Self {
+        self.padding = false;
+        self
+    }
+
+    pub fn set_descending(&mut self, descending: bool) -> &mut Self {
+        self.descending = descending;
+        self
+    }
+}
+
+fn normalize_scoreboard_line(mut line: String) -> String {
+    for _ in 0..2 {
+        if line.ends_with('\n') {
+            line.pop();
+        }
+    }
+    line
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Player {
     id: PlayerId,
@@ -862,6 +969,34 @@ impl Player {
             fade_out_milliseconds: duration_milliseconds(title.fade_out),
         };
         let _ = unsafe { send(host.context, self.raw_id(), view) };
+    }
+
+    pub fn send_scoreboard(&self, scoreboard: &Scoreboard) {
+        let Some(host) = host_api() else { return };
+        let Some(send) = host.player_scoreboard else {
+            return;
+        };
+        let lines: Vec<_> = scoreboard
+            .lines
+            .iter()
+            .map(|line| string_view_from_str(line))
+            .collect();
+        let view = dragonfly_plugin_sys::DfScoreboardView {
+            name: string_view_from_str(&scoreboard.name),
+            lines: lines.as_ptr(),
+            line_count: lines.len() as u64,
+            padding: u8::from(scoreboard.padding),
+            descending: u8::from(scoreboard.descending),
+        };
+        let _ = unsafe { send(host.context, self.raw_id(), view) };
+    }
+
+    pub fn remove_scoreboard(&self) {
+        let Some(host) = host_api() else { return };
+        let Some(remove) = host.player_scoreboard_remove else {
+            return;
+        };
+        let _ = unsafe { remove(host.context, self.raw_id()) };
     }
 
     pub fn teleport(&self, position: Vec3) {
@@ -1883,13 +2018,13 @@ fn slice_pointer<T>(value: &[T]) -> *const T {
     }
 }
 
-fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV3> {
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV4> {
     unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
 }
 
 fn read_item_stack(
     open: impl FnOnce(
-        &dragonfly_plugin_sys::DfHostApiV3,
+        &dragonfly_plugin_sys::DfHostApiV4,
         *mut u64,
         *mut dragonfly_plugin_sys::DfItemStackInfo,
     ) -> Option<dragonfly_plugin_sys::DfStatus>,
@@ -1910,7 +2045,7 @@ fn read_item_stack(
 }
 
 fn read_item_stack_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV3,
+    host: &dragonfly_plugin_sys::DfHostApiV4,
     snapshot_id: u64,
     info: dragonfly_plugin_sys::DfItemStackInfo,
 ) -> Option<ItemStack> {
@@ -2974,6 +3109,28 @@ pub trait Plugin: Default + Send + Sync + 'static {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scoreboard_enforces_protocol_limit_and_matches_line_semantics() {
+        let mut board = Scoreboard::new("Stats");
+        board.push_line("first\n\n\n").unwrap();
+        board.set_line(2, "third").unwrap();
+        board.remove_padding().set_descending(true);
+        assert_eq!(board.name(), "Stats");
+        assert_eq!(board.lines(), ["first\n", "", "third"]);
+        assert!(!board.padding());
+        assert!(board.is_descending());
+        for index in 3..MAX_SCOREBOARD_LINES {
+            board.set_line(index, index.to_string()).unwrap();
+        }
+        assert_eq!(
+            board.push_line("too many"),
+            Err(ScoreboardLineOutOfBounds {
+                index: MAX_SCOREBOARD_LINES
+            })
+        );
+        assert_eq!(board.remove_line(1), Some(String::new()));
+    }
 
     #[derive(CommandEnum, Debug, Eq, PartialEq)]
     enum Mode {

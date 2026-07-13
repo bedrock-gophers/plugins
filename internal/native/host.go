@@ -23,6 +23,13 @@ type PlayerTitle struct {
 	FadeOut    time.Duration
 }
 
+type PlayerScoreboard struct {
+	Name       string
+	Lines      []string
+	Padding    bool
+	Descending bool
+}
+
 type SkinAnimation struct {
 	Width, Height uint32
 	Type          uint32
@@ -76,6 +83,8 @@ type ItemStack struct {
 type Host interface {
 	SendPlayerText(PlayerID, PlayerTextKind, string) bool
 	SendPlayerTitle(PlayerID, PlayerTitle) bool
+	SendPlayerScoreboard(PlayerID, PlayerScoreboard) bool
+	RemovePlayerScoreboard(PlayerID) bool
 	TransformPlayer(PlayerID, PlayerTransformKind, Vec3, float64, float64) bool
 	PlayerRotation(PlayerID) (Rotation, bool)
 	SetPlayerState(PlayerID, PlayerStateKind, PlayerStateValue) bool
@@ -98,6 +107,8 @@ type noopHost struct{}
 
 func (noopHost) SendPlayerText(PlayerID, PlayerTextKind, string) bool { return false }
 func (noopHost) SendPlayerTitle(PlayerID, PlayerTitle) bool           { return false }
+func (noopHost) SendPlayerScoreboard(PlayerID, PlayerScoreboard) bool { return false }
+func (noopHost) RemovePlayerScoreboard(PlayerID) bool                 { return false }
 func (noopHost) TransformPlayer(PlayerID, PlayerTransformKind, Vec3, float64, float64) bool {
 	return false
 }

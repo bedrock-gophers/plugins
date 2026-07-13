@@ -369,7 +369,7 @@ The same descriptor/proxy model covers:
 - Player and world persistence providers.
 - Resource packs.
 - Typed commands and command permissions.
-- Forms, scoreboards, sounds, particles, structures, and entity actions.
+- Forms, sounds, particles, structures, and entity actions. Player scoreboards are supported through owned, bounded snapshots.
 
 Each family belongs in schema. Language SDKs generate from it; only Go-to-Dragonfly proxy semantics remain handwritten.
 

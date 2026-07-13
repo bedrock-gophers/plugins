@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	maxSkinDataBytes  = 64 << 20
-	maxSkinAnimations = 256
+	maxSkinDataBytes   = 64 << 20
+	maxSkinAnimations  = 256
+	maxScoreboardLines = 15
 )
 
 //export bg_go_player_text
@@ -27,6 +28,34 @@ func bg_go_player_text(context C.uint64_t, player C.DfPlayerId, kind C.uint32_t,
 	}
 	id.Generation = uint64(player.generation)
 	if !host.SendPlayerText(id, PlayerTextKind(kind), stringView(message)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_player_scoreboard
+func bg_go_player_scoreboard(context C.uint64_t, player C.DfPlayerId, view C.DfScoreboardView) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || view.line_count > maxScoreboardLines || (view.line_count != 0 && view.lines == nil) {
+		return C.DF_STATUS_ERROR
+	}
+	lineViews := unsafe.Slice(view.lines, int(view.line_count))
+	lines := make([]string, len(lineViews))
+	for index, line := range lineViews {
+		lines[index] = stringView(line)
+	}
+	if !host.SendPlayerScoreboard(playerID(player), PlayerScoreboard{
+		Name: stringView(view.name), Lines: lines, Padding: view.padding != 0, Descending: view.descending != 0,
+	}) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_player_scoreboard_remove
+func bg_go_player_scoreboard_remove(context C.uint64_t, player C.DfPlayerId) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || !host.RemovePlayerScoreboard(playerID(player)) {
 		return C.DF_STATUS_ERROR
 	}
 	return C.DF_STATUS_OK

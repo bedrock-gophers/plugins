@@ -25,15 +25,20 @@ _Static_assert(sizeof(DfItemStackSnapshot) == 88, "DfItemStackSnapshot ABI layou
 _Static_assert(sizeof(DfItemStackData) == 152, "DfItemStackData ABI layout changed");
 _Static_assert(sizeof(DfItemStackViewV3) == 120, "DfItemStackViewV3 ABI layout changed");
 _Static_assert(sizeof(DfItemStackSnapshot) == 88, "DfItemStackSnapshot ABI layout changed");
-_Static_assert(sizeof(DfHostApiV3) == 208, "DfHostApiV3 ABI layout changed");
-_Static_assert(offsetof(DfHostApiV3, player_skin_open) == 80, "DfHostApiV3.player_skin_open ABI offset changed");
-_Static_assert(offsetof(DfHostApiV3, player_skin_set) == 112, "DfHostApiV3.player_skin_set ABI offset changed");
-_Static_assert(offsetof(DfHostApiV3, inventory_size) == 120, "DfHostApiV3.inventory_size ABI offset changed");
-_Static_assert(offsetof(DfHostApiV3, player_held_slot_set) == 200, "DfHostApiV3.player_held_slot_set ABI offset changed");
+_Static_assert(sizeof(DfScoreboardView) == 40, "DfScoreboardView ABI layout changed");
+_Static_assert(offsetof(DfScoreboardView, lines) == 16, "DfScoreboardView.lines ABI offset changed");
+_Static_assert(sizeof(DfHostApiV4) == 224, "DfHostApiV4 ABI layout changed");
+_Static_assert(offsetof(DfHostApiV4, player_skin_open) == 80, "DfHostApiV4.player_skin_open ABI offset changed");
+_Static_assert(offsetof(DfHostApiV4, player_skin_set) == 112, "DfHostApiV4.player_skin_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV4, inventory_size) == 120, "DfHostApiV4.inventory_size ABI offset changed");
+_Static_assert(offsetof(DfHostApiV4, player_held_slot_set) == 200, "DfHostApiV4.player_held_slot_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV4, player_scoreboard) == 208, "DfHostApiV4.player_scoreboard ABI offset changed");
 #endif
 
 extern DfStatus bg_go_player_text(uint64_t context, DfPlayerId player, uint32_t kind, DfStringView message);
 extern DfStatus bg_go_player_title(uint64_t context, DfPlayerId player, DfTitleView title);
+extern DfStatus bg_go_player_scoreboard(uint64_t context, DfPlayerId player, DfScoreboardView scoreboard);
+extern DfStatus bg_go_player_scoreboard_remove(uint64_t context, DfPlayerId player);
 extern DfStatus bg_go_player_transform(uint64_t context, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch);
 extern DfStatus bg_go_player_rotation(uint64_t context, DfPlayerId player, DfRotation *rotation);
 extern DfStatus bg_go_player_state_set(uint64_t context, DfPlayerId player, uint32_t kind, DfPlayerStateValue value);
@@ -63,6 +68,14 @@ static DfStatus host_player_text(uint64_t context, DfPlayerId player, uint32_t k
 
 static DfStatus host_player_title(uint64_t context, DfPlayerId player, DfTitleView title) {
     return bg_go_player_title(context, player, title);
+}
+
+static DfStatus host_player_scoreboard(uint64_t context, DfPlayerId player, DfScoreboardView scoreboard) {
+    return bg_go_player_scoreboard(context, player, scoreboard);
+}
+
+static DfStatus host_player_scoreboard_remove(uint64_t context, DfPlayerId player) {
+    return bg_go_player_scoreboard_remove(context, player);
 }
 
 static DfStatus host_player_transform(uint64_t context, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch) {
@@ -134,7 +147,7 @@ typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *)
 struct BgRuntimeLibrary {
     void *handle;
     DfRuntime *runtime;
-    DfHostApiV3 host_api;
+    DfHostApiV4 host_api;
     RuntimeDestroyFn destroy;
     RuntimeEnableFn enable;
     RuntimeDisableFn disable;
@@ -207,9 +220,9 @@ DfStatus bg_runtime_open(
         return DF_STATUS_ERROR;
     }
 
-    library->host_api = (DfHostApiV3) {
+    library->host_api = (DfHostApiV4) {
         .abi_version = DF_HOST_ABI_VERSION,
-        .struct_size = sizeof(DfHostApiV3),
+        .struct_size = sizeof(DfHostApiV4),
         .context = host_context,
         .player_text = host_player_text,
         .player_title = host_player_title,
@@ -235,6 +248,8 @@ DfStatus bg_runtime_open(
         .inventory_clear = host_inventory_clear,
         .player_held_items_set = host_player_held_items_set,
         .player_held_slot_set = host_player_held_slot_set,
+        .player_scoreboard = host_player_scoreboard,
+        .player_scoreboard_remove = host_player_scoreboard_remove,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

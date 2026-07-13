@@ -66,6 +66,25 @@ func TestPlayersTransformsPlayer(t *testing.T) {
 	})
 }
 
+func TestPlayersSendsAndRemovesScoreboard(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		id := players.Register(player, 1)
+		if !players.SendPlayerScoreboard(id, native.PlayerScoreboard{
+			Name: "Stats", Lines: []string{"Wins: 3", "Losses: 1"}, Padding: false, Descending: true,
+		}) {
+			t.Fatal("send scoreboard failed")
+		}
+		if players.SendPlayerScoreboard(id, native.PlayerScoreboard{Lines: make([]string, 16)}) {
+			t.Fatal("accepted a scoreboard with more than 15 lines")
+		}
+		players.Unregister(player)
+		if players.RemovePlayerScoreboard(id) {
+			t.Fatal("removed scoreboard for a stale player")
+		}
+	})
+}
+
 func TestPlayersTracksStableGenerationAndNames(t *testing.T) {
 	withPlayer(t, func(player *player.Player) {
 		players := NewPlayers()

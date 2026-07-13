@@ -75,6 +75,21 @@ fn give_sword(player: Player) {
 
 `Player::inventory()`, `armour()`, and `offhand()` expose get/set/add/clear operations. Mutating setters are fire-and-forget; host transport statuses stay internal. `add_item()` returns only the useful domain result: the count added. `held_items()`, `set_held_items()`, and `set_held_slot()` mirror Dragonfly. Inventory reads and item events preserve count, metadata, damage, unbreakable state, anvil cost, custom name, lore, NBT, `WithValue` data, and enchantments through bounded snapshots. NBT uses standard little-endian encoding, not Go `gob` bytes.
 
+Scoreboards are owned snapshots with Dragonfly's 15-line limit, padding, and display-order controls:
+
+```rust
+use dragonfly::{Player, Scoreboard, ScoreboardLineOutOfBounds};
+
+fn show_scoreboard(player: Player) -> Result<(), ScoreboardLineOutOfBounds> {
+    let mut board = Scoreboard::new("Match");
+    board.push_line("Red: 3")?.push_line("Blue: 2")?;
+    player.send_scoreboard(&board);
+    Ok(())
+}
+```
+
+`send_scoreboard()` and `remove_scoreboard()` are fire-and-forget; native host transport failures remain internal.
+
 Built-in item identities are typed and mirror Dragonfly's item model: `item::new(item, count)` creates the stack, and metadata belongs to the item type. `item::Custom` is the explicit escape hatch for plugin-registered identifiers.
 
 Commands use compile-time macros in place of Go runtime reflection. `#[command("root")]` declares the command, and each `#[subcommand("name")]` method becomes a Dragonfly runnable with generated native metadata and parsing. See the hello-command example for general command arguments and the items-command example for inventory operations.
@@ -88,5 +103,6 @@ See [native plugin architecture](docs/plans/rust-plugin-architecture.md).
 - [Lifecycle logger](examples/plugins/lifecycle-logger): demonstrates enable and disable hooks.
 - [Hello command](examples/plugins/hello-command): demonstrates Dragonfly subcommands and enum parameters.
 - [Items command](examples/plugins/items-command): demonstrates typed items and inventory reads/writes.
+- [Scoreboard](examples/plugins/scoreboard): sends and removes a sidebar scoreboard.
 
 The examples compile as native plugin libraries through `make stage-examples`. Precompiled `.so`, `.dylib`, or `.dll` plugins may also be placed directly in `examples/plugins`.
