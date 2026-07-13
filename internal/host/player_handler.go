@@ -728,6 +728,13 @@ func blockName(block world.Block) string {
 }
 
 func (h *PlayerHandler) nativeDamageSource(source world.DamageSource) native.DamageSource {
+	return NativeDamageSource(source, h.players.EntityRegistry())
+}
+
+// NativeDamageSource converts a Dragonfly damage source without losing its
+// concrete attacker, projectile, block, or enchantment semantics. Entities may
+// be nil when no stable entity attribution is available.
+func NativeDamageSource(source world.DamageSource, entities *Entities) native.DamageSource {
 	source = concreteDamageSource(source)
 	if source == nil {
 		return native.DamageSource{Name: "<nil>"}
@@ -749,8 +756,8 @@ func (h *PlayerHandler) nativeDamageSource(source world.DamageSource) native.Dam
 	switch source := source.(type) {
 	case entity.AttackDamageSource:
 		value.Kind = native.DamageSourceAttack
-		if source.Attacker != nil {
-			value.Entity = h.players.EntityRegistry().Register(source.Attacker)
+		if source.Attacker != nil && entities != nil {
+			value.Entity = entities.Register(source.Attacker)
 		}
 	case block.DamageSource:
 		if source.Block == nil {
@@ -784,11 +791,11 @@ func (h *PlayerHandler) nativeDamageSource(source world.DamageSource) native.Dam
 		value.Kind, value.Data = native.DamageSourcePoison, source.Fatal
 	case entity.ProjectileDamageSource:
 		value.Kind = native.DamageSourceProjectile
-		if source.Projectile != nil {
-			value.Entity = h.players.EntityRegistry().Register(source.Projectile)
+		if source.Projectile != nil && entities != nil {
+			value.Entity = entities.Register(source.Projectile)
 		}
-		if source.Owner != nil {
-			value.SecondaryEntity = h.players.EntityRegistry().Register(source.Owner)
+		if source.Owner != nil && entities != nil {
+			value.SecondaryEntity = entities.Register(source.Owner)
 		}
 		value.ProjectileProtection = true
 	case player.StarvationDamageSource:
@@ -797,8 +804,8 @@ func (h *PlayerHandler) nativeDamageSource(source world.DamageSource) native.Dam
 		value.Kind = native.DamageSourceSuffocation
 	case enchantment.ThornsDamageSource:
 		value.Kind = native.DamageSourceThorns
-		if source.Owner != nil {
-			value.Entity = h.players.EntityRegistry().Register(source.Owner)
+		if source.Owner != nil && entities != nil {
+			value.Entity = entities.Register(source.Owner)
 		}
 	case entity.VoidDamageSource:
 		value.Kind = native.DamageSourceVoid
@@ -809,6 +816,12 @@ func (h *PlayerHandler) nativeDamageSource(source world.DamageSource) native.Dam
 }
 
 func (h *PlayerHandler) nativeHealingSource(source world.HealingSource) native.HealingSource {
+	return NativeHealingSource(source)
+}
+
+// NativeHealingSource converts a Dragonfly healing source to the stable ABI
+// representation shared by player and custom living entity callbacks.
+func NativeHealingSource(source world.HealingSource) native.HealingSource {
 	source = concreteHealingSource(source)
 	if source == nil {
 		return native.HealingSource{Name: "<nil>"}
