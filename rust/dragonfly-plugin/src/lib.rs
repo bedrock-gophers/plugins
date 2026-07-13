@@ -985,6 +985,15 @@ impl Player {
         })
     }
 
+    /// Formats and sends a message without making the caller allocate a `String`.
+    pub fn messagef(&self, arguments: core::fmt::Arguments<'_>) {
+        if let Some(message) = arguments.as_str() {
+            self.message(message);
+        } else {
+            self.message(&std::fmt::format(arguments));
+        }
+    }
+
     pub fn heal<'a>(&self, health: f64, source: impl Into<healing::Source<'a>>) -> f64 {
         let Some(host) = host_api() else { return 0.0 };
         let Some(heal) = host.player_heal else {

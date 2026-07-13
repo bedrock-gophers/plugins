@@ -4,6 +4,12 @@ Native multi-language plugin runtime for [df-mc/dragonfly](https://github.com/df
 
 Current status: native runtime foundation plus player actions, typed items, inventories, scoreboards, asynchronous forms, managed worlds, stable entity handles, built-in entity/projectile spawning, typed world particles and sounds, and entity attack/use events. Generated events, lifecycle hooks, Dragonfly commands, bounded snapshots, and host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
 
+Rust mirrors Dragonfly's `Messagef` convenience with Rust formatting arguments:
+
+```rust
+player.messagef(format_args!("Welcome, {}!", player.name().unwrap_or("player")));
+```
+
 ## Build and test
 
 Requirements:
