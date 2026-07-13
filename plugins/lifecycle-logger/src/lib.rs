@@ -1,12 +1,15 @@
-use dragonfly::{Enchantment, Event, Plugin, Title, Value, World, damage, healing, plugin};
+use dragonfly::{
+    Enchantment, Event, Plugin, PluginResult, Title, Value, World, damage, healing, plugin,
+};
 
 #[derive(Default)]
 struct LifecycleLogger;
 
 #[plugin]
 impl Plugin for LifecycleLogger {
-    fn on_enable(&self) {
+    fn on_enable(&self) -> PluginResult {
         eprintln!("lifecycle-logger enabled");
+        Ok(())
     }
 
     fn on_disable(&self) {
