@@ -27,7 +27,7 @@ version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=7388fa753b6b52c2cca3e5d37eda05a22e19ae3b#7388fa753b6b52c2cca3e5d37eda05a22e19ae3b"
 
 [[package]]
-name = "ping-command"
+name = "items-command"
 version = "0.1.0"
 dependencies = [
  "dragonfly-plugin",
