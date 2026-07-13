@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bedrock-gophers/plugins/internal/host"
 	"github.com/bedrock-gophers/plugins/internal/native"
@@ -35,9 +36,17 @@ type managedWorld struct {
 	id        native.WorldID
 	name      WorldID
 	world     *world.World
+	spec      *normalizedWorldSpec
 	core      bool
 	unloading bool
 	closed    bool
+}
+
+type worldOpening struct {
+	spec normalizedWorldSpec
+	done chan struct{}
+	id   native.WorldID
+	err  error
 }
 
 // WorldManager owns every world exposed through the plugin framework.
@@ -54,6 +63,8 @@ type WorldManager struct {
 	blocks          world.BlockRegistry
 	entityTypes     world.EntityRegistry
 	registriesReady bool
+	openings        map[WorldID]*worldOpening
+	providerPaths   map[string]WorldID
 }
 
 // NewWorldManager constructs an in-memory manager, primarily useful to embedders and tests.
@@ -86,6 +97,7 @@ func newWorldManager(root string, log *slog.Logger, players *host.Players) *Worl
 	}
 	return &WorldManager{
 		worlds: make(map[WorldID]*managedWorld), handles: make(map[native.WorldID]*managedWorld), byWorld: make(map[*world.World]*managedWorld),
+		openings: make(map[WorldID]*worldOpening), providerPaths: make(map[string]WorldID),
 		root: root, log: log, players: players, entityHandles: entityHandles,
 	}
 }
@@ -118,51 +130,154 @@ func (m *WorldManager) Create(name WorldID, config world.Config) (*world.World, 
 	return w, nil
 }
 
-// Open opens or creates a persistent custom world using an mcdb provider.
+// Open opens or creates a persistent custom world using the default policies.
 func (m *WorldManager) Open(name WorldID, dimension native.WorldDimension) (native.WorldID, error) {
-	if err := validateCustomWorldID(name); err != nil {
-		return 0, err
-	}
-	if m.root == "" {
-		return 0, errors.New("persistent world root is not configured")
-	}
-	dim, ok := dragonflyDimension(dimension)
+	dim, ok := worldSpecDimensionFromNative(dimension)
 	if !ok {
 		return 0, fmt.Errorf("invalid world dimension %d", dimension)
 	}
-	if entry, ok := m.entryByName(name); ok {
-		if entry.world.Dimension() != dim {
-			return 0, fmt.Errorf("world %q is already open with another dimension", name)
-		}
-		return entry.id, nil
+	parts := strings.SplitN(string(name), ":", 2)
+	providerPath := ""
+	if len(parts) == 2 {
+		providerPath = parts[0] + "/" + parts[1]
 	}
-	path, err := m.worldPath(name)
+	return m.OpenSpec(name, WorldSpec{
+		ProviderPath: providerPath, Dimension: dim, OpenMode: WorldOpenOrCreate,
+		Save: WorldSaveAutomatic, SaveInterval: 10 * time.Minute,
+		RandomTicks: WorldRandomTicksPerSubchunk, RandomTickRate: 3,
+		Time: WorldTimePreserve, Weather: WorldWeatherPreserve,
+		ChunkUnload: WorldChunkUnloadAfter, ChunkUnloadAfter: 2 * time.Minute,
+	})
+}
+
+// OpenSpec synchronously opens or creates a persistent world with immutable policies.
+func (m *WorldManager) OpenSpec(name WorldID, value WorldSpec) (native.WorldID, error) {
+	if err := validateCustomWorldID(name); err != nil {
+		return 0, err
+	}
+	spec, err := normalizeWorldSpec(m.root, value)
 	if err != nil {
 		return 0, err
 	}
-	m.mu.RLock()
-	blocks, entities, ready := m.blocks, m.entityTypes, m.registriesReady
-	m.mu.RUnlock()
-	if !ready {
+
+	m.mu.Lock()
+	if entry, exists := m.worlds[name]; exists {
+		if entry.unloading || entry.spec == nil || *entry.spec != spec {
+			m.mu.Unlock()
+			return 0, fmt.Errorf("world %q is already open with another specification", name)
+		}
+		id := entry.id
+		m.mu.Unlock()
+		return id, nil
+	}
+	if opening, exists := m.openings[name]; exists {
+		if opening.spec != spec {
+			m.mu.Unlock()
+			return 0, fmt.Errorf("world %q is already opening with another specification", name)
+		}
+		done := opening.done
+		m.mu.Unlock()
+		<-done
+		return opening.id, opening.err
+	}
+	if owner, exists := m.providerPaths[spec.absoluteProviderPath]; exists {
+		m.mu.Unlock()
+		return 0, fmt.Errorf("world provider path %q is already owned by %q", spec.providerPath, owner)
+	}
+	if !m.registriesReady {
+		m.mu.Unlock()
 		return 0, errors.New("core world registries are not ready")
 	}
-	provider, err := (mcdb.Config{Log: m.log, Blocks: blocks}).Open(path)
+	opening := &worldOpening{spec: spec, done: make(chan struct{})}
+	m.openings[name] = opening
+	m.providerPaths[spec.absoluteProviderPath] = name
+	m.mu.Unlock()
+
+	id, openErr := m.openNormalized(name, spec)
+	m.mu.Lock()
+	opening.id, opening.err = id, openErr
+	delete(m.openings, name)
+	if openErr != nil {
+		delete(m.providerPaths, spec.absoluteProviderPath)
+	}
+	close(opening.done)
+	m.mu.Unlock()
+	return id, openErr
+}
+
+func (m *WorldManager) openNormalized(name WorldID, spec normalizedWorldSpec) (native.WorldID, error) {
+	if err := preflightProvider(spec.OpenMode, spec.absoluteProviderPath); err != nil {
+		return 0, fmt.Errorf("open world %q: %w", name, err)
+	}
+	m.mu.RLock()
+	blocks, entities := m.blocks, m.entityTypes
+	m.mu.RUnlock()
+	provider, err := (mcdb.Config{Log: m.log, Blocks: blocks}).Open(spec.absoluteProviderPath)
 	if err != nil {
 		return 0, fmt.Errorf("open world %q: %w", name, err)
 	}
-	w := world.Config{
-		Log: m.log, Dim: dim, Provider: provider, Blocks: blocks, Entities: entities,
-		PortalDestination: m.portalDestination,
-	}.New()
-	id, err := m.register(name, w, false)
-	if err != nil {
+	spec.applySettings(provider.Settings())
+	config := spec.config(m.log, provider, blocks, entities)
+	config.PortalDestination = m.portalDestination
+	w := config.New()
+
+	m.mu.Lock()
+	if m.next == native.WorldID(math.MaxUint64) {
+		m.mu.Unlock()
 		_ = w.Close()
-		if existing, ok := m.entryByName(name); ok {
-			return existing.id, nil
-		}
-		return 0, err
+		return 0, errors.New("world handle space exhausted")
 	}
-	return id, nil
+	m.next++
+	stored := spec
+	entry := &managedWorld{id: m.next, name: name, world: w, spec: &stored}
+	w.Handle(host.NewWorldHandler(m.entityHandles, m.players, entry.id))
+	m.worlds[name], m.handles[entry.id], m.byWorld[w] = entry, entry, entry
+	m.mu.Unlock()
+	return entry.id, nil
+}
+
+func preflightProvider(mode WorldOpenMode, path string) error {
+	info, err := os.Lstat(path)
+	switch mode {
+	case WorldOpenOrCreate:
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("inspect provider: %w", err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("provider path is a symlink")
+		}
+		return nil
+	case WorldOpenExisting:
+		if err != nil {
+			return fmt.Errorf("inspect existing provider: %w", err)
+		}
+		if !info.IsDir() {
+			return errors.New("existing provider path is not a directory")
+		}
+		for _, relative := range []string{"level.dat", filepath.Join("db", "CURRENT")} {
+			artifact, statErr := os.Lstat(filepath.Join(path, relative))
+			if statErr != nil {
+				return fmt.Errorf("inspect existing provider artifact %q: %w", relative, statErr)
+			}
+			if !artifact.Mode().IsRegular() {
+				return fmt.Errorf("existing provider artifact %q is not a regular file", relative)
+			}
+		}
+		return nil
+	case WorldCreateNew:
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("inspect new provider: %w", err)
+		}
+		return errors.New("new provider path already exists")
+	default:
+		return fmt.Errorf("invalid world open mode %d", mode)
+	}
 }
 
 func (m *WorldManager) register(name WorldID, w *world.World, core bool) (native.WorldID, error) {
@@ -173,6 +288,9 @@ func (m *WorldManager) register(name WorldID, w *world.World, core bool) (native
 	defer m.mu.Unlock()
 	if _, exists := m.worlds[name]; exists {
 		return 0, fmt.Errorf("world %q already exists", name)
+	}
+	if _, exists := m.openings[name]; exists {
+		return 0, fmt.Errorf("world %q is opening", name)
 	}
 	if m.next == native.WorldID(math.MaxUint64) {
 		return 0, errors.New("world handle space exhausted")
@@ -340,26 +458,27 @@ func (m *WorldManager) unload(invocation native.InvocationID, entry *managedWorl
 		}
 		return fmt.Errorf("world %q contains %d player(s)", entry.name, players)
 	}
+	entry.closed = true
+	closeErr := entry.world.Close()
 	m.mu.Lock()
 	delete(m.worlds, entry.name)
 	delete(m.handles, entry.id)
 	delete(m.byWorld, entry.world)
-	entry.closed = true
+	if entry.spec != nil {
+		delete(m.providerPaths, entry.spec.absoluteProviderPath)
+	}
 	m.mu.Unlock()
-	return entry.world.Close()
+	return closeErr
 }
 
 // CloseCustom closes all custom worlds. Dragonfly closes core dimensions itself.
 func (m *WorldManager) CloseCustom() error {
 	m.mu.Lock()
 	custom := make([]*managedWorld, 0, len(m.worlds))
-	for name, entry := range m.worlds {
+	for _, entry := range m.worlds {
 		if !entry.core {
 			entry.unloading = true
 			custom = append(custom, entry)
-			delete(m.worlds, name)
-			delete(m.handles, entry.id)
-			delete(m.byWorld, entry.world)
 		}
 	}
 	m.mu.Unlock()
@@ -367,15 +486,23 @@ func (m *WorldManager) CloseCustom() error {
 	var failures []error
 	for _, entry := range custom {
 		entry.lifecycle.Lock()
-		if entry.closed {
-			entry.lifecycle.Unlock()
-			continue
-		}
-		entry.closed = true
-		if err := entry.world.Close(); err != nil {
-			failures = append(failures, err)
+		if !entry.closed {
+			entry.closed = true
+			if err := entry.world.Close(); err != nil {
+				failures = append(failures, err)
+			}
 		}
 		entry.lifecycle.Unlock()
+		m.mu.Lock()
+		if m.worlds[entry.name] == entry {
+			delete(m.worlds, entry.name)
+			delete(m.handles, entry.id)
+			delete(m.byWorld, entry.world)
+		}
+		if entry.spec != nil {
+			delete(m.providerPaths, entry.spec.absoluteProviderPath)
+		}
+		m.mu.Unlock()
 	}
 	return errors.Join(failures...)
 }

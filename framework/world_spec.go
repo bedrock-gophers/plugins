@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/world"
 )
 
@@ -267,5 +268,18 @@ func worldSpecDimension(value WorldDimension) (world.Dimension, bool) {
 		return world.End, true
 	default:
 		return nil, false
+	}
+}
+
+func worldSpecDimensionFromNative(value native.WorldDimension) (WorldDimension, bool) {
+	switch value {
+	case native.WorldDimensionOverworld:
+		return WorldDimensionOverworld, true
+	case native.WorldDimensionNether:
+		return WorldDimensionNether, true
+	case native.WorldDimensionEnd:
+		return WorldDimensionEnd, true
+	default:
+		return 0, false
 	}
 }

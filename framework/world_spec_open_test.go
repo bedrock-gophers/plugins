@@ -1,0 +1,180 @@
+package framework
+
+import (
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
+	"github.com/bedrock-gophers/plugins/internal/host"
+	"github.com/bedrock-gophers/plugins/internal/native"
+	"github.com/df-mc/dragonfly/server/world"
+	"github.com/df-mc/dragonfly/server/world/mcdb"
+)
+
+func persistentTestManager(t *testing.T) (*WorldManager, string) {
+	t.Helper()
+	root := t.TempDir()
+	manager, err := NewPersistentWorldManager(root, nil, host.NewPlayers())
+	if err != nil {
+		t.Fatal(err)
+	}
+	core := world.Config{Synchronous: true}.New()
+	if err := manager.RegisterCore(OverworldID, core); err != nil {
+		_ = core.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = manager.CloseCustom()
+		_ = core.Close()
+	})
+	return manager, root
+}
+
+func TestWorldManagerConcurrentIdenticalSpecsShareOneWorld(t *testing.T) {
+	manager, _ := persistentTestManager(t)
+	spec := validWorldSpec("arenas/shared")
+	const callers = 8
+	ids := make(chan native.WorldID, callers)
+	errs := make(chan error, callers)
+	var start sync.WaitGroup
+	start.Add(1)
+	var callersDone sync.WaitGroup
+	callersDone.Add(callers)
+	for range callers {
+		go func() {
+			defer callersDone.Done()
+			start.Wait()
+			id, err := manager.OpenSpec("example:shared", spec)
+			ids <- id
+			errs <- err
+		}()
+	}
+	start.Done()
+	callersDone.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var want native.WorldID
+	for id := range ids {
+		if want == 0 {
+			want = id
+		} else if id != want {
+			t.Fatalf("world ID = %d, want %d", id, want)
+		}
+	}
+	if got := manager.IDs(); len(got) != 2 {
+		t.Fatalf("managed IDs = %v", got)
+	}
+}
+
+func TestWorldManagerRejectsMismatchedDuplicateSpec(t *testing.T) {
+	manager, _ := persistentTestManager(t)
+	spec := validWorldSpec("arenas/one")
+	if _, err := manager.OpenSpec("example:arena", spec); err != nil {
+		t.Fatal(err)
+	}
+	spec.Time, spec.FixedTime = WorldTimeFixed, 6000
+	if _, err := manager.OpenSpec("example:arena", spec); err == nil {
+		t.Fatal("mismatched duplicate accepted")
+	}
+}
+
+func TestWorldManagerRejectsProviderPathAlias(t *testing.T) {
+	manager, _ := persistentTestManager(t)
+	spec := validWorldSpec("arenas/one")
+	if _, err := manager.OpenSpec("example:one", spec); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.OpenSpec("example:two", spec); err == nil {
+		t.Fatal("provider path alias accepted")
+	}
+}
+
+func TestWorldManagerRejectsProviderPathSymlink(t *testing.T) {
+	manager, root := persistentTestManager(t)
+	if err := os.Symlink(t.TempDir(), filepath.Join(root, "alias")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := manager.OpenSpec("example:alias", validWorldSpec("alias/world")); err == nil {
+		t.Fatal("symlink path accepted")
+	}
+}
+
+func TestWorldManagerOpenExistingRequiresMCDBArtifacts(t *testing.T) {
+	manager, root := persistentTestManager(t)
+	spec := validWorldSpec("existing/world")
+	spec.OpenMode = WorldOpenExisting
+	if _, err := manager.OpenSpec("example:missing", spec); err == nil {
+		t.Fatal("missing provider accepted")
+	}
+	createMCDBFixture(t, filepath.Join(root, "existing", "world"))
+	if _, err := manager.OpenSpec("example:existing", spec); err != nil {
+		t.Fatalf("valid provider rejected: %v", err)
+	}
+}
+
+func TestWorldManagerCreateNewRejectsExistingPath(t *testing.T) {
+	manager, root := persistentTestManager(t)
+	if err := os.MkdirAll(filepath.Join(root, "existing"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spec := validWorldSpec("existing")
+	spec.OpenMode = WorldCreateNew
+	if _, err := manager.OpenSpec("example:new", spec); err == nil {
+		t.Fatal("existing path accepted")
+	}
+}
+
+func TestWorldManagerFailedOpenReleasesReservations(t *testing.T) {
+	manager, root := persistentTestManager(t)
+	path := filepath.Join(root, "retry")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spec := validWorldSpec("retry")
+	spec.OpenMode = WorldCreateNew
+	if _, err := manager.OpenSpec("example:retry", spec); err == nil {
+		t.Fatal("existing path accepted")
+	}
+	if err := os.RemoveAll(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.OpenSpec("example:retry", spec); err != nil {
+		t.Fatalf("reservation was not released: %v", err)
+	}
+}
+
+func TestWorldManagerUnloadReleasesProviderPathAfterClose(t *testing.T) {
+	manager, _ := persistentTestManager(t)
+	spec := validWorldSpec("reusable")
+	first, err := manager.OpenSpec("example:first", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Unload("example:first"); err != nil {
+		t.Fatal(err)
+	}
+	second, err := manager.OpenSpec("example:second", spec)
+	if err != nil {
+		t.Fatalf("provider path was not released: %v", err)
+	}
+	if second == first {
+		t.Fatalf("world handle was reused: %d", second)
+	}
+}
+
+func createMCDBFixture(t *testing.T, path string) {
+	t.Helper()
+	provider, err := (mcdb.Config{}).Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Close(); err != nil {
+		t.Fatal(err)
+	}
+}

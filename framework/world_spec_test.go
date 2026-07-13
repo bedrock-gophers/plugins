@@ -45,6 +45,7 @@ func TestNormalizeWorldSpecRejectsInvalidPolicies(t *testing.T) {
 	tests := map[string]func(*WorldSpec){
 		"unknown dimension":       func(spec *WorldSpec) { spec.Dimension = 99 },
 		"unknown open mode":       func(spec *WorldSpec) { spec.OpenMode = 99 },
+		"unknown save policy":     func(spec *WorldSpec) { spec.Save = 99 },
 		"automatic zero interval": func(spec *WorldSpec) { spec.SaveInterval = 0 },
 		"manual non-zero interval": func(spec *WorldSpec) {
 			spec.Save = WorldSaveManual
