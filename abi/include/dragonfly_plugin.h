@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 3u
-#define DF_HOST_ABI_VERSION 15u
+#define DF_HOST_ABI_VERSION 16u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -18,6 +18,10 @@ typedef uint32_t DfEventId;
 
 typedef struct { uint8_t bytes[16]; uint64_t generation; } DfPlayerId;
 typedef struct { uint8_t bytes[16]; uint64_t generation; } DfEntityId;
+typedef struct DfDetachedEntityId {
+    uint64_t value;
+    uint64_t generation;
+} DfDetachedEntityId;
 typedef uint64_t DfInvocationId;
 typedef struct { double x; double y; double z; } DfVec3;
 typedef struct { double yaw; double pitch; } DfRotation;
@@ -355,6 +359,15 @@ typedef DfStatus (*DfHostWorldTimeSetFn)(uint64_t context, DfInvocationId invoca
 typedef DfStatus (*DfHostWorldSpawnGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
 typedef DfStatus (*DfHostWorldSpawnSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position);
 typedef DfStatus (*DfHostWorldEntitySpawnFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV3 *entity, DfEntityId *output);
+typedef DfStatus (*DfHostWorldEntityRemoveFn)(
+    uint64_t context, DfInvocationId invocation, DfWorldId world,
+    DfEntityId entity, DfDetachedEntityId *detached);
+typedef DfStatus (*DfHostWorldEntityAddFn)(
+    uint64_t context, DfInvocationId invocation, DfWorldId world,
+    DfDetachedEntityId detached, const DfVec3 *position,
+    DfEntityId *entity);
+typedef void (*DfHostDetachedEntityDropFn)(
+    uint64_t context, DfDetachedEntityId detached);
 typedef DfStatus (*DfHostWorldEntitiesFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfEntityIdBuffer *output);
 typedef DfStatus (*DfHostWorldPlayersFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfPlayerIdBuffer *output);
 typedef DfStatus (*DfHostEntityStateFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state);
@@ -423,7 +436,10 @@ typedef struct {
     DfHostPlayerHurtFn player_hurt;
     DfHostSkinSnapshotInfoFn skin_snapshot_info;
     DfHostSkinSnapshotSetFn skin_snapshot_set;
-} DfHostApiV15;
+    DfHostWorldEntityRemoveFn world_entity_remove;
+    DfHostWorldEntityAddFn world_entity_add;
+    DfHostDetachedEntityDropFn detached_entity_drop;
+} DfHostApiV16;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
 #define DF_COMMAND_PARAMETER_STRING 3u
@@ -935,7 +951,7 @@ typedef DfStatus (*DfPluginEntityTypeAtFn)(void *instance, uint64_t index, DfEnt
 typedef DfStatus (*DfPluginHandleEntityFn)(void *instance, uint64_t local_type, uint32_t operation, uint64_t entity_instance, const void *input, void *state);
 typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const DfCommandInput *input, DfCommandState *state);
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
-typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV15 *host);
+typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV16 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
 
 typedef struct {
@@ -958,7 +974,7 @@ typedef struct {
 typedef const DfPluginApiV3 *(*DfPluginEntryV3Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
-typedef struct { DfStringView plugin_directory; const DfHostApiV15 *host; } DfRuntimeConfig;
+typedef struct { DfStringView plugin_directory; const DfHostApiV16 *host; } DfRuntimeConfig;
 
 DfStatus df_runtime_create(const DfRuntimeConfig *config, DfRuntime **out, uint8_t *error, uint64_t error_capacity);
 DfStatus df_runtime_enable(DfRuntime *runtime);
