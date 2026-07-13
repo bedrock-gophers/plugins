@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/df-mc/dragonfly/server/world"
 )
@@ -57,5 +58,39 @@ func TestDetachedRegistryDrainCleansEntriesExactlyOnce(t *testing.T) {
 	}
 	if _, ok := registry.take(first); ok {
 		t.Fatal("drained entry remained available")
+	}
+}
+
+func TestDetachedRegistryTakeReturnsHandle(t *testing.T) {
+	registry := newDetachedEntities()
+	handle := new(world.EntityHandle)
+	id := registry.put(handle, nil)
+	if taken, ok := registry.take(id); !ok || taken != handle {
+		t.Fatalf("taken handle = %p, ok=%v; want %p", taken, ok, handle)
+	}
+}
+
+func TestDetachedRegistryCleanupIsReentrant(t *testing.T) {
+	for _, operation := range []string{"drop", "drain"} {
+		t.Run(operation, func(t *testing.T) {
+			registry := newDetachedEntities()
+			id := registry.put(new(world.EntityHandle), func() {
+				registry.put(new(world.EntityHandle), nil)
+			})
+			finished := make(chan struct{})
+			go func() {
+				defer close(finished)
+				if operation == "drop" {
+					registry.drop(id)
+				} else {
+					registry.drain()
+				}
+			}()
+			select {
+			case <-finished:
+			case <-time.After(time.Second):
+				t.Fatal("cleanup blocked while re-entering registry")
+			}
+		})
 	}
 }

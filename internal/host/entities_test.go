@@ -97,3 +97,28 @@ func TestEntitiesReserveFreshGeneration(t *testing.T) {
 		}
 	})
 }
+
+func TestEntitiesReserveActiveHandleFreshGeneration(t *testing.T) {
+	withPlayerTx(t, func(_ *world.Tx, connected *player.Player) {
+		entities := NewEntities()
+		handle := connected.H()
+		first := entities.registerHandle(handle, 0)
+		reserved := entities.reserve(handle)
+		if reserved == first || reserved.Generation <= first.Generation {
+			t.Fatalf("active ID was reused: %#v then %#v", first, reserved)
+		}
+		if _, ok := entities.Handle(first); ok {
+			t.Fatal("prior active ID remained resolvable after reservation")
+		}
+		if _, ok := entities.Handle(reserved); ok {
+			t.Fatal("reserved ID resolved before activation")
+		}
+		entities.activate(handle)
+		if _, ok := entities.Handle(first); ok {
+			t.Fatal("prior active ID revived after activation")
+		}
+		if resolved, ok := entities.Handle(reserved); !ok || resolved != handle {
+			t.Fatalf("activated ID resolved handle = %p, ok=%v", resolved, ok)
+		}
+	})
+}

@@ -157,7 +157,11 @@ func (e *Entities) reserve(handle *world.EntityHandle) native.EntityID {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if entry, ok := e.byHandle[handle]; ok {
-		return entry.id
+		if entry.state == entityInactive {
+			return entry.id
+		}
+		delete(e.byHandle, handle)
+		delete(e.byID, entry.id)
 	}
 	return e.registerNewHandleLocked(handle, 0, entityInactive)
 }
