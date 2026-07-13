@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+type PlayerForm struct {
+	ID          uint64
+	RequestJSON []byte
+}
+
 type PlayerTransformKind uint32
 
 const (
@@ -85,6 +90,8 @@ type Host interface {
 	SendPlayerTitle(PlayerID, PlayerTitle) bool
 	SendPlayerScoreboard(PlayerID, PlayerScoreboard) bool
 	RemovePlayerScoreboard(PlayerID) bool
+	SendPlayerForm(PlayerID, PlayerForm) bool
+	ClosePlayerForm(PlayerID) bool
 	TransformPlayer(PlayerID, PlayerTransformKind, Vec3, float64, float64) bool
 	PlayerRotation(PlayerID) (Rotation, bool)
 	SetPlayerState(PlayerID, PlayerStateKind, PlayerStateValue) bool
@@ -109,6 +116,8 @@ func (noopHost) SendPlayerText(PlayerID, PlayerTextKind, string) bool { return f
 func (noopHost) SendPlayerTitle(PlayerID, PlayerTitle) bool           { return false }
 func (noopHost) SendPlayerScoreboard(PlayerID, PlayerScoreboard) bool { return false }
 func (noopHost) RemovePlayerScoreboard(PlayerID) bool                 { return false }
+func (noopHost) SendPlayerForm(PlayerID, PlayerForm) bool             { return false }
+func (noopHost) ClosePlayerForm(PlayerID) bool                        { return false }
 func (noopHost) TransformPlayer(PlayerID, PlayerTransformKind, Vec3, float64, float64) bool {
 	return false
 }
@@ -141,10 +150,187 @@ var (
 	itemSnapshotMu       sync.Mutex
 	itemSnapshots        = map[uint64]itemSnapshot{}
 	itemSnapshotCounts   = map[uint64]int{}
+	formSequence         atomic.Uint64
+	formMu               sync.Mutex
+	formCond             = sync.NewCond(&formMu)
+	forms                = map[uint64]formRegistration{}
+	formHostState        = map[uint64]*formState{}
 )
 
 const maxSkinSnapshotsPerHost = 32
 const maxItemSnapshotsPerHost = 64
+const maxFormsPerHost = 128
+const maxFormsPerPlayer = 16
+
+type formRegistration struct {
+	host    uint64
+	player  PlayerID
+	respond func(PlayerID, bool, []byte) bool
+	drop    func()
+}
+type formState struct {
+	closing, draining bool
+	inflight, count   int
+	players           map[PlayerID]int
+}
+
+func registerForm(host uint64, player PlayerID, respond func(PlayerID, bool, []byte) bool, drop func()) (uint64, bool) {
+	formMu.Lock()
+	defer formMu.Unlock()
+	state := formHostState[host]
+	if state == nil {
+		state = &formState{players: map[PlayerID]int{}}
+		formHostState[host] = state
+	}
+	if state.closing || state.draining || state.count >= maxFormsPerHost || state.players[player] >= maxFormsPerPlayer {
+		return 0, false
+	}
+	id := formSequence.Add(1)
+	forms[id] = formRegistration{host: host, player: player, respond: respond, drop: drop}
+	state.count++
+	state.players[player]++
+	return id, true
+}
+
+func CompletePlayerForm(id uint64, submitter PlayerID, closed bool, response []byte) bool {
+	formMu.Lock()
+	registration, ok := forms[id]
+	if !ok {
+		formMu.Unlock()
+		return true
+	}
+	delete(forms, id)
+	state := formHostState[registration.host]
+	state.count--
+	state.players[registration.player]--
+	if state.players[registration.player] == 0 {
+		delete(state.players, registration.player)
+	}
+	state.inflight++
+	formMu.Unlock()
+	if submitter != registration.player || len(response) > maxFormJSONBytes {
+		registration.drop()
+		formMu.Lock()
+		state.inflight--
+		formCond.Broadcast()
+		formMu.Unlock()
+		return false
+	}
+	ok = registration.respond(submitter, closed, response)
+	formMu.Lock()
+	state.inflight--
+	formCond.Broadcast()
+	formMu.Unlock()
+	return ok
+}
+
+func abandonForm(id uint64) {
+	formMu.Lock()
+	defer formMu.Unlock()
+	r, ok := forms[id]
+	if !ok {
+		return
+	}
+	delete(forms, id)
+	s := formHostState[r.host]
+	s.count--
+	s.players[r.player]--
+	if s.players[r.player] == 0 {
+		delete(s.players, r.player)
+	}
+}
+
+func CancelPlayerForms(player PlayerID) {
+	cancelMatchingForms(func(r formRegistration) bool { return r.player == player })
+}
+func CancelPlayerForm(id uint64) {
+	var callback func()
+	var state *formState
+	formMu.Lock()
+	if r, ok := forms[id]; ok {
+		delete(forms, id)
+		state = formHostState[r.host]
+		state.count--
+		state.players[r.player]--
+		if state.players[r.player] == 0 {
+			delete(state.players, r.player)
+		}
+		state.inflight++
+		callback = r.drop
+	}
+	formMu.Unlock()
+	if callback != nil {
+		callback()
+		formMu.Lock()
+		state.inflight--
+		formCond.Broadcast()
+		formMu.Unlock()
+	}
+}
+func cancelMatchingForms(match func(formRegistration) bool) {
+	type pendingDrop struct {
+		callback func()
+		state    *formState
+	}
+	var callbacks []pendingDrop
+	formMu.Lock()
+	for id, r := range forms {
+		if match(r) {
+			delete(forms, id)
+			s := formHostState[r.host]
+			s.count--
+			s.players[r.player]--
+			if s.players[r.player] == 0 {
+				delete(s.players, r.player)
+			}
+			s.inflight++
+			callbacks = append(callbacks, pendingDrop{callback: r.drop, state: s})
+		}
+	}
+	formMu.Unlock()
+	for _, callback := range callbacks {
+		callback.callback()
+		formMu.Lock()
+		callback.state.inflight--
+		formCond.Broadcast()
+		formMu.Unlock()
+	}
+}
+
+func drainHostForms(host uint64, closing bool) {
+	formMu.Lock()
+	state := formHostState[host]
+	if state == nil {
+		if closing {
+			formHostState[host] = &formState{closing: true, draining: true, players: map[PlayerID]int{}}
+		}
+		formMu.Unlock()
+		return
+	}
+	state.draining = true
+	if closing {
+		state.closing = true
+	}
+	var callbacks []func()
+	for id, r := range forms {
+		if r.host == host {
+			delete(forms, id)
+			callbacks = append(callbacks, r.drop)
+		}
+	}
+	state.count = 0
+	state.players = map[PlayerID]int{}
+	for state.inflight != 0 {
+		formCond.Wait()
+	}
+	if !closing {
+		state.draining = false
+	}
+	formMu.Unlock()
+	for _, callback := range callbacks {
+		callback()
+	}
+}
 
 type skinSnapshot struct {
 	host uint64
@@ -167,6 +353,10 @@ func registerHost(host Host) uint64 {
 
 func unregisterHost(id uint64) {
 	if id != 0 {
+		drainHostForms(id, true)
+		formMu.Lock()
+		delete(formHostState, id)
+		formMu.Unlock()
 		hosts.Delete(id)
 		skinSnapshotMu.Lock()
 		for snapshotID, snapshot := range skinSnapshots {

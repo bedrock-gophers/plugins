@@ -6,6 +6,7 @@ package native
 import "C"
 
 import (
+	"encoding/json"
 	"time"
 	"unsafe"
 )
@@ -14,7 +15,59 @@ const (
 	maxSkinDataBytes   = 64 << 20
 	maxSkinAnimations  = 256
 	maxScoreboardLines = 15
+	maxFormJSONBytes   = 1 << 20
 )
+
+//export bg_go_player_form_send
+func bg_go_player_form_send(context C.uint64_t, player C.DfPlayerId, view *C.DfFormView) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || view == nil || view.response == nil || view.drop == nil || view.request_json.len == 0 || view.request_json.len > maxFormJSONBytes || view.request_json.data == nil {
+		return C.DF_STATUS_ERROR
+	}
+	request := append([]byte(nil), unsafe.Slice((*byte)(unsafe.Pointer(view.request_json.data)), int(view.request_json.len))...)
+	if !json.Valid(request) {
+		return C.DF_STATUS_ERROR
+	}
+	callbackContext, responseCallback, dropCallback := view.callback_context, view.response, view.drop
+	id, ok := registerForm(uint64(context), playerID(player), func(submitter PlayerID, closed bool, response []byte) bool {
+		outcome := C.uint32_t(C.DF_FORM_RESPONSE_SUBMITTED)
+		if closed {
+			outcome = C.uint32_t(C.DF_FORM_RESPONSE_CLOSED)
+		}
+		var responseView C.DfStringView
+		if len(response) != 0 {
+			responseView.data = (*C.uint8_t)(unsafe.Pointer(&response[0]))
+			responseView.len = C.uint64_t(len(response))
+		}
+		return C.bg_call_form_response(responseCallback, callbackContext, cPlayerID(submitter), outcome, responseView) == C.DF_STATUS_OK
+	}, func() { C.bg_call_form_drop(dropCallback, callbackContext) })
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	if !host.SendPlayerForm(playerID(player), PlayerForm{ID: id, RequestJSON: request}) {
+		abandonForm(id)
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_player_form_close
+func bg_go_player_form_close(context C.uint64_t, player C.DfPlayerId) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || !host.ClosePlayerForm(playerID(player)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+func cPlayerID(id PlayerID) C.DfPlayerId {
+	var value C.DfPlayerId
+	for index := range id.UUID {
+		value.bytes[index] = C.uint8_t(id.UUID[index])
+	}
+	value.generation = C.uint64_t(id.Generation)
+	return value
+}
 
 //export bg_go_player_text
 func bg_go_player_text(context C.uint64_t, player C.DfPlayerId, kind C.uint32_t, message C.DfStringView) C.DfStatus {

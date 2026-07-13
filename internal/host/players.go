@@ -2,6 +2,7 @@ package host
 
 import (
 	"math"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -56,11 +57,37 @@ func (p *Players) Register(player *player.Player, generation uint64) native.Play
 
 func (p *Players) Unregister(player *player.Player) {
 	p.mu.Lock()
+	var id native.PlayerID
+	var registered bool
 	if entry, ok := p.entries[player.H()]; ok {
+		id, registered = entry.id, true
 		delete(p.byID, entry.id)
 		delete(p.entries, player.H())
 	}
 	p.mu.Unlock()
+	if registered {
+		native.CancelPlayerForms(id)
+	}
+}
+
+func (p *Players) SendPlayerForm(id native.PlayerID, value native.PlayerForm) bool {
+	connected, ok := p.ResolveID(id)
+	if !ok {
+		return false
+	}
+	f := &nativePlayerForm{id: value.ID, request: append([]byte(nil), value.RequestJSON...), players: p}
+	runtime.SetFinalizer(f, func(form *nativePlayerForm) { native.CancelPlayerForm(form.id) })
+	connected.SendForm(f)
+	return true
+}
+
+func (p *Players) ClosePlayerForm(id native.PlayerID) bool {
+	connected, ok := p.ResolveID(id)
+	if !ok {
+		return false
+	}
+	connected.CloseForm()
+	return true
 }
 
 func (p *Players) ID(player *player.Player) (native.PlayerID, bool) {

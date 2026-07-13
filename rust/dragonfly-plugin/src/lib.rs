@@ -4,6 +4,7 @@ extern crate self as dragonfly_plugin;
 
 use core::sync::atomic::{AtomicPtr, Ordering};
 
+pub mod form;
 mod item_nbt;
 
 pub use dragonfly_plugin_macros::{Command, CommandEnum, plugin};
@@ -47,7 +48,7 @@ pub mod Event {
     pub use super::PlayerToggleSprintEventData as PlayerToggleSprint;
 }
 
-static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV4> =
+static HOST_API: AtomicPtr<dragonfly_plugin_sys::DfHostApiV5> =
     AtomicPtr::new(core::ptr::null_mut());
 
 const MAX_SKIN_DATA_BYTES: u64 = 64 << 20;
@@ -69,7 +70,7 @@ impl Drop for SkinSnapshot {
 #[doc(hidden)]
 /// # Safety
 /// `host` must remain valid while plugin callbacks may execute.
-pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV4) {
+pub unsafe fn install_host(host: *const dragonfly_plugin_sys::DfHostApiV5) {
     HOST_API.store(host.cast_mut(), Ordering::Release);
 }
 
@@ -576,6 +577,24 @@ impl Drop for ItemSnapshot {
 }
 
 impl Player {
+    /// Sends a form and owns its one-shot callback until it is submitted, closed, or discarded.
+    pub fn send_form<F, C>(&self, form: F, callback: C)
+    where
+        F: form::Form,
+        C: FnOnce(Player, Option<F::Response>) + Send + 'static,
+    {
+        form::send(self, form, callback);
+    }
+
+    /// Requests that the client's currently visible form be closed.
+    pub fn close_form(&self) {
+        let Some(host) = host_api() else { return };
+        let Some(close) = host.player_form_close else {
+            return;
+        };
+        let _ = unsafe { close(host.context, self.raw_id()) };
+    }
+
     pub const fn inventory(&self) -> Inventory {
         Inventory {
             player: *self,
@@ -2018,13 +2037,13 @@ fn slice_pointer<T>(value: &[T]) -> *const T {
     }
 }
 
-fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV4> {
+fn host_api() -> Option<&'static dragonfly_plugin_sys::DfHostApiV5> {
     unsafe { HOST_API.load(Ordering::Acquire).as_ref() }
 }
 
 fn read_item_stack(
     open: impl FnOnce(
-        &dragonfly_plugin_sys::DfHostApiV4,
+        &dragonfly_plugin_sys::DfHostApiV5,
         *mut u64,
         *mut dragonfly_plugin_sys::DfItemStackInfo,
     ) -> Option<dragonfly_plugin_sys::DfStatus>,
@@ -2045,7 +2064,7 @@ fn read_item_stack(
 }
 
 fn read_item_stack_snapshot(
-    host: &dragonfly_plugin_sys::DfHostApiV4,
+    host: &dragonfly_plugin_sys::DfHostApiV5,
     snapshot_id: u64,
     info: dragonfly_plugin_sys::DfItemStackInfo,
 ) -> Option<ItemStack> {

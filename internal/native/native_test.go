@@ -1,6 +1,7 @@
 package native
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -74,6 +75,8 @@ type recordingHost struct {
 		Item      ItemStack
 	}
 	inventoryAdds []ItemStack
+	forms         []PlayerForm
+	formClosed    bool
 }
 
 func (h *recordingHost) SendPlayerText(player PlayerID, kind PlayerTextKind, message string) bool {
@@ -97,6 +100,11 @@ func (h *recordingHost) RemovePlayerScoreboard(player PlayerID) bool {
 	h.player, h.scoreboardRemoved = player, true
 	return true
 }
+func (h *recordingHost) SendPlayerForm(_ PlayerID, form PlayerForm) bool {
+	h.forms = append(h.forms, form)
+	return true
+}
+func (h *recordingHost) ClosePlayerForm(PlayerID) bool { h.formClosed = true; return true }
 
 func (h *recordingHost) TransformPlayer(_ PlayerID, kind PlayerTransformKind, vector Vec3, yaw, pitch float64) bool {
 	h.transforms = append(h.transforms, kind)
@@ -200,10 +208,133 @@ func TestPluginCanMessagePlayer(t *testing.T) {
 	}
 }
 
+func TestFormResponseRoundTrip(t *testing.T) {
+	library, plugins := nativeArtifacts(t)
+	host := &recordingHost{}
+	runtime, err := OpenWithHost(library, plugins, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtime.Close)
+	if err := runtime.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	id := PlayerID{Generation: 77}
+	if _, err := runtime.HandlePlayerJoin(PlayerJoinInput{Player: id, Name: "FormPlayer"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(host.forms) == 0 || !bytes.Contains(host.forms[len(host.forms)-1].RequestJSON, []byte(`"type":"form"`)) {
+		t.Fatalf("menu form not sent: %+v", host.forms)
+	}
+	menu := host.forms[len(host.forms)-1]
+	if !CompletePlayerForm(menu.ID, id, false, []byte("0")) {
+		t.Fatal("menu response rejected")
+	}
+	if len(host.forms) < 2 || !bytes.Contains(host.forms[len(host.forms)-1].RequestJSON, []byte(`"type":"custom_form"`)) {
+		t.Fatalf("custom form not sent after menu response: %+v", host.forms)
+	}
+	custom := host.forms[len(host.forms)-1]
+	response := []byte(`[null,null,null,"Alex",true,5,1,2]`)
+	if !CompletePlayerForm(custom.ID, id, false, response) {
+		t.Fatal("custom response rejected")
+	}
+	if !slices.Contains(host.texts, "Hello Alex: volume 5, colour #1, speed #2") {
+		t.Fatalf("texts = %v", host.texts)
+	}
+}
+
+func TestFormRegistryIsBoundedAndDrained(t *testing.T) {
+	host := registerHost(noopHost{})
+	player := PlayerID{Generation: 9}
+	dropped := 0
+	for index := 0; index < maxFormsPerPlayer; index++ {
+		if _, ok := registerForm(host, player, func(PlayerID, bool, []byte) bool { return true }, func() { dropped++ }); !ok {
+			t.Fatalf("registration %d rejected", index)
+		}
+	}
+	if _, ok := registerForm(host, player, func(PlayerID, bool, []byte) bool { return true }, func() { dropped++ }); ok {
+		t.Fatal("registration beyond per-player bound accepted")
+	}
+	drainHostForms(host, false)
+	if dropped != maxFormsPerPlayer {
+		t.Fatalf("dropped = %d, want %d", dropped, maxFormsPerPlayer)
+	}
+	if _, ok := registerForm(host, player, func(PlayerID, bool, []byte) bool { return true }, func() { dropped++ }); !ok {
+		t.Fatal("registry did not reopen after non-closing drain")
+	}
+	unregisterHost(host)
+	if dropped != maxFormsPerPlayer+1 {
+		t.Fatalf("dropped after close = %d", dropped)
+	}
+}
+
+func TestFormDrainWaitsForConcurrentDrop(t *testing.T) {
+	host := registerHost(noopHost{})
+	player := PlayerID{Generation: 10}
+	started, release := make(chan struct{}), make(chan struct{})
+	id, ok := registerForm(host, player, func(PlayerID, bool, []byte) bool { return true }, func() { close(started); <-release })
+	if !ok {
+		t.Fatal("form registration rejected")
+	}
+	go CancelPlayerForm(id)
+	<-started
+	drained := make(chan struct{})
+	go func() { drainHostForms(host, false); close(drained) }()
+	select {
+	case <-drained:
+		t.Fatal("drain returned while drop callback was in flight")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("drain did not finish")
+	}
+	unregisterHost(host)
+}
+
+func TestClosingFormDrainKeepsRegistrationGateClosed(t *testing.T) {
+	host := registerHost(noopHost{})
+	drainHostForms(host, true)
+	if _, ok := registerForm(host, PlayerID{Generation: 11}, func(PlayerID, bool, []byte) bool {
+		return true
+	}, func() {}); ok {
+		t.Fatal("form registered after closing drain")
+	}
+	unregisterHost(host)
+}
+
+func TestFormRejectsWrongPlayerAndOversizedResponse(t *testing.T) {
+	host := registerHost(noopHost{})
+	t.Cleanup(func() { unregisterHost(host) })
+	player := PlayerID{Generation: 11}
+	dropped := 0
+	register := func() uint64 {
+		id, ok := registerForm(host, player, func(PlayerID, bool, []byte) bool {
+			t.Fatal("invalid response reached Rust callback")
+			return true
+		}, func() { dropped++ })
+		if !ok {
+			t.Fatal("form registration rejected")
+		}
+		return id
+	}
+	if CompletePlayerForm(register(), PlayerID{Generation: 12}, false, []byte("0")) {
+		t.Fatal("response from wrong player accepted")
+	}
+	if CompletePlayerForm(register(), player, false, make([]byte, maxFormJSONBytes+1)) {
+		t.Fatal("oversized response accepted")
+	}
+	if dropped != 2 {
+		t.Fatalf("dropped = %d, want 2", dropped)
+	}
+}
+
 func TestMovementGuard(t *testing.T) {
 	runtime := openTestRuntime(t)
-	if runtime.PluginCount() != 7 {
-		t.Fatalf("plugin count = %d, want 7", runtime.PluginCount())
+	if runtime.PluginCount() != 8 {
+		t.Fatalf("plugin count = %d, want 8", runtime.PluginCount())
 	}
 	if runtime.Subscriptions()&PlayerMoveSubscription == 0 {
 		t.Fatal("movement subscription missing")

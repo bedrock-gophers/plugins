@@ -49,22 +49,24 @@ mod tests {
 
     #[test]
     #[cfg(target_pointer_width = "64")]
-    fn host_v4_layout_is_stable() {
+    fn host_v5_layout_is_stable() {
         assert_eq!(size_of::<DfInventoryId>(), 32);
         assert_eq!(size_of::<DfItemStackInfo>(), 80);
         assert_eq!(size_of::<DfItemStackSnapshot>(), 88);
         assert_eq!(size_of::<DfItemStackSnapshot>(), 88);
         assert_eq!(size_of::<DfItemStackData>(), 152);
         assert_eq!(size_of::<DfItemStackViewV3>(), 120);
-        assert_eq!(size_of::<DfHostApiV4>(), 224);
-        assert_eq!(align_of::<DfHostApiV4>(), 8);
-        assert_eq!(offset_of!(DfHostApiV4, context), 8);
-        assert_eq!(offset_of!(DfHostApiV4, player_text), 16);
-        assert_eq!(offset_of!(DfHostApiV4, player_skin_open), 80);
-        assert_eq!(offset_of!(DfHostApiV4, player_skin_set), 112);
-        assert_eq!(offset_of!(DfHostApiV4, inventory_size), 120);
-        assert_eq!(offset_of!(DfHostApiV4, player_held_slot_set), 200);
-        assert_eq!(offset_of!(DfHostApiV4, player_scoreboard), 208);
-        assert_eq!(offset_of!(DfHostApiV4, player_scoreboard_remove), 216);
+        assert_eq!(size_of::<DfHostApiV5>(), 240);
+        assert_eq!(align_of::<DfHostApiV5>(), 8);
+        assert_eq!(offset_of!(DfHostApiV5, context), 8);
+        assert_eq!(offset_of!(DfHostApiV5, player_text), 16);
+        assert_eq!(offset_of!(DfHostApiV5, player_skin_open), 80);
+        assert_eq!(offset_of!(DfHostApiV5, player_skin_set), 112);
+        assert_eq!(offset_of!(DfHostApiV5, inventory_size), 120);
+        assert_eq!(offset_of!(DfHostApiV5, player_held_slot_set), 200);
+        assert_eq!(offset_of!(DfHostApiV5, player_scoreboard), 208);
+        assert_eq!(offset_of!(DfHostApiV5, player_scoreboard_remove), 216);
+        assert_eq!(offset_of!(DfHostApiV5, player_form_send), 224);
+        assert_eq!(offset_of!(DfHostApiV5, player_form_close), 232);
     }
 }

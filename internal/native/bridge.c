@@ -27,18 +27,24 @@ _Static_assert(sizeof(DfItemStackViewV3) == 120, "DfItemStackViewV3 ABI layout c
 _Static_assert(sizeof(DfItemStackSnapshot) == 88, "DfItemStackSnapshot ABI layout changed");
 _Static_assert(sizeof(DfScoreboardView) == 40, "DfScoreboardView ABI layout changed");
 _Static_assert(offsetof(DfScoreboardView, lines) == 16, "DfScoreboardView.lines ABI offset changed");
-_Static_assert(sizeof(DfHostApiV4) == 224, "DfHostApiV4 ABI layout changed");
-_Static_assert(offsetof(DfHostApiV4, player_skin_open) == 80, "DfHostApiV4.player_skin_open ABI offset changed");
-_Static_assert(offsetof(DfHostApiV4, player_skin_set) == 112, "DfHostApiV4.player_skin_set ABI offset changed");
-_Static_assert(offsetof(DfHostApiV4, inventory_size) == 120, "DfHostApiV4.inventory_size ABI offset changed");
-_Static_assert(offsetof(DfHostApiV4, player_held_slot_set) == 200, "DfHostApiV4.player_held_slot_set ABI offset changed");
-_Static_assert(offsetof(DfHostApiV4, player_scoreboard) == 208, "DfHostApiV4.player_scoreboard ABI offset changed");
+_Static_assert(sizeof(DfFormView) == 40, "DfFormView ABI layout changed");
+_Static_assert(sizeof(DfHostApiV5) == 240, "DfHostApiV5 ABI layout changed");
+_Static_assert(offsetof(DfHostApiV5, player_skin_open) == 80, "DfHostApiV5.player_skin_open ABI offset changed");
+_Static_assert(offsetof(DfHostApiV5, player_skin_set) == 112, "DfHostApiV5.player_skin_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV5, inventory_size) == 120, "DfHostApiV5.inventory_size ABI offset changed");
+_Static_assert(offsetof(DfHostApiV5, player_held_slot_set) == 200, "DfHostApiV5.player_held_slot_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV5, player_scoreboard) == 208, "DfHostApiV5.player_scoreboard ABI offset changed");
 #endif
 
 extern DfStatus bg_go_player_text(uint64_t context, DfPlayerId player, uint32_t kind, DfStringView message);
 extern DfStatus bg_go_player_title(uint64_t context, DfPlayerId player, DfTitleView title);
 extern DfStatus bg_go_player_scoreboard(uint64_t context, DfPlayerId player, DfScoreboardView scoreboard);
 extern DfStatus bg_go_player_scoreboard_remove(uint64_t context, DfPlayerId player);
+extern DfStatus bg_go_player_form_send(uint64_t context, DfPlayerId player, const DfFormView *form);
+extern DfStatus bg_go_player_form_close(uint64_t context, DfPlayerId player);
+
+DfStatus bg_call_form_response(DfFormResponseFn callback, void *callback_context, DfPlayerId submitter, uint32_t outcome, DfStringView response_json) { return callback(callback_context, submitter, outcome, response_json); }
+void bg_call_form_drop(DfFormDropFn callback, void *callback_context) { callback(callback_context); }
 extern DfStatus bg_go_player_transform(uint64_t context, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch);
 extern DfStatus bg_go_player_rotation(uint64_t context, DfPlayerId player, DfRotation *rotation);
 extern DfStatus bg_go_player_state_set(uint64_t context, DfPlayerId player, uint32_t kind, DfPlayerStateValue value);
@@ -77,6 +83,8 @@ static DfStatus host_player_scoreboard(uint64_t context, DfPlayerId player, DfSc
 static DfStatus host_player_scoreboard_remove(uint64_t context, DfPlayerId player) {
     return bg_go_player_scoreboard_remove(context, player);
 }
+static DfStatus host_player_form_send(uint64_t context, DfPlayerId player, const DfFormView *form) { return bg_go_player_form_send(context, player, form); }
+static DfStatus host_player_form_close(uint64_t context, DfPlayerId player) { return bg_go_player_form_close(context, player); }
 
 static DfStatus host_player_transform(uint64_t context, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch) {
     return bg_go_player_transform(context, player, kind, vector, yaw, pitch);
@@ -147,7 +155,7 @@ typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *)
 struct BgRuntimeLibrary {
     void *handle;
     DfRuntime *runtime;
-    DfHostApiV4 host_api;
+    DfHostApiV5 host_api;
     RuntimeDestroyFn destroy;
     RuntimeEnableFn enable;
     RuntimeDisableFn disable;
@@ -220,9 +228,9 @@ DfStatus bg_runtime_open(
         return DF_STATUS_ERROR;
     }
 
-    library->host_api = (DfHostApiV4) {
+    library->host_api = (DfHostApiV5) {
         .abi_version = DF_HOST_ABI_VERSION,
-        .struct_size = sizeof(DfHostApiV4),
+        .struct_size = sizeof(DfHostApiV5),
         .context = host_context,
         .player_text = host_player_text,
         .player_title = host_player_title,
@@ -250,6 +258,8 @@ DfStatus bg_runtime_open(
         .player_held_slot_set = host_player_held_slot_set,
         .player_scoreboard = host_player_scoreboard,
         .player_scoreboard_remove = host_player_scoreboard_remove,
+        .player_form_send = host_player_form_send,
+        .player_form_close = host_player_form_close,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

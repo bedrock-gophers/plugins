@@ -369,7 +369,7 @@ The same descriptor/proxy model covers:
 - Player and world persistence providers.
 - Resource packs.
 - Typed commands and command permissions.
-- Forms, sounds, particles, structures, and entity actions. Player scoreboards are supported through owned, bounded snapshots.
+- Sounds, particles, structures, and entity actions. Player forms and scoreboards are supported through owned, bounded host bridges.
 
 Each family belongs in schema. Language SDKs generate from it; only Go-to-Dragonfly proxy semantics remain handwritten.
 
@@ -455,6 +455,8 @@ Dragonfly v0.11 entity values are transaction-scoped. The host registry stores s
 
 Host callbacks execute synchronously while the plugin callback is active. Large values such as skins and item stacks use bounded Go-owned snapshots with RAII close on the Rust side. No Go pointer crosses or survives the ABI.
 
+Forms are the deliberate asynchronous exception. `Player::send_form` transfers an owned `FnOnce + Send + 'static` callback into a bounded host registry. Dragonfly retains only an opaque registration ID, and dispatches the submitted or closed response inside the response transaction. Player disconnect, runtime disable, and runtime destruction drain pending callbacks before plugin libraries unload. The public API is fire-and-forget: host transport failures discard the callback without exposing native status values.
+
 Separate event mutations from host actions.
 
 Event mutations return directly:
@@ -473,7 +475,7 @@ Current synchronous host actions include:
 
 Calls resolve through the already-active transaction; they must never call `world.CallRef` back into the same owner. Persistent background operations are not supported yet. Later support must enqueue operations into Go and resolve `EntityHandle` inside a new transaction. Transaction values must never escape a callback.
 
-The host ABI is currently v3. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
+The host ABI is currently v5. WIP releases intentionally make breaking ABI changes instead of retaining compatibility shims; runtime and plugins must be compiled from the same revision.
 
 ## Items and inventories
 

@@ -2,7 +2,7 @@
 
 Native multi-language plugin runtime for [df-mc/dragonfly](https://github.com/df-mc/dragonfly). Rust is the first supported plugin language.
 
-Current status: native runtime foundation plus player actions, typed items, and player inventory handles. Generated events, lifecycle hooks, Dragonfly commands, item snapshots, and synchronous host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
+Current status: native runtime foundation plus player actions, typed items, inventories, scoreboards, and asynchronous forms. Generated events, lifecycle hooks, Dragonfly commands, bounded snapshots, and host actions travel through Go, the native Rust runtime, and dynamically loaded Rust plugins.
 
 ## Build and test
 
@@ -90,6 +90,24 @@ fn show_scoreboard(player: Player) -> Result<(), ScoreboardLineOutOfBounds> {
 
 `send_scoreboard()` and `remove_scoreboard()` are fire-and-forget; native host transport failures remain internal.
 
+Forms cover Dragonfly's menu, modal, and custom families, including every v0.11 element. Responses use owned one-shot callbacks because Dragonfly answers asynchronously:
+
+```rust
+use dragonfly::{Player, form};
+
+fn choose(player: Player) {
+    let mut menu = form::Menu::new("Choose").body("Pick an option.");
+    let first = menu.button(form::Button::new("First"));
+    player.send_form(menu, move |player, response| {
+        if response.is_some_and(|response| response.selected() == first) {
+            player.message("First selected");
+        }
+    });
+}
+```
+
+`send_form()` and `close_form()` are fire-and-forget. Submit and close callbacks run inside Dragonfly's response transaction; disconnect, disable, and shutdown safely discard pending callbacks before plugin libraries unload.
+
 Built-in item identities are typed and mirror Dragonfly's item model: `item::new(item, count)` creates the stack, and metadata belongs to the item type. `item::Custom` is the explicit escape hatch for plugin-registered identifiers.
 
 Commands use compile-time macros in place of Go runtime reflection. `#[command("root")]` declares the command, and each `#[subcommand("name")]` method becomes a Dragonfly runnable with generated native metadata and parsing. See the hello-command example for general command arguments and the items-command example for inventory operations.
@@ -104,5 +122,6 @@ See [native plugin architecture](docs/plans/rust-plugin-architecture.md).
 - [Hello command](examples/plugins/hello-command): demonstrates Dragonfly subcommands and enum parameters.
 - [Items command](examples/plugins/items-command): demonstrates typed items and inventory reads/writes.
 - [Scoreboard](examples/plugins/scoreboard): sends and removes a sidebar scoreboard.
+- [Forms](examples/plugins/forms): demonstrates menu, modal, and typed custom-form responses.
 
 The examples compile as native plugin libraries through `make stage-examples`. Precompiled `.so`, `.dylib`, or `.dll` plugins may also be placed directly in `examples/plugins`.

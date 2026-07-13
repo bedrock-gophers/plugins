@@ -336,6 +336,7 @@ func (r *Runtime) Close() {
 	if r == nil || r.ptr == nil {
 		return
 	}
+	drainHostForms(r.hostContext, true)
 	C.bg_runtime_close(r.ptr)
 	unregisterHost(r.hostContext)
 	r.ptr = nil
@@ -355,6 +356,7 @@ func (r *Runtime) Enable() error {
 
 func (r *Runtime) Disable() {
 	if r != nil && r.ptr != nil {
+		drainHostForms(r.hostContext, false)
 		C.bg_runtime_disable(r.ptr)
 	}
 }
