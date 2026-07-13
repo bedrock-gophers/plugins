@@ -3,13 +3,6 @@
 version = 4
 
 [[package]]
-name = "chat-filter"
-version = "0.1.0"
-dependencies = [
- "dragonfly-plugin",
-]
-
-[[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
 source = "git+https://github.com/bedrock-gophers/plugins?rev=9783e6f704889bd14643c884b62cca6ec7c3d6f0#9783e6f704889bd14643c884b62cca6ec7c3d6f0"
@@ -49,6 +42,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfbc457d0c7a0759a614551b11a6409e5951f6c7537be1f1b7682b9ae9230368"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "scoreboard"
+version = "0.1.0"
+dependencies = [
+ "dragonfly-plugin",
 ]
 
 [[package]]

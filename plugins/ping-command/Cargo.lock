@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "dragonfly-plugin"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=03a9129b9cd11e27831a4b11986a7aeda2dae83e#03a9129b9cd11e27831a4b11986a7aeda2dae83e"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=9783e6f704889bd14643c884b62cca6ec7c3d6f0#9783e6f704889bd14643c884b62cca6ec7c3d6f0"
 dependencies = [
  "dragonfly-plugin-macros",
  "dragonfly-plugin-sys",
@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-macros"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=03a9129b9cd11e27831a4b11986a7aeda2dae83e#03a9129b9cd11e27831a4b11986a7aeda2dae83e"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=9783e6f704889bd14643c884b62cca6ec7c3d6f0#9783e6f704889bd14643c884b62cca6ec7c3d6f0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "dragonfly-plugin-sys"
 version = "0.1.0"
-source = "git+https://github.com/bedrock-gophers/plugins?rev=03a9129b9cd11e27831a4b11986a7aeda2dae83e#03a9129b9cd11e27831a4b11986a7aeda2dae83e"
+source = "git+https://github.com/bedrock-gophers/plugins?rev=9783e6f704889bd14643c884b62cca6ec7c3d6f0#9783e6f704889bd14643c884b62cca6ec7c3d6f0"
 
 [[package]]
 name = "ping-command"
