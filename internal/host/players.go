@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/block"
@@ -543,40 +544,61 @@ func (p *Players) ChangePlayerEffect(invocation native.InvocationID, id native.P
 	if operation == native.PlayerEffectRemove {
 		return p.mutatePlayer(invocation, id, func(connected *player.Player) { connected.RemoveEffect(effectType) })
 	}
-	if operation != native.PlayerEffectAdd || value.Level <= 0 || value.Duration < 0 ||
-		math.IsNaN(value.Potency) || math.IsInf(value.Potency, 0) || value.Potency < 0 {
+	if operation != native.PlayerEffectAdd || value.Level <= 0 || value.Duration < 0 {
 		return false
 	}
-	var applied effect.Effect
-	lasting, isLasting := effectType.(effect.LastingType)
-	switch value.Mode {
-	case native.PlayerEffectTimed:
-		if !isLasting || value.Potency != 1 {
-			return false
-		}
-		applied = effect.New(lasting, int(value.Level), value.Duration)
-	case native.PlayerEffectAmbient:
-		if !isLasting || value.Potency != 1 {
-			return false
-		}
-		applied = effect.NewAmbient(lasting, int(value.Level), value.Duration)
-	case native.PlayerEffectInfinite:
-		if !isLasting || value.Duration != 0 || value.Potency != 1 {
-			return false
-		}
-		applied = effect.NewInfinite(lasting, int(value.Level))
-	case native.PlayerEffectInstant:
-		if isLasting || value.Duration != 0 {
-			return false
-		}
-		applied = effect.NewInstantWithPotency(effectType, int(value.Level), value.Potency)
-	default:
+	applied, ok := playerEffectFromNative(effectType, value)
+	if !ok {
 		return false
-	}
-	if value.ParticlesHidden {
-		applied = applied.WithoutParticles()
 	}
 	return p.mutatePlayer(invocation, id, func(connected *player.Player) { connected.AddEffect(applied) })
+}
+
+const maximumPlayerEffectTick = 1_000_000
+
+func playerEffectFromNative(effectType effect.Type, value native.PlayerEffect) (effect.Effect, bool) {
+	if value.Tick < 0 || value.Tick > maximumPlayerEffectTick || value.Ambient && value.Infinite {
+		return effect.Effect{}, false
+	}
+	lasting, isLasting := effectType.(effect.LastingType)
+	if !isLasting {
+		if value.Duration != 0 || value.Ambient || value.Infinite || value.Tick != 0 {
+			return effect.Effect{}, false
+		}
+		reconstructed := effect.NewInstantWithPotency(effectType, int(value.Level), value.Potency)
+		if value.ParticlesHidden {
+			reconstructed = reconstructed.WithoutParticles()
+		}
+		return reconstructed, true
+	}
+	duration := value.Duration
+	if value.Infinite {
+		if duration != 0 {
+			return effect.Effect{}, false
+		}
+	} else {
+		tickDuration := time.Duration(value.Tick) * (time.Second / 20)
+		if duration > time.Duration(math.MaxInt64)-tickDuration {
+			return effect.Effect{}, false
+		}
+		duration += tickDuration
+	}
+	var reconstructed effect.Effect
+	switch {
+	case value.Infinite:
+		reconstructed = effect.NewInfinite(lasting, int(value.Level))
+	case value.Ambient:
+		reconstructed = effect.NewAmbient(lasting, int(value.Level), duration)
+	default:
+		reconstructed = effect.New(lasting, int(value.Level), duration)
+	}
+	for range value.Tick {
+		reconstructed = reconstructed.TickDuration()
+	}
+	if value.ParticlesHidden {
+		reconstructed = reconstructed.WithoutParticles()
+	}
+	return reconstructed, true
 }
 
 func (p *Players) PlayerEffects(invocation native.InvocationID, id native.PlayerID) ([]native.PlayerEffect, bool) {
@@ -588,9 +610,6 @@ func (p *Players) PlayerEffects(invocation native.InvocationID, id native.Player
 		active := connected.Effects()
 		values := make([]native.PlayerEffect, 0, len(active))
 		for _, current := range active {
-			if _, lasting := current.Type().(effect.LastingType); !lasting {
-				continue
-			}
 			value, valid := snapshotPlayerEffect(current)
 			if !valid {
 				return result{}
@@ -603,28 +622,34 @@ func (p *Players) PlayerEffects(invocation native.InvocationID, id native.Player
 }
 
 func snapshotPlayerEffect(current effect.Effect) (native.PlayerEffect, bool) {
-	lasting, ok := current.Type().(effect.LastingType)
+	effectType := current.Type()
 	level := current.Level()
-	if !ok || level <= 0 || int64(level) > math.MaxInt32 {
+	if effectType == nil || level <= 0 || int64(level) > math.MaxInt32 {
 		return native.PlayerEffect{}, false
 	}
-	id, ok := effect.ID(lasting)
+	id, ok := effect.ID(effectType)
 	if !ok || int64(id) < math.MinInt32 || int64(id) > math.MaxInt32 {
 		return native.PlayerEffect{}, false
 	}
-	mode := native.PlayerEffectTimed
-	duration := max(current.Duration(), 0)
+	tick := current.Tick()
+	if tick < 0 {
+		return native.PlayerEffect{}, false
+	}
 	if current.Infinite() {
 		if current.Duration() != 0 {
 			return native.PlayerEffect{}, false
 		}
-		mode = native.PlayerEffectInfinite
-	} else if current.Ambient() {
-		mode = native.PlayerEffectAmbient
+	}
+	if current.Ambient() && current.Infinite() {
+		return native.PlayerEffect{}, false
+	}
+	potency := float64(1)
+	if _, lasting := effectType.(effect.LastingType); lasting {
+		potency = 0
 	}
 	return native.PlayerEffect{
-		Type: native.EffectType(id), Level: int32(level), Duration: duration,
-		Potency: 1, Mode: mode, ParticlesHidden: current.ParticlesHidden(),
+		Type: native.EffectType(id), Level: int32(level), Duration: current.Duration(), Potency: potency,
+		Ambient: current.Ambient(), ParticlesHidden: current.ParticlesHidden(), Infinite: current.Infinite(), Tick: int64(tick),
 	}, true
 }
 

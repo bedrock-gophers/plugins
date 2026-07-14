@@ -311,6 +311,24 @@ namespace Dragonfly
                 12 => 12,
                 _ => throw new InvalidOperationException("Invalid StewType value."),
             };
+
+            public IReadOnlyList<Effect.Value> Effects() => _value switch
+            {
+                0 => new Effect.Value[] { Effect.New(Effect.NightVision, 1, TimeSpan.FromTicks(50000000)) },
+                1 => new Effect.Value[] { Effect.New(Effect.JumpBoost, 1, TimeSpan.FromTicks(50000000)) },
+                2 => new Effect.Value[] { Effect.New(Effect.Weakness, 1, TimeSpan.FromTicks(70000000)) },
+                3 => new Effect.Value[] { Effect.New(Effect.Blindness, 1, TimeSpan.FromTicks(60000000)) },
+                4 => new Effect.Value[] { Effect.New(Effect.Poison, 1, TimeSpan.FromTicks(110000000)) },
+                5 => new Effect.Value[] { Effect.New(Effect.Saturation, 1, TimeSpan.FromTicks(3000000)) },
+                6 => new Effect.Value[] { Effect.New(Effect.Saturation, 1, TimeSpan.FromTicks(3000000)) },
+                7 => new Effect.Value[] { Effect.New(Effect.FireResistance, 1, TimeSpan.FromTicks(30000000)) },
+                8 => new Effect.Value[] { Effect.New(Effect.Regeneration, 1, TimeSpan.FromTicks(70000000)) },
+                9 => new Effect.Value[] { Effect.New(Effect.Wither, 1, TimeSpan.FromTicks(70000000)) },
+                10 => new Effect.Value[] { Effect.New(Effect.NightVision, 1, TimeSpan.FromTicks(50000000)) },
+                11 => new Effect.Value[] { Effect.New(Effect.Blindness, 1, TimeSpan.FromTicks(60000000)) },
+                12 => new Effect.Value[] { Effect.New(Effect.Nausea, 1, TimeSpan.FromTicks(70000000)) },
+                _ => throw new InvalidOperationException("Invalid StewType value."),
+            };
         }
 
         public static StewType NightVisionPoppyStew() => new(0);
@@ -326,6 +344,23 @@ namespace Dragonfly
         public static StewType NightVisionTorchflowerStew() => new(10);
         public static StewType BlindnessEyeblossomStew() => new(11);
         public static StewType NauseaStew() => new(12);
+
+        public static IReadOnlyList<StewType> StewTypes() => new StewType[]
+        {
+            NightVisionPoppyStew(),
+            JumpBoostStew(),
+            WeaknessStew(),
+            BlindnessBluetStew(),
+            PoisonStew(),
+            SaturationDandelionStew(),
+            SaturationOrchidStew(),
+            FireResistanceStew(),
+            RegenerationStew(),
+            WitherStew(),
+            NightVisionTorchflowerStew(),
+            BlindnessEyeblossomStew(),
+            NauseaStew(),
+        };
 
         public readonly record struct SherdType
         {
@@ -1185,7 +1220,55 @@ namespace Dragonfly
                 40 => 40,
                 41 => 41,
                 42 => 42,
-                _ => throw new InvalidOperationException("Invalid Value value."),
+                _ => unchecked((byte)_value),
+            };
+
+            public IReadOnlyList<Effect.Value> Effects() => _value switch
+            {
+                0 => Array.Empty<Effect.Value>(),
+                1 => Array.Empty<Effect.Value>(),
+                2 => Array.Empty<Effect.Value>(),
+                3 => Array.Empty<Effect.Value>(),
+                4 => Array.Empty<Effect.Value>(),
+                5 => new Effect.Value[] { Effect.New(Effect.NightVision, 1, TimeSpan.FromTicks(1800000000)) },
+                6 => new Effect.Value[] { Effect.New(Effect.NightVision, 1, TimeSpan.FromTicks(4800000000)) },
+                7 => new Effect.Value[] { Effect.New(Effect.Invisibility, 1, TimeSpan.FromTicks(1800000000)) },
+                8 => new Effect.Value[] { Effect.New(Effect.Invisibility, 1, TimeSpan.FromTicks(4800000000)) },
+                9 => new Effect.Value[] { Effect.New(Effect.JumpBoost, 1, TimeSpan.FromTicks(1800000000)) },
+                10 => new Effect.Value[] { Effect.New(Effect.JumpBoost, 1, TimeSpan.FromTicks(4800000000)) },
+                11 => new Effect.Value[] { Effect.New(Effect.JumpBoost, 2, TimeSpan.FromTicks(900000000)) },
+                12 => new Effect.Value[] { Effect.New(Effect.FireResistance, 1, TimeSpan.FromTicks(1800000000)) },
+                13 => new Effect.Value[] { Effect.New(Effect.FireResistance, 1, TimeSpan.FromTicks(4800000000)) },
+                14 => new Effect.Value[] { Effect.New(Effect.Speed, 1, TimeSpan.FromTicks(1800000000)) },
+                15 => new Effect.Value[] { Effect.New(Effect.Speed, 1, TimeSpan.FromTicks(4800000000)) },
+                16 => new Effect.Value[] { Effect.New(Effect.Speed, 2, TimeSpan.FromTicks(900000000)) },
+                17 => new Effect.Value[] { Effect.New(Effect.Slowness, 1, TimeSpan.FromTicks(900000000)) },
+                18 => new Effect.Value[] { Effect.New(Effect.Slowness, 1, TimeSpan.FromTicks(2400000000)) },
+                19 => new Effect.Value[] { Effect.New(Effect.WaterBreathing, 1, TimeSpan.FromTicks(1800000000)) },
+                20 => new Effect.Value[] { Effect.New(Effect.WaterBreathing, 1, TimeSpan.FromTicks(4800000000)) },
+                21 => new Effect.Value[] { Effect.NewInstant(Effect.InstantHealth, 1) },
+                22 => new Effect.Value[] { Effect.NewInstant(Effect.InstantHealth, 2) },
+                23 => new Effect.Value[] { Effect.NewInstant(Effect.InstantDamage, 1) },
+                24 => new Effect.Value[] { Effect.NewInstant(Effect.InstantDamage, 2) },
+                25 => new Effect.Value[] { Effect.New(Effect.Poison, 1, TimeSpan.FromTicks(450000000)) },
+                26 => new Effect.Value[] { Effect.New(Effect.Poison, 1, TimeSpan.FromTicks(1200000000)) },
+                27 => new Effect.Value[] { Effect.New(Effect.Poison, 2, TimeSpan.FromTicks(225000000)) },
+                28 => new Effect.Value[] { Effect.New(Effect.Regeneration, 1, TimeSpan.FromTicks(450000000)) },
+                29 => new Effect.Value[] { Effect.New(Effect.Regeneration, 1, TimeSpan.FromTicks(1200000000)) },
+                30 => new Effect.Value[] { Effect.New(Effect.Regeneration, 2, TimeSpan.FromTicks(225000000)) },
+                31 => new Effect.Value[] { Effect.New(Effect.Strength, 1, TimeSpan.FromTicks(1800000000)) },
+                32 => new Effect.Value[] { Effect.New(Effect.Strength, 1, TimeSpan.FromTicks(4800000000)) },
+                33 => new Effect.Value[] { Effect.New(Effect.Strength, 2, TimeSpan.FromTicks(900000000)) },
+                34 => new Effect.Value[] { Effect.New(Effect.Weakness, 1, TimeSpan.FromTicks(900000000)) },
+                35 => new Effect.Value[] { Effect.New(Effect.Weakness, 1, TimeSpan.FromTicks(2400000000)) },
+                36 => new Effect.Value[] { Effect.New(Effect.Wither, 1, TimeSpan.FromTicks(400000000)) },
+                37 => new Effect.Value[] { Effect.New(Effect.Resistance, 3, TimeSpan.FromTicks(200000000)), Effect.New(Effect.Slowness, 4, TimeSpan.FromTicks(200000000)) },
+                38 => new Effect.Value[] { Effect.New(Effect.Resistance, 3, TimeSpan.FromTicks(400000000)), Effect.New(Effect.Slowness, 4, TimeSpan.FromTicks(400000000)) },
+                39 => new Effect.Value[] { Effect.New(Effect.Resistance, 5, TimeSpan.FromTicks(200000000)), Effect.New(Effect.Slowness, 6, TimeSpan.FromTicks(200000000)) },
+                40 => new Effect.Value[] { Effect.New(Effect.SlowFalling, 1, TimeSpan.FromTicks(900000000)) },
+                41 => new Effect.Value[] { Effect.New(Effect.SlowFalling, 1, TimeSpan.FromTicks(2400000000)) },
+                42 => new Effect.Value[] { Effect.New(Effect.Slowness, 4, TimeSpan.FromTicks(200000000)) },
+                _ => Array.Empty<Effect.Value>(),
             };
         }
 
@@ -1232,6 +1315,55 @@ namespace Dragonfly
         public static Value SlowFalling() => new(40);
         public static Value LongSlowFalling() => new(41);
         public static Value StrongSlowness() => new(42);
+
+        public static Value From(int id) => new(unchecked((byte)id));
+
+        public static IReadOnlyList<Value> All() => new Value[]
+        {
+            Water(),
+            Mundane(),
+            LongMundane(),
+            Thick(),
+            Awkward(),
+            NightVision(),
+            LongNightVision(),
+            Invisibility(),
+            LongInvisibility(),
+            Leaping(),
+            LongLeaping(),
+            StrongLeaping(),
+            FireResistance(),
+            LongFireResistance(),
+            Swiftness(),
+            LongSwiftness(),
+            StrongSwiftness(),
+            Slowness(),
+            LongSlowness(),
+            WaterBreathing(),
+            LongWaterBreathing(),
+            Healing(),
+            StrongHealing(),
+            Harming(),
+            StrongHarming(),
+            Poison(),
+            LongPoison(),
+            StrongPoison(),
+            Regeneration(),
+            LongRegeneration(),
+            StrongRegeneration(),
+            Strength(),
+            LongStrength(),
+            StrongStrength(),
+            Weakness(),
+            LongWeakness(),
+            Wither(),
+            TurtleMaster(),
+            LongTurtleMaster(),
+            StrongTurtleMaster(),
+            SlowFalling(),
+            LongSlowFalling(),
+            StrongSlowness(),
+        };
 
     }
 

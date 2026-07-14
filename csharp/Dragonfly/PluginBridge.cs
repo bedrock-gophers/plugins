@@ -51,6 +51,123 @@ internal static unsafe class PluginBridge
         internal static World.GameMode PlayerGameMode(ulong invocation, PlayerId player) =>
             World.GameModeFromDescriptor(GetPlayerState(invocation, player, 0).Integer);
 
+        internal static void AddPlayerEffect(ulong invocation, PlayerId player, Effect.Value effect)
+        {
+            var type = effect.Type();
+            if (type is null || !Effect.TryID(type, out var typeID))
+                throw new ArgumentException("effect type is not registered", nameof(effect));
+            if (effect.Level() <= 0)
+                throw new ArgumentOutOfRangeException(nameof(effect), "effect level must be positive");
+            if (effect.Duration() < TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(effect), "effect duration must not be negative");
+
+            var api = Api;
+            if (api is null || api->PlayerEffect == null)
+                throw new InvalidOperationException("player is unavailable");
+            var view = EncodeEffect(effect, typeID);
+            if (api->PlayerEffect(api->Context, invocation, player, 0, view) != Abi.Ok)
+                throw new InvalidOperationException("player is no longer available");
+        }
+
+        internal static void RemovePlayerEffect(ulong invocation, PlayerId player, Effect.Type type)
+        {
+            ArgumentNullException.ThrowIfNull(type);
+            if (!Effect.TryID(type, out var typeID))
+                throw new ArgumentException("effect type is not registered", nameof(type));
+            var api = Api;
+            if (api is null || api->PlayerEffect == null)
+                throw new InvalidOperationException("player is unavailable");
+            var view = new EffectView { Type = typeID };
+            if (api->PlayerEffect(api->Context, invocation, player, 1, view) != Abi.Ok)
+                throw new InvalidOperationException("player is no longer available");
+        }
+
+        internal static (Effect.Value Effect, bool Ok) PlayerEffect(ulong invocation, PlayerId player, Effect.Type type)
+        {
+            ArgumentNullException.ThrowIfNull(type);
+            if (!Effect.TryID(type, out var typeID))
+                return (default, false);
+            foreach (var view in PlayerEffectViews(invocation, player))
+            {
+                if (view.Type == typeID)
+                    return (DecodeEffect(view), true);
+            }
+            return (default, false);
+        }
+
+        internal static IReadOnlyList<Effect.Value> PlayerEffects(ulong invocation, PlayerId player)
+        {
+            var views = PlayerEffectViews(invocation, player);
+            var effects = new Effect.Value[views.Length];
+            for (var index = 0; index < effects.Length; index++)
+                effects[index] = DecodeEffect(views[index]);
+            return effects;
+        }
+
+        private static EffectView[] PlayerEffectViews(ulong invocation, PlayerId player)
+        {
+            var api = Api;
+            if (api is null || api->PlayerEffects == null)
+                throw new InvalidOperationException("player is unavailable");
+
+            EffectBuffer buffer = default;
+            var status = api->PlayerEffects(api->Context, invocation, player, &buffer);
+            if (buffer.Length == 0)
+            {
+                if (status != Abi.Ok)
+                    throw new InvalidOperationException("player is no longer available");
+                return Array.Empty<EffectView>();
+            }
+            if (buffer.Length > int.MaxValue)
+                throw new InvalidOperationException("invalid effects returned by server");
+
+            var views = new EffectView[checked((int)buffer.Length)];
+            fixed (EffectView* data = views)
+            {
+                buffer = new EffectBuffer { Data = data, Capacity = (ulong)views.Length };
+                if (api->PlayerEffects(api->Context, invocation, player, &buffer) != Abi.Ok ||
+                    buffer.Length > (ulong)views.Length)
+                    throw new InvalidOperationException("player is no longer available");
+            }
+
+            if (buffer.Length != (ulong)views.Length)
+                Array.Resize(ref views, checked((int)buffer.Length));
+            return views;
+        }
+
+        private static EffectView EncodeEffect(Effect.Value effect, int typeID)
+        {
+            return new EffectView
+            {
+                Type = typeID,
+                Level = effect.Level(),
+                DurationNanoseconds = checked(effect.Duration().Ticks * 100),
+                Potency = effect.Potency,
+                Ambient = effect.Ambient() ? (byte)1 : (byte)0,
+                ParticlesHidden = effect.ParticlesHidden() ? (byte)1 : (byte)0,
+                Infinite = effect.Infinite() ? (byte)1 : (byte)0,
+                Tick = effect.Tick(),
+            };
+        }
+
+        private static Effect.Value DecodeEffect(EffectView view)
+        {
+            var type = Effect.TypeByID(view.Type);
+            if (type is null || view.Level <= 0 || view.Tick < 0 || view.Tick > int.MaxValue ||
+                view.DurationNanoseconds % 100 != 0 ||
+                view.Ambient > 1 || view.ParticlesHidden > 1 || view.Infinite > 1)
+                throw new InvalidOperationException("invalid effect returned by server");
+            return new Effect.Value(
+                type,
+                TimeSpan.FromTicks(view.DurationNanoseconds / 100),
+                view.Level,
+                view.Potency,
+                view.Ambient != 0,
+                view.ParticlesHidden != 0,
+                view.Infinite != 0,
+                (int)view.Tick);
+        }
+
         internal static int InventorySize(ulong invocation, InventoryId inventory)
         {
             var api = Api;

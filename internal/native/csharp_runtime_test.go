@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/sandertv/gophertunnel/minecraft/nbt"
 )
@@ -86,6 +87,46 @@ func TestCSharpVanillaGameModeCommand(t *testing.T) {
 		PlayerStateGameMode, PlayerStateGameMode, PlayerStateGameMode, PlayerStateGameMode,
 	}) || len(host.values) != 4 {
 		t.Fatalf("game mode host calls: states=%v values=%#v", host.states, host.values)
+	}
+}
+
+func TestCSharpTypedEffects(t *testing.T) {
+	host := &recordingHost{}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	var overload uint64
+	found := false
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "effect" {
+			overload, found = uint64(index), true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("effect overload missing: %#v", kitchen.Overloads)
+	}
+
+	player := PlayerID{UUID: [16]byte{4}, Generation: 3}
+	output, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Overload: overload, Arguments: []string{"effect"},
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Danick"}},
+	})
+	if err != nil || output.Failed || output.Message != "effects=28, potions=43, stews=13, active=true" {
+		t.Fatalf("effect output=%#v error=%v", output, err)
+	}
+	if !slices.Equal(host.effectOps, []PlayerEffectOperation{PlayerEffectAdd, PlayerEffectRemove}) ||
+		len(host.effects) != 2 || len(host.activeEffects) != 0 {
+		t.Fatalf("effect calls: operations=%v effects=%#v active=%#v", host.effectOps, host.effects, host.activeEffects)
+	}
+	added := host.effects[0]
+	if added.Type != EffectRegeneration || added.Level != 1 || added.Duration != 2*time.Second ||
+		added.Potency != 0 || !added.Ambient || !added.ParticlesHidden || added.Infinite || added.Tick != 0 {
+		t.Fatalf("added effect=%+v", added)
 	}
 }
 
@@ -424,7 +465,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 15 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 16 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||

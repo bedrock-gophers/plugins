@@ -340,7 +340,7 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		}
 		if !players.ChangePlayerEffect(invocation, id, native.PlayerEffectAdd, native.PlayerEffect{
 			Type: native.EffectSpeed, Level: 2, Duration: 30 * time.Second,
-			Potency: 1, Mode: native.PlayerEffectTimed,
+			Potency: 1,
 		}) {
 			t.Fatal("add effect failed")
 		}
@@ -357,7 +357,7 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		player.SetGameMode(world.GameModeSurvival)
 		before := player.Health()
 		if !players.ChangePlayerEffect(invocation, id, native.PlayerEffectAdd, native.PlayerEffect{
-			Type: native.EffectInstantHealth, Level: 1, Potency: 0.5, Mode: native.PlayerEffectInstant,
+			Type: native.EffectInstantHealth, Level: 1, Potency: 0.5,
 		}) {
 			t.Fatal("instant effect failed")
 		}
@@ -368,7 +368,7 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		const customID = 32_000
 		effect.Register(customID, testLastingEffect{})
 		if !players.ChangePlayerEffect(invocation, id, native.PlayerEffectAdd, native.PlayerEffect{
-			Type: customID, Level: 1, Duration: time.Second, Potency: 1, Mode: native.PlayerEffectTimed,
+			Type: customID, Level: 1, Duration: time.Second, Potency: 1,
 		}) {
 			t.Fatal("registered effect failed")
 		}
@@ -377,7 +377,7 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		}
 		if !players.ChangePlayerEffect(invocation, id, native.PlayerEffectAdd, native.PlayerEffect{
 			Type: native.EffectRegeneration, Level: 1, Duration: time.Second,
-			Potency: 1, Mode: native.PlayerEffectAmbient, ParticlesHidden: true,
+			Potency: 1, Ambient: true, ParticlesHidden: true,
 		}) {
 			t.Fatal("ambient effect failed")
 		}
@@ -385,20 +385,20 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 			t.Fatalf("ambient effect = %+v ok=%v", applied, ok)
 		}
 		if !players.ChangePlayerEffect(invocation, id, native.PlayerEffectAdd, native.PlayerEffect{
-			Type: native.EffectFireResistance, Level: 1, Potency: 1, Mode: native.PlayerEffectInfinite,
+			Type: native.EffectFireResistance, Level: 1, Potency: 1, Infinite: true,
 		}) {
 			t.Fatal("infinite effect failed")
 		}
 		if applied, ok := player.Effect(effect.FireResistance); !ok || !applied.Infinite() {
 			t.Fatalf("infinite effect = %+v ok=%v", applied, ok)
 		}
-		if players.ChangePlayerEffect(invocation, id, native.PlayerEffectAdd, native.PlayerEffect{
-			Type: customID, Level: 1, Potency: 0.5, Mode: native.PlayerEffectInstant,
+		if !players.ChangePlayerEffect(invocation, id, native.PlayerEffectAdd, native.PlayerEffect{
+			Type: customID, Level: 1, Potency: 0.5,
 		}) {
-			t.Fatal("registered lasting effect accepted as instant")
+			t.Fatal("registered lasting effect rejected with instant potency")
 		}
 		if players.ChangePlayerEffect(invocation, id, native.PlayerEffectAdd, native.PlayerEffect{
-			Type: native.EffectSpeed, Level: 0, Potency: 1, Mode: native.PlayerEffectTimed,
+			Type: native.EffectSpeed, Level: 0, Potency: 1,
 		}) {
 			t.Fatal("zero-level effect accepted")
 		}

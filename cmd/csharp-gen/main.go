@@ -258,6 +258,8 @@ type itemValueTypeSpec struct {
 	CSharpType string
 	Container  string
 	Name       string
+	Collection string
+	From       bool
 	Factories  []string
 	Values     []any
 	Methods    []itemValueMethodSpec
@@ -267,6 +269,7 @@ type itemValueMethodSpec struct {
 	Name       string
 	ReturnType string
 	Results    []string
+	Default    string
 }
 
 type formFieldSpec struct {
@@ -457,6 +460,14 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	effects, err := inspectEffects(filepath.Join(directory, "server", "entity", "effect"))
+	if err != nil {
+		fatal(err)
+	}
+	playerEffectMethods, err := inspectPlayerEffectMethods(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		fatal(err)
+	}
 	forms, err := inspectForms(filepath.Join(directory, "server", "player", "form"))
 	if err != nil {
 		fatal(err)
@@ -485,7 +496,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	items, err := inspectItems(filepath.Join(directory, "server", "item"))
+	items, err := inspectItems(filepath.Join(directory, "server", "item"), effects)
 	if err != nil {
 		fatal(err)
 	}
@@ -525,6 +536,14 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Item.g.cs"),
 			Content: generatePlayerItemMethods(playerItemMethods),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Effect.Types.g.cs"),
+			Content: generateEffects(effects),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Effect.g.cs"),
+			Content: generatePlayerEffects(playerEffectMethods),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Form.Types.g.cs"),
@@ -1606,7 +1625,7 @@ func biomeEmptyStruct(spec *ast.TypeSpec) (*ast.StructType, bool) {
 	return structure, ok
 }
 
-func inspectItems(directory string) (itemSpec, error) {
+func inspectItems(directory string, effects effectSpec) (itemSpec, error) {
 	packages, err := parser.ParseDir(token.NewFileSet(), directory, func(info os.FileInfo) bool {
 		return !strings.HasSuffix(info.Name(), "_test.go")
 	}, 0)
@@ -1664,7 +1683,7 @@ func inspectItems(directory string) (itemSpec, error) {
 	if len(tierNames) != len(liveTiers) {
 		return itemSpec{}, fmt.Errorf("Dragonfly item.ToolTiers AST/live lengths differ: %d/%d", len(tierNames), len(liveTiers))
 	}
-	valueTypes, err := inspectItemValueTypes(directory, functions)
+	valueTypes, err := inspectItemValueTypes(directory, functions, effects)
 	if err != nil {
 		return itemSpec{}, err
 	}
@@ -2655,7 +2674,7 @@ func validateBookItemType(spec *ast.TypeSpec, name string, methods map[string]*a
 	return nil
 }
 
-func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncDecl) ([]itemValueTypeSpec, error) {
+func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncDecl, effects effectSpec) ([]itemValueTypeSpec, error) {
 	potionFunctions, err := packageFunctions(filepath.Join(directory, "potion"), "potion")
 	if err != nil {
 		return nil, err
@@ -2706,8 +2725,16 @@ func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncD
 		if len(factories) != len(specs[index].Values) {
 			return nil, fmt.Errorf("Dragonfly %s AST/live lengths differ: %d/%d", collection.name, len(factories), len(specs[index].Values))
 		}
+		specs[index].Collection = collection.name
+		if specs[index].GoType == "potion.Potion" {
+			from := potionFunctions["From"]
+			if from == nil || goFunctionSignature(from) != (goSignature{Parameters: "int32", Results: "Potion"}) {
+				return nil, fmt.Errorf("Dragonfly potion.From signature changed")
+			}
+			specs[index].From = true
+		}
 		specs[index].Factories = factories
-		methods, err := inspectItemValueMethods(specs[index])
+		methods, err := inspectItemValueMethods(specs[index], effects)
 		if err != nil {
 			return nil, err
 		}
@@ -2750,7 +2777,7 @@ func indexedFactoryNames(functions map[string]*ast.FuncDecl, resultType string, 
 	return names, nil
 }
 
-func inspectItemValueMethods(spec itemValueTypeSpec) ([]itemValueMethodSpec, error) {
+func inspectItemValueMethods(spec itemValueTypeSpec, effects effectSpec) ([]itemValueMethodSpec, error) {
 	methods := map[string][]struct {
 		Name       string
 		ReturnType string
@@ -2772,14 +2799,20 @@ func inspectItemValueMethods(spec itemValueTypeSpec) ([]itemValueMethodSpec, err
 			{Name: "Uint8", ReturnType: "byte"},
 			{Name: "String", ReturnType: "string"},
 		},
-		"StewType":  {{Name: "Uint8", ReturnType: "byte"}},
+		"StewType": {
+			{Name: "Uint8", ReturnType: "byte"},
+			{Name: "Effects", ReturnType: "IReadOnlyList<Effect.Value>"},
+		},
 		"SherdType": {{Name: "String", ReturnType: "string"}, {Name: "Uint8", ReturnType: "byte"}},
 		"WrittenBookGeneration": {
 			{Name: "Uint8", ReturnType: "byte"},
 			{Name: "String", ReturnType: "string"},
 		},
-		"potion.Potion": {{Name: "Uint8", ReturnType: "byte"}},
-		"sound.Horn":    {{Name: "Uint8", ReturnType: "byte"}, {Name: "Name", ReturnType: "string"}},
+		"potion.Potion": {
+			{Name: "Uint8", ReturnType: "byte"},
+			{Name: "Effects", ReturnType: "IReadOnlyList<Effect.Value>"},
+		},
+		"sound.Horn": {{Name: "Uint8", ReturnType: "byte"}, {Name: "Name", ReturnType: "string"}},
 		"sound.DiscType": {
 			{Name: "Uint8", ReturnType: "byte"},
 			{Name: "String", ReturnType: "string"},
@@ -2790,13 +2823,21 @@ func inspectItemValueMethods(spec itemValueTypeSpec) ([]itemValueMethodSpec, err
 	result := make([]itemValueMethodSpec, 0, len(methods))
 	for _, method := range methods {
 		generated := itemValueMethodSpec{Name: method.Name, ReturnType: method.ReturnType}
+		if spec.GoType == "potion.Potion" {
+			switch method.Name {
+			case "Uint8":
+				generated.Default = "unchecked((byte)_value)"
+			case "Effects":
+				generated.Default = "Array.Empty<Effect.Value>()"
+			}
+		}
 		for _, value := range spec.Values {
 			call := reflect.ValueOf(value).MethodByName(method.Name)
 			if !call.IsValid() || call.Type().NumIn() != 0 || call.Type().NumOut() != 1 {
 				return nil, fmt.Errorf("Dragonfly %s.%s signature changed", spec.GoType, method.Name)
 			}
 			outputs := call.Call(nil)
-			formatted, err := csharpItemValueResult(outputs[0].Interface(), method.ReturnType)
+			formatted, err := csharpItemValueResult(outputs[0].Interface(), method.ReturnType, effects)
 			if err != nil {
 				return nil, fmt.Errorf("Dragonfly %s.%s: %w", spec.GoType, method.Name, err)
 			}
@@ -2807,7 +2848,7 @@ func inspectItemValueMethods(spec itemValueTypeSpec) ([]itemValueMethodSpec, err
 	return result, nil
 }
 
-func csharpItemValueResult(value any, returnType string) (string, error) {
+func csharpItemValueResult(value any, returnType string, effects effectSpec) (string, error) {
 	switch returnType {
 	case "byte":
 		value, ok := value.(uint8)
@@ -2827,6 +2868,8 @@ func csharpItemValueResult(value any, returnType string) (string, error) {
 			return "", fmt.Errorf("result is %T, not color.RGBA", value)
 		}
 		return fmt.Sprintf("new Color.RGBA(%d, %d, %d, %d)", value.R, value.G, value.B, value.A), nil
+	case "IReadOnlyList<Effect.Value>":
+		return csharpEffectResult(value, effects)
 	default:
 		return "", fmt.Errorf("unsupported C# return type %s", returnType)
 	}
@@ -5310,11 +5353,25 @@ func generateItemValueType(output *bytes.Buffer, spec itemValueTypeSpec, indent 
 		for index, result := range method.Results {
 			fmt.Fprintf(output, "%s        %d => %s,\n", indent, index, result)
 		}
-		fmt.Fprintf(output, "%s        _ => throw new InvalidOperationException(\"Invalid %s value.\"),\n%s    };\n", indent, spec.Name, indent)
+		if method.Default != "" {
+			fmt.Fprintf(output, "%s        _ => %s,\n%s    };\n", indent, method.Default, indent)
+		} else {
+			fmt.Fprintf(output, "%s        _ => throw new InvalidOperationException(\"Invalid %s value.\"),\n%s    };\n", indent, spec.Name, indent)
+		}
 	}
 	fmt.Fprintf(output, "%s}\n\n", indent)
 	for index, factory := range spec.Factories {
 		fmt.Fprintf(output, "%spublic static %s %s() => new(%d);\n", indent, spec.Name, factory, index)
+	}
+	if spec.From {
+		fmt.Fprintf(output, "\n%spublic static %s From(int id) => new(unchecked((byte)id));\n", indent, spec.Name)
+	}
+	if spec.Collection == "All" || spec.Collection == "StewTypes" {
+		fmt.Fprintf(output, "\n%spublic static IReadOnlyList<%s> %s() => new %s[]\n%s{\n", indent, spec.Name, spec.Collection, spec.Name, indent)
+		for _, factory := range spec.Factories {
+			fmt.Fprintf(output, "%s    %s(),\n", indent, factory)
+		}
+		fmt.Fprintf(output, "%s};\n", indent)
 	}
 	output.WriteByte('\n')
 }

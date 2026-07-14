@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using Dragonfly;
@@ -33,7 +34,8 @@ public sealed class KitchenSink : Plugin
             new KitchenGameMode(),
             new KitchenItem(),
             new KitchenForm(),
-            new KitchenRawFormCommand()));
+            new KitchenRawFormCommand(),
+            new KitchenEffect()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -725,6 +727,71 @@ public sealed class KitchenSink : Plugin
                 inventory.SetItem(0, previous);
                 player.SetHeldItems(mainHand, offHand);
             }
+        }
+    }
+
+    internal sealed class KitchenEffect : Cmd.Runnable
+    {
+        public Cmd.SubCommand Effect;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+
+            var timed = Dragonfly.Effect.New(Dragonfly.Effect.Speed, 2, TimeSpan.FromMilliseconds(1500));
+            var ticked = timed.TickDuration();
+            var ambient = Dragonfly.Effect.NewAmbient(
+                Dragonfly.Effect.Regeneration, 1, TimeSpan.FromSeconds(2)).WithoutParticles();
+            var infinite = Dragonfly.Effect.NewInfinite(Dragonfly.Effect.FireResistance, 1);
+            var instant = Dragonfly.Effect.NewInstant(Dragonfly.Effect.InstantHealth, 1);
+            var potent = Dragonfly.Effect.NewInstantWithPotency(Dragonfly.Effect.InstantDamage, 2, 0.5d);
+            var (speedID, speedRegistered) = Dragonfly.Effect.ID(Dragonfly.Effect.Speed);
+            var (speedType, speedFound) = Dragonfly.Effect.ByID(speedID);
+            var (mixed, mixedAmbient) = Dragonfly.Effect.ResultingColour([timed, infinite]);
+            var potions = Dragonfly.Potion.All();
+            var turtle = Dragonfly.Potion.TurtleMaster().Effects();
+            var stews = Dragonfly.Item.StewTypes();
+            var saturation = Dragonfly.Item.SaturationDandelionStew().Effects();
+            if (ticked.Duration() != TimeSpan.FromMilliseconds(1450) || ticked.Tick() != 1 ||
+                ticked.Type() != Dragonfly.Effect.Speed || timed.ParticlesHidden() ||
+                !ambient.Ambient() || !ambient.ParticlesHidden() || !infinite.Infinite() ||
+                instant.Type() != Dragonfly.Effect.InstantHealth || potent.Level() != 2 ||
+                !speedRegistered || !speedFound || speedType != Dragonfly.Effect.Speed ||
+                mixed == default || mixedAmbient || potions.Count != 43 ||
+                Dragonfly.Potion.From(256) != Dragonfly.Potion.Water() || turtle.Count != 2 ||
+                Dragonfly.Potion.From(43).Uint8() != 43 || Dragonfly.Potion.From(43).Effects().Count != 0 ||
+                turtle[0].Type() != Dragonfly.Effect.Resistance || turtle[1].Type() != Dragonfly.Effect.Slowness ||
+                stews.Count != 13 || saturation.Count != 1 ||
+                saturation[0].Duration() != TimeSpan.FromMilliseconds(300))
+            {
+                output.Error("Effect behavior failed.");
+                return;
+            }
+
+            var (previous, hadPrevious) = player.Effect(Dragonfly.Effect.Regeneration);
+            try
+            {
+                player.AddEffect(ambient);
+                var (active, found) = player.Effect(Dragonfly.Effect.Regeneration);
+                var all = player.Effects();
+                if (!found || active.Level() != 1 || !active.Ambient() || !active.ParticlesHidden() ||
+                    !all.Any(value => value.Type() == Dragonfly.Effect.Regeneration))
+                {
+                    output.Error("Player effect round-trip failed.");
+                    return;
+                }
+            }
+            finally
+            {
+                player.RemoveEffect(Dragonfly.Effect.Regeneration);
+                if (hadPrevious) player.AddEffect(previous);
+            }
+
+            output.Printf("effects=28, potions={0}, stews={1}, active=true", potions.Count, stews.Count);
         }
     }
 

@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 5u
-// Version 30 appends an atomic held-items snapshot operation.
-#define DF_HOST_ABI_VERSION 30u
+// Version 31 transports Dragonfly effect fields using signed nanoseconds and ticks.
+#define DF_HOST_ABI_VERSION 31u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -328,11 +328,7 @@ typedef struct { double healed; } DfPlayerHealResult;
 typedef struct { double damage; uint8_t vulnerable; } DfPlayerHurtResult;
 #define DF_PLAYER_EFFECT_ADD 0u
 #define DF_PLAYER_EFFECT_REMOVE 1u
-#define DF_EFFECT_MODE_TIMED 0u
-#define DF_EFFECT_MODE_AMBIENT 1u
-#define DF_EFFECT_MODE_INFINITE 2u
-#define DF_EFFECT_MODE_INSTANT 3u
-typedef struct { int32_t effect_type; int32_t level; uint64_t duration_milliseconds; double potency; uint32_t mode; uint8_t particles_hidden; } DfEffectView;
+typedef struct { int32_t effect_type; int32_t level; int64_t duration_nanoseconds; double potency; uint8_t ambient; uint8_t particles_hidden; uint8_t infinite; int64_t tick; } DfEffectView;
 typedef struct { DfEffectView *data; uint64_t len; uint64_t capacity; } DfEffectBuffer;
 typedef struct { uint32_t width; uint32_t height; uint32_t animation_type; int64_t frame_count; int64_t expression; uint64_t pixels_len; } DfSkinAnimationInfo;
 typedef struct { uint32_t width; uint32_t height; uint8_t persona; uint64_t play_fab_id_len; uint64_t full_id_len; uint64_t pixels_len; uint64_t model_default_len; uint64_t model_animated_face_len; uint64_t model_len; uint32_t cape_width; uint32_t cape_height; uint64_t cape_pixels_len; uint64_t animation_count; } DfSkinInfo;

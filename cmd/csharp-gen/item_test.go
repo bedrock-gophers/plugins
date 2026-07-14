@@ -15,7 +15,12 @@ func TestInspectItemsUsesASTAndRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec, err := inspectItems(filepath.Join(string(bytes.TrimSpace(output)), "server", "item"))
+	module := string(bytes.TrimSpace(output))
+	effects, err := inspectEffects(filepath.Join(module, "server", "entity", "effect"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := inspectItems(filepath.Join(module, "server", "item"), effects)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,6 +205,12 @@ func TestInspectItemsUsesASTAndRegistry(t *testing.T) {
 		`identifier = "minecraft:diamond_sword"; metadata = 0`,
 		`identifier = "minecraft:cooked_beef"; metadata = 0`,
 		"public static Colour ColourBlack() => new(15)",
+		"public static IReadOnlyList<StewType> StewTypes() => new StewType[]",
+		"public static Value From(int id) => new(unchecked((byte)id))",
+		"public static IReadOnlyList<Value> All() => new Value[]",
+		"public IReadOnlyList<Effect.Value> Effects() => _value switch",
+		"_ => unchecked((byte)_value)",
+		"_ => Array.Empty<Effect.Value>()",
 		"public Color.RGBA SignRGBA() => _value switch",
 		`15 => "black"`,
 		`8 => "silver"`,

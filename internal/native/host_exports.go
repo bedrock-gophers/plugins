@@ -366,34 +366,16 @@ func bg_go_player_effect(context C.uint64_t, invocation C.DfInvocationId, player
 }
 
 func copyPlayerEffect(operation PlayerEffectOperation, value C.DfEffectView) (PlayerEffect, bool) {
-	const maximumMilliseconds = uint64((1<<63 - 1) / int64(time.Millisecond))
-	if operation > PlayerEffectRemove || value.particles_hidden > 1 || uint32(value.mode) > uint32(PlayerEffectInstant) ||
-		uint64(value.duration_milliseconds) > maximumMilliseconds || math.IsNaN(float64(value.potency)) ||
-		math.IsInf(float64(value.potency), 0) || value.potency < 0 {
+	if operation > PlayerEffectRemove || value.ambient > 1 || value.particles_hidden > 1 || value.infinite > 1 {
 		return PlayerEffect{}, false
 	}
 	effect := PlayerEffect{
 		Type: EffectType(value.effect_type), Level: int32(value.level),
-		Duration: milliseconds(value.duration_milliseconds), Potency: float64(value.potency),
-		Mode: PlayerEffectMode(value.mode), ParticlesHidden: value.particles_hidden != 0,
+		Duration: time.Duration(value.duration_nanoseconds), Potency: float64(value.potency),
+		Ambient: value.ambient != 0, ParticlesHidden: value.particles_hidden != 0,
+		Infinite: value.infinite != 0, Tick: int64(value.tick),
 	}
-	if operation == PlayerEffectRemove {
-		return effect, effect.Level == 0 && effect.Duration == 0 && effect.Potency == 1 &&
-			effect.Mode == PlayerEffectTimed && !effect.ParticlesHidden
-	}
-	if effect.Level <= 0 {
-		return PlayerEffect{}, false
-	}
-	switch effect.Mode {
-	case PlayerEffectTimed, PlayerEffectAmbient:
-		return effect, effect.Potency == 1
-	case PlayerEffectInfinite:
-		return effect, effect.Duration == 0 && effect.Potency == 1
-	case PlayerEffectInstant:
-		return effect, effect.Duration == 0
-	default:
-		return PlayerEffect{}, false
-	}
+	return effect, true
 }
 
 //export bg_go_player_entity_visibility

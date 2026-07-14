@@ -43,9 +43,9 @@ public sealed class Example : Plugin
 The project name is the plugin ID. A compile-time generator emits the hidden native entry point.
 
 Current C# slice: loading, lifecycle, reflected commands, player text actions, game mode, typed
-forms, typed items and player inventories, movement, chat, food loss, jump, teleport,
+effects, forms, items and player inventories, movement, chat, food loss, jump, teleport,
 sprint/sneak toggles, punch-air, and quit handlers. Player handler, command-interface,
-player-text, game-mode, form, item, and player-inventory surfaces are generated from Dragonfly's
+player-text, game-mode, effect, form, item, and player-inventory surfaces are generated from Dragonfly's
 Go AST.
 `World.GameMode` includes Dragonfly's four registered values and exact `GameModeByID`/`GameModeID`
 lookups. `Player.SetGameMode` accepts custom implementations just like Dragonfly, and
@@ -78,8 +78,8 @@ Their exact factory values come from Dragonfly's Go AST and live registries. NBT
 families that have not landed remain opaque during transport; raw identifiers,
 metadata, NBT, enchantment IDs, snapshots, and host statuses stay private.
 Generated value methods include colour conversions, numeric IDs, horn names, and music-disc
-identifiers, display names, and authors. Effect-returning potion and stew methods wait for the
-typed effect API.
+identifiers, display names, and authors. Potions and suspicious stews expose their exact typed
+Dragonfly effect lists through `Effects`, `Potion.All`/`From`, and `Item.StewTypes`.
 `BookAndQuill`, `WrittenBook`, and `WrittenBookGeneration` mirror Dragonfly fields and page
 operations. Private bounded LittleEndian NBT transport preserves typed pages, title, author, and
 generation without exposing NBT to plugins.
@@ -147,9 +147,16 @@ Dragonfly iterator and closes it on exhaustion, early exit, or callback completi
 
 Public block, liquid, biome, particle, colour, instrument, and item types come from Dragonfly's Go AST.
 Live registries feed internal generated codecs, so Minecraft identifiers, state NBT, numeric biome
-IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 30 preserves the
+IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 31 preserves the
 separate “no liquid” result, nullable liquid removal, signed nanosecond scheduling delays,
 biome/weather queries, particle payloads, registered/custom game-mode capabilities, and full
 callback-scoped player snapshots for form responses. Structurally valid form contexts receive
 exactly one response or drop callback, including synchronous send failures. World handles,
 capability descriptors, and ABI errors also remain private transport details.
+
+The generated effect slice exposes all 28 registered Dragonfly effects, `Effect.Value`, the five
+constructors, value methods, colour mixing, registry lookup, and `Player.AddEffect`, `RemoveEffect`,
+`Effect`, and `Effects`. ABI 31 carries effect duration, potency, ambient/particle/infinite flags,
+and the current tick; C# exposes duration at `TimeSpan`'s 100 ns precision. Custom effect callbacks,
+registration, and concrete effect-specific multiplier methods wait for the entity and damage-source
+slices; no identifier-based fallback is exposed.

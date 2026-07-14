@@ -63,22 +63,15 @@ const (
 	PlayerEffectRemove
 )
 
-type PlayerEffectMode uint32
-
-const (
-	PlayerEffectTimed PlayerEffectMode = iota
-	PlayerEffectAmbient
-	PlayerEffectInfinite
-	PlayerEffectInstant
-)
-
 type PlayerEffect struct {
 	Type            EffectType
 	Level           int32
 	Duration        time.Duration
 	Potency         float64
-	Mode            PlayerEffectMode
+	Ambient         bool
 	ParticlesHidden bool
+	Infinite        bool
+	Tick            int64
 }
 
 type PlayerTextKind uint32

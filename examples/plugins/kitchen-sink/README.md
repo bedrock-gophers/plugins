@@ -24,6 +24,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
   element type; URL and resource-pack button images; tooltips; closers; and submitted values;
 - open `Form.Value`, `Element.MarshalJSON`, and `MenuElement.MarshalJSON` implementations in
   `/kitchen raw-form`;
+- all 28 registered effect types, constructors, value methods, potion/stew effect lists, and a
+  player effect round trip in `/kitchen effect`;
 - plugin lifecycle.
 
 New APIs belong here only when the example can do something real with them. This plugin is not a

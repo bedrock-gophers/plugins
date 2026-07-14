@@ -8,50 +8,39 @@ import (
 )
 
 func TestPlayerEffectSnapshotViewValidation(t *testing.T) {
-	valid := PlayerEffect{Type: EffectSpeed, Level: 2, Duration: time.Second, Potency: 1, Mode: PlayerEffectTimed}
+	valid := PlayerEffect{Type: EffectSpeed, Level: 2, Duration: time.Second + time.Nanosecond, Potency: 0.75, Tick: 7}
 	ambient := valid
-	ambient.Mode, ambient.ParticlesHidden = PlayerEffectAmbient, true
+	ambient.Ambient, ambient.ParticlesHidden = true, true
 	infinite := valid
-	infinite.Mode, infinite.Duration = PlayerEffectInfinite, 0
-	for name, value := range map[string]PlayerEffect{"timed": valid, "ambient": ambient, "infinite": infinite} {
+	infinite.Infinite, infinite.Duration = true, 0
+	negative := valid
+	negative.Duration = -time.Nanosecond
+	nanPotency := valid
+	nanPotency.Potency = math.NaN()
+	odd := valid
+	odd.Level, odd.Ambient, odd.Infinite, odd.Tick = 0, true, true, -1
+	for name, value := range map[string]PlayerEffect{"timed": valid, "ambient": ambient, "infinite": infinite, "negative duration": negative, "nan potency": nanPotency, "raw fields": odd} {
 		t.Run(name, func(t *testing.T) {
 			view, ok := playerEffectSnapshotView(value)
-			if !ok || int32(view.effect_type) != int32(value.Type) || int32(view.level) != value.Level || uint32(view.mode) != uint32(value.Mode) || (view.particles_hidden != 0) != value.ParticlesHidden {
+			if !ok || int32(view.effect_type) != int32(value.Type) || int32(view.level) != value.Level ||
+				time.Duration(view.duration_nanoseconds) != value.Duration || (view.ambient != 0) != value.Ambient ||
+				(view.particles_hidden != 0) != value.ParticlesHidden || (view.infinite != 0) != value.Infinite ||
+				int64(view.tick) != value.Tick || !(math.IsNaN(value.Potency) && math.IsNaN(float64(view.potency)) || float64(view.potency) == value.Potency) {
 				t.Fatalf("view = %#v ok=%v", view, ok)
 			}
 		})
 	}
 
-	invalid := map[string]PlayerEffect{
-		"zero level":        func() PlayerEffect { value := valid; value.Level = 0; return value }(),
-		"negative duration": func() PlayerEffect { value := valid; value.Duration = -1; return value }(),
-		"zero potency":      func() PlayerEffect { value := valid; value.Potency = 0; return value }(),
-		"nan potency":       func() PlayerEffect { value := valid; value.Potency = math.NaN(); return value }(),
-		"instant":           func() PlayerEffect { value := valid; value.Mode = PlayerEffectInstant; return value }(),
-		"unknown mode":      func() PlayerEffect { value := valid; value.Mode = 99; return value }(),
-		"infinite duration": func() PlayerEffect { value := infinite; value.Duration = time.Second; return value }(),
-	}
-	for name, value := range invalid {
-		t.Run(name, func(t *testing.T) {
-			if _, ok := playerEffectSnapshotView(value); ok {
-				t.Fatalf("invalid effect accepted: %#v", value)
-			}
-		})
-	}
 }
 
-func TestPlayerEffectSnapshotViewsEnforceBound(t *testing.T) {
-	value := PlayerEffect{Type: EffectSpeed, Level: 1, Duration: time.Second, Potency: 1, Mode: PlayerEffectTimed}
-	values := make([]PlayerEffect, maxPlayerEffects)
+func TestPlayerEffectSnapshotViewsHaveNoInventedCountLimit(t *testing.T) {
+	value := PlayerEffect{Type: EffectSpeed, Level: 1, Duration: time.Second, Potency: 1}
+	values := make([]PlayerEffect, 257)
 	for index := range values {
 		values[index] = value
 	}
-	if encoded, ok := playerEffectSnapshotViews(values); !ok || len(encoded) != maxPlayerEffects {
-		t.Fatalf("maximum snapshot length=%d ok=%v", len(encoded), ok)
-	}
-	values = append(values, value)
-	if encoded, ok := playerEffectSnapshotViews(values); ok || encoded != nil {
-		t.Fatalf("oversized snapshot length=%d ok=%v", len(encoded), ok)
+	if encoded, ok := playerEffectSnapshotViews(values); !ok || len(encoded) != len(values) {
+		t.Fatalf("snapshot length=%d ok=%v", len(encoded), ok)
 	}
 }
 

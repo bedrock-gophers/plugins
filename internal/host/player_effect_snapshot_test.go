@@ -44,16 +44,16 @@ func TestPlayersSnapshotAndClearEffects(t *testing.T) {
 		for _, value := range values {
 			byType[value.Type] = value
 		}
-		if value := byType[native.EffectSpeed]; value.Level != 2 || value.Duration != 5*time.Second || value.Potency != 1 || value.Mode != native.PlayerEffectTimed || value.ParticlesHidden {
+		if value := byType[native.EffectSpeed]; value.Level != 2 || value.Duration != 5*time.Second || value.Potency != 0 || value.Ambient || value.Infinite || value.ParticlesHidden || value.Tick != 0 {
 			t.Fatalf("speed = %#v", value)
 		}
-		if value := byType[native.EffectRegeneration]; value.Mode != native.PlayerEffectAmbient || !value.ParticlesHidden {
+		if value := byType[native.EffectRegeneration]; !value.Ambient || value.Infinite || !value.ParticlesHidden {
 			t.Fatalf("ambient = %#v", value)
 		}
-		if value := byType[native.EffectFireResistance]; value.Mode != native.PlayerEffectInfinite || value.Duration != 0 || !value.ParticlesHidden {
+		if value := byType[native.EffectFireResistance]; value.Ambient || !value.Infinite || value.Duration != 0 || !value.ParticlesHidden {
 			t.Fatalf("infinite = %#v", value)
 		}
-		if value := byType[native.EffectType(customID)]; value.Level != 4 || value.Mode != native.PlayerEffectTimed {
+		if value := byType[native.EffectType(customID)]; value.Level != 4 || value.Ambient || value.Infinite {
 			t.Fatalf("custom = %#v", value)
 		}
 
@@ -82,7 +82,7 @@ func TestPlayersSnapshotEmptyEffects(t *testing.T) {
 	})
 }
 
-func TestPlayersSnapshotFiltersInitialInstantEffects(t *testing.T) {
+func TestPlayersSnapshotIncludesInitialInstantEffects(t *testing.T) {
 	w := world.Config{Synchronous: true}.New()
 	t.Cleanup(func() { _ = w.Close() })
 	id := uuid.MustParse("56b1b0c8-d899-43ae-a683-ef8714980289")
@@ -99,19 +99,59 @@ func TestPlayersSnapshotFiltersInitialInstantEffects(t *testing.T) {
 		invocation, leave := players.BeginInvocation(tx)
 		defer leave()
 		values, ok := players.PlayerEffects(invocation, playerID)
-		if !ok || len(values) != 1 || values[0].Type != native.EffectSpeed {
+		if !ok || len(values) != 2 {
 			t.Fatalf("effects = %#v ok=%v", values, ok)
+		}
+		byType := map[native.EffectType]native.PlayerEffect{}
+		for _, value := range values {
+			byType[value.Type] = value
+		}
+		if byType[native.EffectSpeed].Level != 2 || byType[native.EffectInstantHealth].Level != 1 ||
+			byType[native.EffectInstantHealth].Potency != 1 {
+			t.Fatalf("effects = %#v", values)
 		}
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestSnapshotPlayerEffectClampsNegativeRemainingDuration(t *testing.T) {
+func TestSnapshotPlayerEffectPreservesNegativeRemainingDurationAndTick(t *testing.T) {
 	current := effect.New(effect.Speed, 1, time.Millisecond).TickDuration()
 	value, ok := snapshotPlayerEffect(current)
-	if !ok || current.Duration() >= 0 || value.Duration != 0 {
+	if !ok || current.Duration() >= 0 || value.Duration != current.Duration() || value.Tick != 1 {
 		t.Fatalf("current duration=%v snapshot=%#v ok=%v", current.Duration(), value, ok)
+	}
+}
+
+func TestPlayerEffectFromNativePreservesTickAndNanoseconds(t *testing.T) {
+	value := native.PlayerEffect{
+		Type: native.EffectSpeed, Level: 2, Duration: time.Second + time.Nanosecond,
+		Potency: 1, Ambient: true, ParticlesHidden: true, Tick: 3,
+	}
+	reconstructed, ok := playerEffectFromNative(effect.Speed, value)
+	if !ok || reconstructed.Duration() != value.Duration || reconstructed.Tick() != 3 ||
+		!reconstructed.Ambient() || !reconstructed.ParticlesHidden() {
+		t.Fatalf("reconstructed=%#v ok=%v", reconstructed, ok)
+	}
+}
+
+func TestPlayerEffectFromNativePreservesInfiniteTick(t *testing.T) {
+	value := native.PlayerEffect{
+		Type: native.EffectFireResistance, Level: 1, Potency: 1, Infinite: true, Tick: 2,
+	}
+	reconstructed, ok := playerEffectFromNative(effect.FireResistance, value)
+	if !ok || !reconstructed.Infinite() || reconstructed.Duration() != 0 || reconstructed.Tick() != 2 {
+		t.Fatalf("reconstructed=%#v ok=%v", reconstructed, ok)
+	}
+}
+
+func TestPlayerEffectFromNativeRejectsUnboundedTickWork(t *testing.T) {
+	value := native.PlayerEffect{
+		Type: native.EffectSpeed, Level: 1, Duration: time.Second,
+		Potency: 1, Tick: maximumPlayerEffectTick + 1,
+	}
+	if reconstructed, ok := playerEffectFromNative(effect.Speed, value); ok {
+		t.Fatalf("unbounded tick accepted: %#v", reconstructed)
 	}
 }
 

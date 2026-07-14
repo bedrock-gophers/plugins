@@ -45,7 +45,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    plugins never handle identifiers, NBT, numeric biome IDs, world handles, iterator handles, or
    host errors. `Liquid` preserves Dragonfly's `(Liquid, bool)` result, and passing `null` to
    `SetLiquid` removes the liquid. Host
-   ABI 30 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
+   ABI 31 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
    particles, registered/custom game-mode capabilities, and the transaction owner's current tick
    without exposing them publicly. Form response callbacks additionally receive a borrowed full
    player snapshot, and ownership transfer guarantees exactly one response or drop callback.
@@ -68,8 +68,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    include colours, potions and tipped arrows, banner patterns, smithing templates, suspicious stews,
    pottery sherds, goat horns, and music discs. Dependency factories and encoded states are
    derived from Dragonfly's Go AST and live registries rather than a handwritten schema. Their
-   scalar, string, and colour methods are generated from live Dragonfly behavior too; methods
-   returning effects wait for the typed effect slice.
+   scalar, string, colour, and typed effect methods are generated from live Dragonfly behavior too.
+   `Potion.Effects`, `Potion.All`/`From`, `StewType.Effects`, and `StewTypes` preserve Dragonfly's
+   exact lists and ordering.
    Generated `BookAndQuill`, `WrittenBook`, and `WrittenBookGeneration` mirror Dragonfly's fields,
    page operations, and UTF-8 byte limits. A private bounded LittleEndian NBT codec carries their
    typed state; raw NBT remains absent from the plugin API.
@@ -100,14 +101,25 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `SetHeldItems`, and `SetHeldSlot`; `Inventory.Value` exposes `Size`, `Item`, `SetItem`, and
    `AddItem`. C# setters return `void` as the chosen language adaptation, and invalid slots
    throw `ArgumentOutOfRangeException`; host statuses never enter the public API. The existing
-   ABI 30 adds one atomic held-item pair snapshot, so `HeldItems` observes the same player state
+   ABI 31 includes one atomic held-item pair snapshot, so `HeldItems` observes the same player state
    with one host read. Bounded open/read/close item snapshots preserve damage, unbreakable state, anvil cost, custom
    names, lore, item NBT, plugin values, and enchantments internally. Unknown registered stateful
    NBT-backed items decode to a private opaque item and round-trip losslessly. Public
    enchantment/value mutation, `WithItem`,
    ender chests, custom items, and item events remain next; no public identifier fallback is added.
-7. Entities, remaining sounds, and remaining world/block methods.
-8. Convert practice-core and expand parity tests against Dragonfly.
+7. Effects. The generator reads `server/entity/effect` registrations, interfaces, constructors,
+   value methods, and player method signatures from Dragonfly's Go AST, then validates all 28
+   built-ins against the live registry. C# exposes `Effect.Value`, registered `Type`/`LastingType`
+   values, all five constructors, `ResultingColour`, `ByID`/`ID`, and the four player effect methods.
+   ABI 31 transports signed nanosecond duration, level, potency, ambient/particle/infinite flags, and
+   tick. C# `TimeSpan` has 100 ns precision and rejects snapshots outside that precision instead of
+   truncating them. Re-adding a snapshot is bounded to one million elapsed ticks because Dragonfly
+   exposes `Tick` but no constructor or setter for it. Pending initial instant-effect potency is
+   normalised because Dragonfly exposes no potency getter. Custom `Type.Apply`, `LastingType.Start`/`End`,
+   `Register`, and concrete multiplier methods wait for entity and damage-source callbacks instead
+   of receiving a second abstraction.
+8. Entities, remaining sounds, and remaining world/block methods.
+9. Convert practice-core and expand parity tests against Dragonfly.
 
 Each slice removes the replaced legacy implementation. Unsupported API remains absent rather than gaining a parallel abstraction.
 
@@ -137,6 +149,8 @@ durability, repair, smelting, trim-material, and private dyed/trim NBT behavior,
 all 28 tier-and-piece combinations. It also constructs a charged typed crossbow, checks its pure
 capabilities, and round-trips the full nested firework stack. Empty, water, lava, and milk buckets
 exercise typed content queries, consumption flags, duration, max counts, and lava fuel residue.
+`/kitchen effect` exercises every effect constructor and value method, registry and colour lookup,
+all potion/stew effect families, and a real player add/read/list/remove round trip.
 `/kitchen form` exercises reflected menu, custom, and modal forms, every built-in element,
 submitted values, closers, and nested sends. `/kitchen raw-form` exercises the open `Form.Value`
 contract plus public element/menu-element JSON marshalling.

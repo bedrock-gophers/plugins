@@ -166,6 +166,7 @@ type recordingHost struct {
 	hurtResult    PlayerHurtResult
 	effectOps     []PlayerEffectOperation
 	effects       []PlayerEffect
+	activeEffects []PlayerEffect
 	entities      []EntityID
 	visible       []bool
 	skin          PlayerSkin
@@ -312,6 +313,29 @@ func (h *recordingHost) HurtPlayer(_ InvocationID, _ PlayerID, damage float64, s
 func (h *recordingHost) ChangePlayerEffect(_ InvocationID, _ PlayerID, operation PlayerEffectOperation, effect PlayerEffect) bool {
 	h.effectOps = append(h.effectOps, operation)
 	h.effects = append(h.effects, effect)
+	for index := range h.activeEffects {
+		if h.activeEffects[index].Type != effect.Type {
+			continue
+		}
+		if operation == PlayerEffectRemove {
+			h.activeEffects = append(h.activeEffects[:index], h.activeEffects[index+1:]...)
+		} else {
+			h.activeEffects[index] = effect
+		}
+		return true
+	}
+	if operation == PlayerEffectAdd {
+		h.activeEffects = append(h.activeEffects, effect)
+	}
+	return true
+}
+
+func (h *recordingHost) PlayerEffects(InvocationID, PlayerID) ([]PlayerEffect, bool) {
+	return append([]PlayerEffect(nil), h.activeEffects...), true
+}
+
+func (h *recordingHost) ClearPlayerEffects(InvocationID, PlayerID) bool {
+	h.activeEffects = nil
 	return true
 }
 
@@ -915,10 +939,10 @@ func TestPlayerEffectHostCalls(t *testing.T) {
 	if !slices.Equal(host.effectOps, []PlayerEffectOperation{PlayerEffectAdd, PlayerEffectAdd, PlayerEffectRemove}) {
 		t.Fatalf("operations = %v", host.effectOps)
 	}
-	if host.effects[0].Type != EffectSpeed || host.effects[0].Level != 2 || host.effects[0].Duration != 30*time.Second || host.effects[0].Potency != 1 || host.effects[0].Mode != PlayerEffectTimed {
+	if host.effects[0].Type != EffectSpeed || host.effects[0].Level != 2 || host.effects[0].Duration != 30*time.Second || host.effects[0].Potency != 1 || host.effects[0].Ambient || host.effects[0].Infinite {
 		t.Fatalf("effect = %+v", host.effects[0])
 	}
-	if host.effects[1].Type != EffectInstantHealth || host.effects[1].Level != 1 || host.effects[1].Potency != 0.5 || host.effects[1].Mode != PlayerEffectInstant {
+	if host.effects[1].Type != EffectInstantHealth || host.effects[1].Level != 1 || host.effects[1].Potency != 0.5 || host.effects[1].Ambient || host.effects[1].Infinite {
 		t.Fatalf("instant effect = %+v", host.effects[1])
 	}
 }

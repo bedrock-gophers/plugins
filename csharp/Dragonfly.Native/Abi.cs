@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 5;
-    public const uint HostVersion = 30;
+    public const uint HostVersion = 31;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerMoveEvent = 1;
@@ -99,6 +99,27 @@ public struct PlayerStateValue
 }
 
 [StructLayout(LayoutKind.Sequential)]
+public struct EffectView
+{
+    public int Type;
+    public int Level;
+    public long DurationNanoseconds;
+    public double Potency;
+    public byte Ambient;
+    public byte ParticlesHidden;
+    public byte Infinite;
+    public long Tick;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct EffectBuffer
+{
+    public EffectView* Data;
+    public ulong Length;
+    public ulong Capacity;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 public unsafe struct PlayerSnapshot
 {
     public PlayerId Player;
@@ -128,7 +149,7 @@ public unsafe struct HostApi
     public void* PlayerRotation;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, PlayerStateValue, int> PlayerStateSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, PlayerStateValue*, int> PlayerStateGet;
-    public void* PlayerEffect;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, EffectView, int> PlayerEffect;
     public void* PlayerEntityVisibility;
     public void* PlayerSkinOpen;
     public void* PlayerSkinAnimationInfo;
@@ -178,8 +199,8 @@ public unsafe struct HostApi
     public void* SkinSnapshotSet;
     public void* WorldOpenSpec;
     public void* PlayerTransfer;
-    public void* PlayerEffects;
-    public void* PlayerEffectsClear;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, EffectBuffer*, int> PlayerEffects;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, int> PlayerEffectsClear;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, byte*, BlockData*, int> WorldLiquidGet;
     public void* PlayerExperienceSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockRange*, int> WorldRange;
