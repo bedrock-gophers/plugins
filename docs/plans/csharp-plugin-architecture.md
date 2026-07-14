@@ -115,7 +115,10 @@ book families through player inventory before restoring all changed player state
 submitted values, closers, and nested sends. `/kitchen raw-form` exercises the open `Form.Value`
 contract plus public element/menu-element JSON marshalling.
 NativeAOT and host-call tests verify the public shape, lazy iterator cleanup, and transaction-safe
-transport.
+transport. Runtime close destroys plugin instances but deliberately leaves NativeAOT libraries
+mapped until process exit: NativeAOT installs process-wide signal handlers, so unloading a library
+would leave those handlers pointing into unmapped code. Failed server startup follows the same
+lifetime rule and returns its Dragonfly configuration error without crashing during cleanup.
 
 `examples/plugins/vanilla-commands` keeps its plugin entry tiny and one command per file. It currently exercises `/gamemode`, `/help`, `/ping`, and `/position`, and expands with each gameplay parity slice.
 

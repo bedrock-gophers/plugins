@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"reflect"
 	"sync/atomic"
 
 	"github.com/bedrock-gophers/plugins/internal/host"
@@ -161,14 +162,19 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 }
 
 func closeDragonflyProviders(config server.Config, log *slog.Logger) {
-	if config.PlayerProvider != nil {
-		if err := config.PlayerProvider.Close(); err != nil {
-			log.Error("close unused player provider", "error", err)
-		}
+	closeDragonflyProvider("player", config.PlayerProvider, log)
+	closeDragonflyProvider("world", config.WorldProvider, log)
+}
+
+func closeDragonflyProvider(name string, provider interface{ Close() error }, log *slog.Logger) {
+	if provider == nil {
+		return
 	}
-	if config.WorldProvider != nil {
-		if err := config.WorldProvider.Close(); err != nil {
-			log.Error("close unused world provider", "error", err)
-		}
+	value := reflect.ValueOf(provider)
+	if value.Kind() == reflect.Pointer && value.IsNil() {
+		return
+	}
+	if err := provider.Close(); err != nil {
+		log.Error("close unused "+name+" provider", "error", err)
 	}
 }

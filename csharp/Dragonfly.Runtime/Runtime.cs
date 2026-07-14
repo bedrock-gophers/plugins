@@ -7,7 +7,6 @@ namespace Dragonfly.Runtime;
 
 internal unsafe sealed class PluginLibrary : IDisposable
 {
-    internal nint Library;
     internal PluginApi* Api;
     internal void* Instance;
     internal volatile bool Enabled;
@@ -23,10 +22,8 @@ internal unsafe sealed class PluginLibrary : IDisposable
     {
         Disable();
         if (Api is not null && Api->Destroy != null) Api->Destroy(Instance);
-        if (Library != 0) NativeLibrary.Free(Library);
         Api = null;
         Instance = null;
-        Library = 0;
     }
 }
 
@@ -72,36 +69,31 @@ internal unsafe sealed class RuntimeState : IDisposable
 
     private void Add(string path, void* host)
     {
+        // NativeAOT libraries install process-wide signal handlers while loading. Unloading one
+        // leaves those handlers pointing into unmapped code, so the process owns every successful
+        // load until exit even when validation or later server startup fails.
         var library = NativeLibrary.Load(path);
-        try
+        var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v5");
+        var api = entry();
+        if (api is null || api->Header.Version != Abi.PluginVersion || api->Header.Size < sizeof(PluginApi))
+            throw new InvalidOperationException($"{path} has an incompatible plugin API");
+        if (api->Id.Length == 0 || api->Id.Data is null)
+            throw new InvalidOperationException($"{path} has an empty plugin ID");
+        var id = Utf8(api->Id);
+        if (Plugins.Any(plugin => Utf8(plugin.Api->Id) == id))
+            throw new InvalidOperationException($"duplicate plugin ID {id}");
+        if (api->Header.Subscriptions != 0 && api->HandleEvent == null)
+            throw new InvalidOperationException($"plugin {id} has no event handler");
+        var instance = api->Create == null ? null : api->Create();
+        if (api->Create != null && instance is null)
+            throw new InvalidOperationException($"plugin {id} could not be created");
+        if (api->SetHost == null || api->SetHost(instance, host) != Abi.Ok)
         {
-            var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v5");
-            var api = entry();
-            if (api is null || api->Header.Version != Abi.PluginVersion || api->Header.Size < sizeof(PluginApi))
-                throw new InvalidOperationException($"{path} has an incompatible plugin API");
-            if (api->Id.Length == 0 || api->Id.Data is null)
-                throw new InvalidOperationException($"{path} has an empty plugin ID");
-            var id = Utf8(api->Id);
-            if (Plugins.Any(plugin => Utf8(plugin.Api->Id) == id))
-                throw new InvalidOperationException($"duplicate plugin ID {id}");
-            if (api->Header.Subscriptions != 0 && api->HandleEvent == null)
-                throw new InvalidOperationException($"plugin {id} has no event handler");
-            var instance = api->Create == null ? null : api->Create();
-            if (api->Create != null && instance is null)
-                throw new InvalidOperationException($"plugin {id} could not be created");
-            if (api->SetHost == null || api->SetHost(instance, host) != Abi.Ok)
-            {
-                if (api->Destroy != null) api->Destroy(instance);
-                throw new InvalidOperationException($"plugin {id} rejected the host API");
-            }
-            Plugins.Add(new PluginLibrary { Library = library, Api = api, Instance = instance });
-            Subscriptions |= api->Header.Subscriptions;
+            if (api->Destroy != null) api->Destroy(instance);
+            throw new InvalidOperationException($"plugin {id} rejected the host API");
         }
-        catch
-        {
-            NativeLibrary.Free(library);
-            throw;
-        }
+        Plugins.Add(new PluginLibrary { Api = api, Instance = instance });
+        Subscriptions |= api->Header.Subscriptions;
     }
 
     internal void Enable(StringBuffer* error)

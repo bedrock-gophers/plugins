@@ -372,7 +372,6 @@ typedef DfStatus (*RuntimeCommandEnumFn)(DfRuntime *, uint64_t, uint64_t, uint64
 typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *);
 
 struct BgRuntimeLibrary {
-    void *handle;
     DfRuntime *runtime;
     DfHostApiV27 host_api;
     RuntimeDestroyFn destroy;
@@ -435,6 +434,9 @@ DfStatus bg_runtime_open(
         write_error(error, error_capacity, dlerror());
         return DF_STATUS_ERROR;
     }
+    // NativeAOT shared libraries install process-wide signal handlers and do not support safe
+    // unloading. Keep every successful dlopen reference until process exit, including failures
+    // after this point, so those handlers never point into unmapped code.
 
     RuntimeCreateFn create = (RuntimeCreateFn) load_symbol(handle, "df_runtime_create", error, error_capacity);
     RuntimeDestroyFn destroy = (RuntimeDestroyFn) load_symbol(handle, "df_runtime_destroy", error, error_capacity);
@@ -460,14 +462,12 @@ DfStatus bg_runtime_open(
     RuntimeCommandEnumFn command_enum_options = (RuntimeCommandEnumFn) load_symbol(handle, "df_runtime_command_enum_options", error, error_capacity);
     RuntimeEventFn handle_event = (RuntimeEventFn) load_symbol(handle, "df_runtime_handle_event", error, error_capacity);
     if (create == NULL || destroy == NULL || enable == NULL || begin_disable == NULL || finish_disable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || entity_type_count == NULL || entity_type_at == NULL || entity_adopt == NULL || entity_load == NULL || entity_save == NULL || entity_tick == NULL || entity_hurt == NULL || entity_heal == NULL || entity_death == NULL || entity_destroy == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_event == NULL) {
-        dlclose(handle);
         return DF_STATUS_ERROR;
     }
 
     BgRuntimeLibrary *library = calloc(1, sizeof(*library));
     if (library == NULL) {
         write_error(error, error_capacity, "allocate runtime bridge");
-        dlclose(handle);
         return DF_STATUS_ERROR;
     }
 
@@ -566,11 +566,9 @@ DfStatus bg_runtime_open(
     };
     if (create(&config, &library->runtime, error, error_capacity) != DF_STATUS_OK) {
         free(library);
-        dlclose(handle);
         return DF_STATUS_ERROR;
     }
 
-    library->handle = handle;
     library->destroy = destroy;
     library->enable = enable;
     library->begin_disable = begin_disable;
@@ -602,7 +600,6 @@ void bg_runtime_close(BgRuntimeLibrary *library) {
         return;
     }
     library->destroy(library->runtime);
-    dlclose(library->handle);
     free(library);
 }
 
