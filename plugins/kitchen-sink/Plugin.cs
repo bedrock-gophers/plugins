@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using Dragonfly;
@@ -33,7 +34,8 @@ public sealed class KitchenSink : Plugin
             new KitchenGameMode(),
             new KitchenItem(),
             new KitchenForm(),
-            new KitchenRawFormCommand()));
+            new KitchenRawFormCommand(),
+            new KitchenEffect()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -419,6 +421,11 @@ public sealed class KitchenSink : Plugin
         }
     }
 
+    private sealed record KitchenLiquid(string Type = "kitchen") : World.Liquid
+    {
+        public string LiquidType() => Type;
+    }
+
     internal sealed class KitchenItem : Cmd.Runnable
     {
         public Cmd.SubCommand Item;
@@ -432,6 +439,8 @@ public sealed class KitchenSink : Plugin
             }
             var inventory = player.Inventory();
             var previous = inventory.Item(0);
+            var enderChest = player.EnderChestInventory();
+            var previousEnderItem = enderChest.Item(0);
             var (mainHand, offHand) = player.HeldItems();
             var sword = Dragonfly.Item.NewStack(
                     new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond),
@@ -441,31 +450,355 @@ public sealed class KitchenSink : Plugin
             try
             {
                 inventory.SetItem(0, sword);
+                enderChest.SetItem(0, sword);
                 player.SetHeldItems(sword, offHand);
                 var stored = inventory.Item(0);
+                var enderStored = enderChest.Item(0);
                 var (held, _) = player.HeldItems();
                 var armour = player.Armour();
                 var helmet = armour.Helmet();
                 armour.SetHelmet(helmet);
                 var addedEmpty = inventory.AddItem(default);
-                if (stored.Item() is not Dragonfly.Item.Sword typed)
+                if (stored.Item() is not Dragonfly.Item.Sword typed ||
+                    enderStored.Item() is not Dragonfly.Item.Sword || enderChest.Size() != 27)
                 {
                     output.Error("Typed item round-trip failed.");
                     return;
                 }
+
+                var damagedSword = sword.Damage(10);
+                var unbreakableSword = damagedSword.AsUnbreakable();
+                var snowballs = Dragonfly.Item.NewStack(new Dragonfly.Item.Snowball(), 8);
+                var moreSnowballs = Dragonfly.Item.NewStack(new Dragonfly.Item.Snowball(), 10);
+                var (fullSnowballs, remainingSnowballs) = snowballs.AddStack(moreSnowballs);
+                var zeroSword = Dragonfly.Item.NewStack(
+                    new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond), 0);
+                var persistentElytra = Dragonfly.Item.NewStack(new Dragonfly.Item.Elytra(), 1);
+                if (sword.MaxCount() != 1 || sword.MaxDurability() != 1561 || sword.Durability() != 1561 ||
+                    sword.AttackDamage() != 8d || damagedSword.Durability() != 1551 ||
+                    unbreakableSword.Damage(100).Durability() != 1551 || !unbreakableSword.Unbreakable() ||
+                    unbreakableSword.AsBreakable().Unbreakable() || !sword.WithDurability(0).Empty() ||
+                    sword.WithAnvilCost(7).AnvilCost() != 7 ||
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Apple(), 1).WithAnvilCost(7).AnvilCost() != 0 ||
+                    snowballs.MaxCount() != 16 || fullSnowballs.Count() != 16 || remainingSnowballs.Count() != 2 ||
+                    !snowballs.Comparable(moreSnowballs) || snowballs.Equal(moreSnowballs) ||
+                    !zeroSword.Grow(1).Item()!.Equals(new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond)) ||
+                    persistentElytra.Damage(433).Empty())
+                {
+                    output.Error("Stack behavior failed.");
+                    return;
+                }
+
+                var black = Dragonfly.Item.ColourBlack();
+                var lavaChicken = Dragonfly.Sound.DiscLavaChicken();
+                if (black.String() != "black" || black.SilverString() != "black" || black.Uint8() != 15 ||
+                    black.RGBA() != new Dragonfly.Color.RGBA(29, 29, 33, 255) ||
+                    black.SignRGBA() != new Dragonfly.Color.RGBA(0, 0, 0, 255) ||
+                    Dragonfly.Sound.Dream().Name() != "Dream" ||
+                    Dragonfly.Potion.StrongSlowness().Uint8() != 42 ||
+                    lavaChicken.String() != "lava_chicken" || lavaChicken.DisplayName() != "Lava Chicken" ||
+                    lavaChicken.Author() != "Hyper Potions")
+                {
+                    output.Error("Stateful item value methods failed.");
+                    return;
+                }
+
+                var emptyBucket = new Dragonfly.Item.Bucket();
+                var waterContent = Dragonfly.Item.LiquidBucketContent(new Dragonfly.Block.Water(false, 0, false));
+                var waterBucket = new Dragonfly.Item.Bucket(waterContent);
+                var lavaBucket = new Dragonfly.Item.Bucket(
+                    Dragonfly.Item.LiquidBucketContent(new Dragonfly.Block.Lava(false, 0, false)));
+                var milkBucket = new Dragonfly.Item.Bucket(Dragonfly.Item.MilkBucketContent());
+                var customBucket = new Dragonfly.Item.Bucket(
+                    Dragonfly.Item.LiquidBucketContent(new KitchenLiquid()));
+                var customLavaBucket = new Dragonfly.Item.Bucket(
+                    Dragonfly.Item.LiquidBucketContent(new KitchenLiquid("lava")));
+                var (bucketLiquid, bucketLiquidFound) = waterContent.Liquid();
+                var lavaFuel = lavaBucket.FuelInfo();
+                if (!emptyBucket.Empty() || emptyBucket.MaxCount() != 16 ||
+                    emptyBucket.Content.String() != "" || emptyBucket.Content.LiquidType() != "milk" ||
+                    !bucketLiquidFound || bucketLiquid is not Dragonfly.Block.Water ||
+                    waterContent.String() != "water" || waterContent.LiquidType() != "water" ||
+                    waterBucket.Empty() || waterBucket.MaxCount() != 1 || waterBucket.AlwaysConsumable() ||
+                    customBucket.Content.String() != "kitchen" ||
+                    Dragonfly.Item.NewStack(customBucket, 1).MaxCount() != 1 ||
+                    customLavaBucket.FuelInfo().Duration != TimeSpan.FromSeconds(1000) ||
+                    milkBucket.Empty() || !milkBucket.AlwaysConsumable() || !milkBucket.CanConsume() ||
+                    milkBucket.ConsumeDuration() != TimeSpan.FromMilliseconds(1610) ||
+                    lavaFuel.Duration != TimeSpan.FromSeconds(1000) ||
+                    lavaFuel.Residue.Count() != 1 || lavaFuel.Residue.Item() is not Dragonfly.Item.Bucket residue ||
+                    !residue.Empty())
+                {
+                    output.Error("Bucket behavior failed.");
+                    return;
+                }
+
+                Dragonfly.Item.Stack[] variants =
+                [
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Arrow(Dragonfly.Potion.NightVision()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.BannerPattern(Dragonfly.Item.CreeperBannerPattern()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Dye(Dragonfly.Item.ColourBlack()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.GoatHorn(Dragonfly.Sound.Dream()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Potion(Dragonfly.Potion.StrongSlowness()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.LingeringPotion(Dragonfly.Potion.Healing()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.SplashPotion(Dragonfly.Potion.Harming()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.MusicDisc(Dragonfly.Sound.DiscLavaChicken()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.PotterySherd(Dragonfly.Item.SherdTypeScrape()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.SmithingTemplate(Dragonfly.Item.TemplateBolt()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.SuspiciousStew(Dragonfly.Item.NauseaStew()), 1),
+                    Dragonfly.Item.NewStack(emptyBucket, 1),
+                    Dragonfly.Item.NewStack(waterBucket, 1),
+                    Dragonfly.Item.NewStack(lavaBucket, 1),
+                    Dragonfly.Item.NewStack(milkBucket, 1),
+                ];
+                foreach (var variant in variants)
+                {
+                    inventory.SetItem(0, variant);
+                    if (!Equals(inventory.Item(0).Item(), variant.Item()))
+                    {
+                        output.Error("Stateful item round-trip failed.");
+                        return;
+                    }
+                }
+
+                var writable = new Dragonfly.Item.BookAndQuill("alpha")
+                    .InsertPage(1, "beta")
+                    .SetPage(0, "first")
+                    .SwapPages(0, 1);
+                var (writablePage, writablePageFound) = writable.Page(1);
+                if (!writablePageFound || writablePage != "first" || writable.TotalPages() != 2 ||
+                    writable.DeletePage(1).TotalPages() != 1)
+                {
+                    output.Error("Writable book behavior failed.");
+                    return;
+                }
+                var writableStack = Dragonfly.Item.NewStack(writable, 1);
+                var otherWritableStack = Dragonfly.Item.NewStack(new Dragonfly.Item.BookAndQuill("different"), 1);
+                var (unchangedWritable, remainingWritable) = writableStack.AddStack(otherWritableStack);
+                if (writableStack.Comparable(otherWritableStack) ||
+                    unchangedWritable.Count() != 1 || remainingWritable.Count() != 1)
+                {
+                    output.Error("Writable book comparison failed.");
+                    return;
+                }
+                inventory.SetItem(0, writableStack);
+                if (inventory.Item(0).Item() is not Dragonfly.Item.BookAndQuill storedWritable ||
+                    storedWritable.Page(0) != ("beta", true) || storedWritable.Page(1) != ("first", true))
+                {
+                    output.Error("Writable book round-trip failed.");
+                    return;
+                }
+
+                var written = new Dragonfly.Item.WrittenBook(
+                    "Kitchen", "bedrock-gophers", Dragonfly.Item.CopyGeneration(), "page one", "page two");
+                inventory.SetItem(0, Dragonfly.Item.NewStack(written, 1));
+                if (inventory.Item(0).Item() is not Dragonfly.Item.WrittenBook storedWritten ||
+                    storedWritten.Title != "Kitchen" || storedWritten.Author != "bedrock-gophers" ||
+                    storedWritten.Generation != Dragonfly.Item.CopyGeneration() ||
+                    storedWritten.Page(1) != ("page two", true))
+                {
+                    output.Error("Written book round-trip failed.");
+                    return;
+                }
+
+                var explosion = new Dragonfly.Item.FireworkExplosion
+                {
+                    Shape = Dragonfly.Item.FireworkShapeStar(),
+                    Colour = Dragonfly.Item.ColourBlack(),
+                    Fade = Dragonfly.Item.ColourRed(),
+                    Fades = true,
+                    Twinkle = true,
+                    Trail = true,
+                };
+                var firework = new Dragonfly.Item.Firework(TimeSpan.FromMilliseconds(1500), explosion);
+                var randomisedDuration = firework.RandomisedDuration();
+                var otherFirework = new Dragonfly.Item.Firework(TimeSpan.FromMilliseconds(2000), explosion);
+                if (!firework.OffHand() || explosion.Shape.Name() != "Star" || explosion.Shape.String() != "star" ||
+                    randomisedDuration < firework.Duration ||
+                    randomisedDuration >= firework.Duration + TimeSpan.FromMilliseconds(600) ||
+                    Dragonfly.Item.NewStack(firework, 1).Comparable(Dragonfly.Item.NewStack(otherFirework, 1)))
+                {
+                    output.Error("Firework behavior failed.");
+                    return;
+                }
+                inventory.SetItem(0, Dragonfly.Item.NewStack(firework, 1));
+                if (inventory.Item(0).Item() is not Dragonfly.Item.Firework storedFirework ||
+                    storedFirework.Duration != firework.Duration || storedFirework.Explosions.Length != 1 ||
+                    storedFirework.Explosions[0] != explosion)
+                {
+                    output.Error("Firework round-trip failed.");
+                    return;
+                }
+
+                var starExplosion = new Dragonfly.Item.FireworkExplosion
+                {
+                    Shape = Dragonfly.Item.FireworkShapeBurst(),
+                    Colour = Dragonfly.Item.ColourCyan(),
+                };
+                inventory.SetItem(0, Dragonfly.Item.NewStack(new Dragonfly.Item.FireworkStar(starExplosion), 1));
+                if (inventory.Item(0).Item() is not Dragonfly.Item.FireworkStar storedStar ||
+                    storedStar.FireworkExplosion != starExplosion)
+                {
+                    output.Error("Firework star round-trip failed.");
+                    return;
+                }
+
+                var chargedRocket = Dragonfly.Item.NewStack(firework, 1)
+                    .WithCustomName("Charged rocket")
+                    .WithLore("Nested stack");
+                var crossbow = new Dragonfly.Item.Crossbow(chargedRocket);
+                var crossbowDurability = crossbow.DurabilityInfo();
+                var crossbowFuel = crossbow.FuelInfo();
+                if (crossbow.MaxCount() != 1 || crossbowDurability.MaxDurability != 464 ||
+                    crossbowDurability.BrokenItem is null || !crossbowDurability.BrokenItem().Empty() ||
+                    crossbowFuel.Duration != TimeSpan.FromSeconds(15) || !crossbowFuel.Residue.Empty() ||
+                    crossbow.EnchantmentValue() != 1)
+                {
+                    output.Error("Crossbow behavior failed.");
+                    return;
+                }
+                inventory.SetItem(0, Dragonfly.Item.NewStack(crossbow, 1));
+                if (inventory.Item(0).Item() is not Dragonfly.Item.Crossbow storedCrossbow ||
+                    storedCrossbow.Item.CustomName() != "Charged rocket" ||
+                    storedCrossbow.Item.Lore() is not ["Nested stack"] ||
+                    storedCrossbow.Item.Item() is not Dragonfly.Item.Firework storedRocket ||
+                    storedRocket.Duration != firework.Duration || storedRocket.Explosions.Length != 1 ||
+                    storedRocket.Explosions[0] != explosion)
+                {
+                    output.Error("Crossbow round-trip failed.");
+                    return;
+                }
+
+                var armourTrim = new Dragonfly.Item.ArmourTrim(
+                    Dragonfly.Item.TemplateFlow(),
+                    new Dragonfly.Item.RedstoneWire());
+                var dyedLeather = new Dragonfly.Item.ArmourTierLeather(
+                    new Dragonfly.Color.RGBA(1, 2, 3, 255));
+                var dyedHelmet = new Dragonfly.Item.Helmet(dyedLeather, armourTrim);
+                var helmetDurability = dyedHelmet.DurabilityInfo();
+                var copperChestplate = new Dragonfly.Item.Chestplate(new Dragonfly.Item.ArmourTierCopper());
+                var copperSmelt = copperChestplate.SmeltInfo();
+                var redstoneMaterial = new Dragonfly.Item.RedstoneWire();
+                if (Dragonfly.Item.ArmourTiers().Length != 7 ||
+                    Dragonfly.Item.ArmourTrimMaterials().Length != 11 ||
+                    dyedLeather.BaseDurability() != 55d || dyedLeather.Name() != "leather" ||
+                    dyedHelmet.MaxCount() != 1 || dyedHelmet.DefencePoints() != 1d ||
+                    dyedHelmet.Toughness() != 0d || dyedHelmet.KnockBackResistance() != 0d ||
+                    dyedHelmet.EnchantmentValue() != 15 || helmetDurability.MaxDurability != 55 ||
+                    helmetDurability.BrokenItem is null || !helmetDurability.BrokenItem().Empty() ||
+                    !((Dragonfly.Item.HelmetType)dyedHelmet).Helmet() ||
+                    !dyedHelmet.RepairableBy(Dragonfly.Item.NewStack(new Dragonfly.Item.Leather(), 1)) ||
+                    dyedHelmet.RepairableBy(Dragonfly.Item.NewStack(new Dragonfly.Item.Diamond(), 1)) ||
+                    copperSmelt.Product.Item() is not Dragonfly.Item.CopperNugget ||
+                    copperSmelt.Product.Count() != 1 || copperSmelt.Experience != 0.1d ||
+                    copperSmelt.Food || !copperSmelt.Ores ||
+                    redstoneMaterial.TrimMaterial() != "redstone" || redstoneMaterial.MaterialColour() != "§m" ||
+                    dyedHelmet.WithTrim(default) is not Dragonfly.Item.Helmet untrimmed || !untrimmed.Trim.Zero() ||
+                    Dragonfly.Item.NewStack(dyedHelmet, 1).Comparable(Dragonfly.Item.NewStack(untrimmed, 1)))
+                {
+                    output.Error("Armour behavior failed.");
+                    return;
+                }
+
+                var armourItems = new List<World.Item>();
+                foreach (var tier in Dragonfly.Item.ArmourTiers())
+                {
+                    armourItems.Add(tier is Dragonfly.Item.ArmourTierLeather ? dyedHelmet : new Dragonfly.Item.Helmet(tier));
+                    armourItems.Add(new Dragonfly.Item.Chestplate(tier));
+                    armourItems.Add(new Dragonfly.Item.Leggings(tier));
+                    armourItems.Add(new Dragonfly.Item.Boots(tier));
+                }
+                foreach (var armourItem in armourItems)
+                {
+                    inventory.SetItem(0, Dragonfly.Item.NewStack(armourItem, 1));
+                    var storedArmour = inventory.Item(0).Item();
+                    if (storedArmour?.GetType() != armourItem.GetType() || !storedArmour.Equals(armourItem))
+                    {
+                        output.Error("Armour round-trip failed.");
+                        return;
+                    }
+                }
                 output.Printf(
-                    "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, added_empty={4}",
+                    "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, ender_slots={4}, added_empty={5}, variants={6}",
                     typed.Tier.Name,
                     stored.Count(),
                     held.Item() is Dragonfly.Item.Sword ? "true" : "false",
                     armour.Inventory().Size(),
-                    addedEmpty);
+                    enderChest.Size(),
+                    addedEmpty,
+                    variants.Length + 33);
             }
             finally
             {
                 inventory.SetItem(0, previous);
+                enderChest.SetItem(0, previousEnderItem);
                 player.SetHeldItems(mainHand, offHand);
             }
+        }
+    }
+
+    internal sealed class KitchenEffect : Cmd.Runnable
+    {
+        public Cmd.SubCommand Effect;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+
+            var timed = Dragonfly.Effect.New(Dragonfly.Effect.Speed, 2, TimeSpan.FromMilliseconds(1500));
+            var ticked = timed.TickDuration();
+            var ambient = Dragonfly.Effect.NewAmbient(
+                Dragonfly.Effect.Regeneration, 1, TimeSpan.FromSeconds(2)).WithoutParticles();
+            var infinite = Dragonfly.Effect.NewInfinite(Dragonfly.Effect.FireResistance, 1);
+            var instant = Dragonfly.Effect.NewInstant(Dragonfly.Effect.InstantHealth, 1);
+            var potent = Dragonfly.Effect.NewInstantWithPotency(Dragonfly.Effect.InstantDamage, 2, 0.5d);
+            var (speedID, speedRegistered) = Dragonfly.Effect.ID(Dragonfly.Effect.Speed);
+            var (speedType, speedFound) = Dragonfly.Effect.ByID(speedID);
+            var (mixed, mixedAmbient) = Dragonfly.Effect.ResultingColour([timed, infinite]);
+            var potions = Dragonfly.Potion.All();
+            var turtle = Dragonfly.Potion.TurtleMaster().Effects();
+            var stews = Dragonfly.Item.StewTypes();
+            var saturation = Dragonfly.Item.SaturationDandelionStew().Effects();
+            if (ticked.Duration() != TimeSpan.FromMilliseconds(1450) || ticked.Tick() != 1 ||
+                ticked.Type() != Dragonfly.Effect.Speed || timed.ParticlesHidden() ||
+                !ambient.Ambient() || !ambient.ParticlesHidden() || !infinite.Infinite() ||
+                instant.Type() != Dragonfly.Effect.InstantHealth || potent.Level() != 2 ||
+                !speedRegistered || !speedFound || speedType != Dragonfly.Effect.Speed ||
+                mixed == default || mixedAmbient || potions.Count != 43 ||
+                Dragonfly.Potion.From(256) != Dragonfly.Potion.Water() || turtle.Count != 2 ||
+                Dragonfly.Potion.From(43).Uint8() != 43 || Dragonfly.Potion.From(43).Effects().Count != 0 ||
+                turtle[0].Type() != Dragonfly.Effect.Resistance || turtle[1].Type() != Dragonfly.Effect.Slowness ||
+                stews.Count != 13 || saturation.Count != 1 ||
+                saturation[0].Duration() != TimeSpan.FromMilliseconds(300))
+            {
+                output.Error("Effect behavior failed.");
+                return;
+            }
+
+            var (previous, hadPrevious) = player.Effect(Dragonfly.Effect.Regeneration);
+            try
+            {
+                player.AddEffect(ambient);
+                var (active, found) = player.Effect(Dragonfly.Effect.Regeneration);
+                var all = player.Effects();
+                if (!found || active.Level() != 1 || !active.Ambient() || !active.ParticlesHidden() ||
+                    !all.Any(value => value.Type() == Dragonfly.Effect.Regeneration))
+                {
+                    output.Error("Player effect round-trip failed.");
+                    return;
+                }
+            }
+            finally
+            {
+                player.RemoveEffect(Dragonfly.Effect.Regeneration);
+                if (hadPrevious) player.AddEffect(previous);
+            }
+
+            output.Printf("effects=28, potions={0}, stews={1}, active=true", potions.Count, stews.Count);
         }
     }
 
