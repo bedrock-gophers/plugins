@@ -537,6 +537,154 @@ func TestInspectInstrumentsRejectsASTDrift(t *testing.T) {
 	}
 }
 
+func TestInspectGameModesUsesASTAndLiveRegistry(t *testing.T) {
+	command := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/df-mc/dragonfly")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := string(bytes.TrimSpace(output))
+	spec, err := inspectGameModes(filepath.Join(directory, "server", "world", "game_mode.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(spec.Methods, gameModeMethodNames) || len(spec.Modes) != 4 {
+		t.Fatalf("game mode spec = %+v", spec)
+	}
+	wantMasks := []uint64{0x6b, 0xfd, 0x6a, 0x10}
+	for index, mode := range spec.Modes {
+		if mode.Name != gameModeVariableNames[index] || mode.ID != index || gameModeCapabilityMask(mode.Capabilities) != wantMasks[index] {
+			t.Fatalf("game mode %d = %+v", index, mode)
+		}
+	}
+	generated := string(generateGameModes(spec))
+	for _, expected := range []string{
+		"public interface GameMode",
+		"public static readonly GameMode GameModeSurvival = new BuiltinGameMode(0, 0x6bUL);",
+		"public static readonly GameMode GameModeSpectator = new BuiltinGameMode(3, 0x10UL);",
+		"public static (GameMode GameMode, bool Ok) GameModeByID(int id)",
+		"_ => (GameModeSurvival, false)",
+		"public static (int ID, bool Ok) GameModeID(GameMode mode)",
+		"internal static long GameModeDescriptor(GameMode mode)",
+		"BuiltinGameModeFlag | (uint)builtin.ID",
+		"if (mode.InstantPortalTravel()) capabilities |= 1UL << 7;",
+		"internal static GameMode GameModeFromDescriptor(long descriptor)",
+		"if ((value & ~CustomGameModeMask) != 0)",
+		"if (!ok) throw new InvalidOperationException(\"invalid game mode descriptor\");",
+		"private sealed class BuiltinGameMode",
+	} {
+		if !strings.Contains(generated, expected) {
+			t.Fatalf("generated game mode output missing %q:\n%s", expected, generated)
+		}
+	}
+	playerMethods, err := inspectPlayerGameModeMethods(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	playerOutput := string(generatePlayerGameModes(playerMethods))
+	for _, expected := range []string{
+		"public void SetGameMode(World.GameMode mode)",
+		"Integer = World.GameModeDescriptor(mode)",
+		"public World.GameMode GameMode() => PluginBridge.Host.PlayerGameMode(_invocation, Id);",
+	} {
+		if !strings.Contains(playerOutput, expected) {
+			t.Fatalf("generated player game mode output missing %q:\n%s", expected, playerOutput)
+		}
+	}
+}
+
+func TestInspectGameModesRejectsASTDrift(t *testing.T) {
+	for name, test := range map[string]struct {
+		mutate   func(string) string
+		expected string
+	}{
+		"interface": {
+			mutate: func(source string) string {
+				return strings.Replace(source, "AllowsEditing() bool", "CanEdit() bool", 1)
+			},
+			expected: "world.GameMode methods changed",
+		},
+		"registry": {
+			mutate: func(source string) string {
+				return strings.Replace(source, "0: GameModeSurvival", "0: GameModeCreative", 1)
+			},
+			expected: "invalid ID/name",
+		},
+		"lookup": {
+			mutate: func(source string) string {
+				return strings.Replace(source, "GameModeByID(id int)", "GameModeByID(id int64)", 1)
+			},
+			expected: "GameModeByID signature changed",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "game_mode.go")
+			if err := os.WriteFile(path, []byte(test.mutate(gameModeFixtureSource())), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := inspectGameModes(path)
+			if err == nil || !strings.Contains(err.Error(), test.expected) {
+				t.Fatalf("expected %q drift error, got %v", test.expected, err)
+			}
+		})
+	}
+}
+
+func gameModeFixtureSource() string {
+	return `package world
+type GameMode interface {
+	AllowsEditing() bool
+	AllowsTakingDamage() bool
+	CreativeInventory() bool
+	HasCollision() bool
+	AllowsFlying() bool
+	AllowsInteraction() bool
+	Visible() bool
+	InstantPortalTravel() bool
+}
+var (
+	GameModeSurvival survival
+	GameModeCreative creative
+	GameModeAdventure adventure
+	GameModeSpectator spectator
+)
+var gameModeReg = newGameModeRegistry(map[int]GameMode{
+	0: GameModeSurvival,
+	1: GameModeCreative,
+	2: GameModeAdventure,
+	3: GameModeSpectator,
+})
+func GameModeByID(id int) (GameMode, bool) { return nil, false }
+func GameModeID(mode GameMode) (int, bool) { return 0, false }
+type survival struct{}
+type creative struct{}
+type adventure struct{}
+type spectator struct{}
+`
+}
+
+func TestInspectPlayerGameModeMethodsRejectsDrift(t *testing.T) {
+	for name, source := range map[string]string{
+		"setter parameter": `package player
+func (p *Player) SetGameMode(value world.GameMode) {}
+func (p *Player) GameMode() world.GameMode { return nil }`,
+		"getter result": `package player
+func (p *Player) SetGameMode(mode world.GameMode) {}
+func (p *Player) GameMode() int { return 0 }`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "player.go")
+			if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := inspectPlayerGameModeMethods(path)
+			if err == nil || !strings.Contains(err.Error(), "signature changed") {
+				t.Fatalf("expected player game mode signature drift error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestInspectWorldTxRejectsAddParticleDrift(t *testing.T) {
 	for name, declaration := range map[string]string{
 		"position name": "func (tx *Tx) AddParticle(position mgl64.Vec3, p Particle) {}",

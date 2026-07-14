@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 5;
-    public const uint HostVersion = 27;
+    public const uint HostVersion = 28;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerMoveEvent = 1;
@@ -106,7 +106,7 @@ public unsafe struct HostApi
     public void* PlayerTransform;
     public void* PlayerRotation;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, PlayerStateValue, int> PlayerStateSet;
-    public void* PlayerStateGet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, PlayerStateValue*, int> PlayerStateGet;
     public void* PlayerEffect;
     public void* PlayerEntityVisibility;
     public void* PlayerSkinOpen;

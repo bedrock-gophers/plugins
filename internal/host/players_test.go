@@ -28,6 +28,10 @@ func TestPlayersResolveFreshTransaction(t *testing.T) {
 		player.Config{UUID: playerUUID, Name: "Transactional", Position: mgl64.Vec3{}},
 	)
 	players := NewPlayers()
+	creativeDescriptor, ok := encodeGameModeDescriptor(world.GameModeCreative)
+	if !ok {
+		t.Fatal("encode creative game mode")
+	}
 	var id native.PlayerID
 	if err := w.Do(func(tx *world.Tx) {
 		id = players.Register(tx.AddEntity(handle).(*player.Player), 2)
@@ -37,7 +41,7 @@ func TestPlayersResolveFreshTransaction(t *testing.T) {
 	changed := false
 	if err := w.Do(func(tx *world.Tx) {
 		players.WithInvocation(tx, func(invocation native.InvocationID) {
-			changed = players.SetPlayerState(invocation, id, native.PlayerStateGameMode, native.PlayerStateValue{Integer: 1})
+			changed = players.SetPlayerState(invocation, id, native.PlayerStateGameMode, native.PlayerStateValue{Integer: creativeDescriptor})
 		})
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)
@@ -94,6 +98,114 @@ func TestPlayersInvocationRegistryIsExactAndExpires(t *testing.T) {
 	if _, ok := players.InvocationTx(0); ok {
 		t.Fatal("zero invocation resolved")
 	}
+}
+
+type testCustomGameMode struct {
+	flags uint8
+	data  []byte
+}
+
+func (m testCustomGameMode) AllowsEditing() bool       { return m.flags&(1<<0) != 0 }
+func (m testCustomGameMode) AllowsTakingDamage() bool  { return m.flags&(1<<1) != 0 }
+func (m testCustomGameMode) CreativeInventory() bool   { return m.flags&(1<<2) != 0 }
+func (m testCustomGameMode) HasCollision() bool        { return m.flags&(1<<3) != 0 }
+func (m testCustomGameMode) AllowsFlying() bool        { return m.flags&(1<<4) != 0 }
+func (m testCustomGameMode) AllowsInteraction() bool   { return m.flags&(1<<5) != 0 }
+func (m testCustomGameMode) Visible() bool             { return m.flags&(1<<6) != 0 }
+func (m testCustomGameMode) InstantPortalTravel() bool { return m.flags&(1<<7) != 0 }
+
+func TestGameModeDescriptorsRoundTrip(t *testing.T) {
+	builtins := []world.GameMode{
+		world.GameModeSurvival,
+		world.GameModeCreative,
+		world.GameModeAdventure,
+		world.GameModeSpectator,
+	}
+	for id, want := range builtins {
+		descriptorBits := gameModeBuiltinFlag | uint64(id)
+		descriptor := int64(descriptorBits)
+		decoded, ok := decodeGameModeDescriptor(descriptor)
+		if !ok {
+			t.Fatalf("decode builtin %d", id)
+		}
+		decodedID, registered := world.GameModeID(decoded)
+		if !registered || decodedID != id {
+			t.Fatalf("decoded builtin %d = %T, id=%d, registered=%v", id, decoded, decodedID, registered)
+		}
+		encoded, ok := encodeGameModeDescriptor(want)
+		if !ok || encoded != descriptor {
+			t.Fatalf("encode builtin %d = %#x, %v, want %#x", id, uint64(encoded), ok, descriptorBits)
+		}
+	}
+
+	for bits := uint64(0); bits <= gameModeCustomMask; bits++ {
+		decoded, ok := decodeGameModeDescriptor(int64(bits))
+		if !ok {
+			t.Fatalf("decode custom %#x", bits)
+		}
+		if _, registered := world.GameModeID(decoded); registered {
+			t.Fatalf("custom %#x resolved as a registered game mode", bits)
+		}
+		encoded, ok := encodeGameModeDescriptor(decoded)
+		if !ok || uint64(encoded) != bits {
+			t.Fatalf("encode custom %#x = %#x, %v", bits, uint64(encoded), ok)
+		}
+	}
+
+	// A custom implementation need not be comparable. Dragonfly's registry uses
+	// interface keys, so the host must fall back to capability encoding without
+	// leaking the resulting map-key panic.
+	custom := testCustomGameMode{flags: 0xa5, data: []byte{1}}
+	encoded, ok := encodeGameModeDescriptor(custom)
+	if !ok || uint64(encoded) != 0xa5 {
+		t.Fatalf("encode unregistered game mode = %#x, %v", uint64(encoded), ok)
+	}
+
+	for _, descriptorBits := range []uint64{
+		1 << 8,
+		1 << 62,
+		gameModeBuiltinFlag | 999,
+	} {
+		if mode, ok := decodeGameModeDescriptor(int64(descriptorBits)); ok || mode != nil {
+			t.Fatalf("invalid descriptor %#x decoded as %T, %v", descriptorBits, mode, ok)
+		}
+	}
+	if _, ok := encodeGameModeDescriptor(nil); ok {
+		t.Fatal("nil game mode encoded")
+	}
+}
+
+func TestPlayersReadAndSetCustomGameModeDescriptor(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		id := players.Register(player, 1)
+		invocation, leave := players.BeginInvocation(player.Tx())
+		defer leave()
+
+		player.SetGameMode(testCustomGameMode{flags: 0xa5, data: []byte{1}})
+		state, ok := players.PlayerState(invocation, id, native.PlayerStateGameMode)
+		if !ok || uint64(state.Integer) != 0xa5 {
+			t.Fatalf("custom game-mode state = %#x, %v", uint64(state.Integer), ok)
+		}
+		if !players.SetPlayerState(invocation, id, native.PlayerStateGameMode, native.PlayerStateValue{Integer: 0x5a}) {
+			t.Fatal("set custom game mode")
+		}
+		mode := player.GameMode()
+		if mode.AllowsEditing() || !mode.AllowsTakingDamage() || mode.CreativeInventory() || !mode.HasCollision() ||
+			!mode.AllowsFlying() || mode.AllowsInteraction() || !mode.Visible() || mode.InstantPortalTravel() {
+			t.Fatalf("custom game-mode capabilities do not match descriptor: %T", mode)
+		}
+
+		before := player.GameMode()
+		for _, descriptorBits := range []uint64{1 << 8, 1 << 62, gameModeBuiltinFlag | 999} {
+			if players.SetPlayerState(invocation, id, native.PlayerStateGameMode, native.PlayerStateValue{Integer: int64(descriptorBits)}) {
+				t.Fatalf("accepted invalid game-mode descriptor %#x", descriptorBits)
+			}
+			if player.GameMode() != before {
+				t.Fatalf("invalid descriptor %#x changed the game mode", descriptorBits)
+			}
+		}
+	})
 }
 
 func TestPlayersTransformsPlayer(t *testing.T) {
@@ -197,7 +309,11 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		if !ok || healed != 3 {
 			t.Fatalf("healed = %v ok=%v", healed, ok)
 		}
-		if !players.SetPlayerState(invocation, id, native.PlayerStateGameMode, native.PlayerStateValue{Integer: 1}) {
+		creativeDescriptor, ok := encodeGameModeDescriptor(world.GameModeCreative)
+		if !ok {
+			t.Fatal("encode creative game mode")
+		}
+		if !players.SetPlayerState(invocation, id, native.PlayerStateGameMode, native.PlayerStateValue{Integer: creativeDescriptor}) {
 			t.Fatal("game-mode change failed")
 		}
 		gameMode, _ := players.PlayerState(invocation, id, native.PlayerStateGameMode)
@@ -209,7 +325,7 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 		scale, _ := players.PlayerState(invocation, id, native.PlayerStateScale)
 		invisible, _ := players.PlayerState(invocation, id, native.PlayerStateInvisible)
 		immobile, _ := players.PlayerState(invocation, id, native.PlayerStateImmobile)
-		if gameMode.Integer != 1 || food.Integer != 12 || maxHealth.Number != 40 || health.Number != 19 || level.Integer != 12 || math.Abs(progress.Number-0.5) > 0.02 || scale.Number != 1.5 || invisible.Integer != 1 || immobile.Integer != 1 {
+		if gameMode.Integer != creativeDescriptor || food.Integer != 12 || maxHealth.Number != 40 || health.Number != 19 || level.Integer != 12 || math.Abs(progress.Number-0.5) > 0.02 || scale.Number != 1.5 || invisible.Integer != 1 || immobile.Integer != 1 {
 			t.Fatalf("game mode=%+v food=%+v max=%+v health=%+v level=%+v progress=%+v scale=%+v invisible=%+v immobile=%+v", gameMode, food, maxHealth, health, level, progress, scale, invisible, immobile)
 		}
 		if !players.SendPlayerText(invocation, id, native.PlayerTextNameTag, "Rust Player") || player.NameTag() != "Rust Player" {

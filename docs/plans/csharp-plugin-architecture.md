@@ -23,7 +23,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
 
 1. NativeAOT loading and `OnEnable`/`OnDisable`.
 2. `player.Handler` events. Movement, chat, food loss, jump, teleport, sprint/sneak toggles, punch-air, and quit are implemented.
-3. Player methods and commands. Command interfaces and the implemented `Player` method surface are generated from Dragonfly's Go AST. C# uses `Cmd.New`/`Cmd.Register`, one `Cmd.Runnable` per overload, and reflected public fields as Dragonfly uses reflected Go struct fields. Supported command fields include subcommands, native enums, dynamic `Cmd.Enum` values, players, vectors, optional values, and `Cmd.Varargs`. The generator roots runnable fields and field types for NativeAOT; runnable types use `internal` visibility and require no linker annotations. Bedrock-facing subcommands and enum/player suggestions are always lowercase. `Player.SetGameMode(World.GameMode)` and Dragonfly's four built-in game-mode values are available. The text slice includes `Message`, `SendPopup`, `SendTip`, `SendJukeboxPopup`, `SetNameTag`, and `Disconnect`. `Messagef` remains absent until Go `fmt.Sprintf` semantics can be preserved honestly.
+3. Player methods and commands. Command interfaces and the implemented `Player` method surface are generated from Dragonfly's Go AST. C# uses `Cmd.New`/`Cmd.Register`, one `Cmd.Runnable` per overload, and reflected public fields as Dragonfly uses reflected Go struct fields. Supported command fields include subcommands, native enums, dynamic `Cmd.Enum` values, players, vectors, optional values, and `Cmd.Varargs`. The generator roots runnable fields and field types for NativeAOT; runnable types use `internal` visibility and require no linker annotations. Bedrock-facing subcommands and enum/player suggestions are always lowercase. The generated game-mode slice includes the exact `World.GameMode` interface, four registered values, `GameModeByID`, `GameModeID`, `Player.SetGameMode`, and `Player.GameMode`. Custom C# game modes cross the private ABI as their eight Dragonfly capabilities and remain unregistered, matching raw Dragonfly behavior. The text slice includes `Message`, `SendPopup`, `SendTip`, `SendJukeboxPopup`, `SetNameTag`, and `Disconnect`. `Messagef` remains absent until Go `fmt.Sprintf` semantics can be preserved honestly.
 4. World and block parity. The first landed slice generates `Cube.Pos`, `Cube.Range`,
    `Cube.Face`, `World.Block`, `World.SetOpts`, `World.Tx.Range`, `World.Tx.Block`,
    `World.Tx.BlockLoaded`, `World.Tx.BlocksWithin`, `World.Tx.SetBlock`,
@@ -45,8 +45,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    plugins never handle identifiers, NBT, numeric biome IDs, world handles, iterator handles, or
    host errors. `Liquid` preserves Dragonfly's `(Liquid, bool)` result, and passing `null` to
    `SetLiquid` removes the liquid. Host
-   ABI 27 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
-   particles, and the transaction owner's current tick without exposing them publicly.
+   ABI 28 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
+   particles, registered/custom game-mode capabilities, and the transaction owner's current tick
+   without exposing them publicly.
    `ScheduleBlockUpdate`
    maps Go `time.Duration` to C# `TimeSpan`
    and preserves the transaction-owned call. `BuildStructure` remains absent until its synchronous `At` and
@@ -73,6 +74,8 @@ temperature and weather query in this slice.
 `/kitchen tick` reads Dragonfly's transaction-owned current tick; it does not alias world day-time.
 `/kitchen particle` emits all 20 particle types and exercises every one of Dragonfly's 16 note
 instruments through the transaction-owned `AddParticle` call.
+`/kitchen game-mode` exercises registered lookup, player reads, and a custom capability-backed
+game mode.
 NativeAOT and host-call tests verify the public shape, lazy iterator cleanup, and transaction-safe
 transport.
 

@@ -37,6 +37,20 @@ internal static unsafe class PluginBridge
             _ = api->PlayerStateSet(api->Context, invocation, player, kind, value);
         }
 
+        internal static PlayerStateValue GetPlayerState(ulong invocation, PlayerId player, uint kind)
+        {
+            var api = Api;
+            if (api is null || api->PlayerStateGet == null)
+                throw new InvalidOperationException("player is unavailable");
+            PlayerStateValue value;
+            if (api->PlayerStateGet(api->Context, invocation, player, kind, &value) != Abi.Ok)
+                throw new InvalidOperationException("player is no longer available");
+            return value;
+        }
+
+        internal static World.GameMode PlayerGameMode(ulong invocation, PlayerId player) =>
+            World.GameModeFromDescriptor(GetPlayerState(invocation, player, 0).Integer);
+
         internal static World.Block WorldBlock(ulong invocation, Cube.Pos position)
         {
             var api = Api;

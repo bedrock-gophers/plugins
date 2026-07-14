@@ -9,7 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 5u
-#define DF_HOST_ABI_VERSION 27u
+// Version 28 changes player game-mode state payload semantics. The host table layout is unchanged.
+#define DF_HOST_ABI_VERSION 28u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 

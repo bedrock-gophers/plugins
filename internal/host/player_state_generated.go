@@ -7,7 +7,6 @@ import (
 
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/player"
-	"github.com/df-mc/dragonfly/server/world"
 )
 
 func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, message string) bool {
@@ -35,7 +34,7 @@ func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, messag
 func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value native.PlayerStateValue) bool {
 	switch kind {
 	case native.PlayerStateGameMode:
-		mode, ok := world.GameModeByID(int(value.Integer))
+		mode, ok := decodeGameModeDescriptor(value.Integer)
 		if !ok {
 			return false
 		}
@@ -92,8 +91,8 @@ func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value
 func readPlayerState(connected *player.Player, kind native.PlayerStateKind) (native.PlayerStateValue, bool) {
 	switch kind {
 	case native.PlayerStateGameMode:
-		value, ok := world.GameModeID(connected.GameMode())
-		return native.PlayerStateValue{Integer: int64(value)}, ok
+		value, ok := encodeGameModeDescriptor(connected.GameMode())
+		return native.PlayerStateValue{Integer: value}, ok
 	case native.PlayerStateFood:
 		return native.PlayerStateValue{Integer: int64(connected.Food())}, true
 	case native.PlayerStateMaxHealth:

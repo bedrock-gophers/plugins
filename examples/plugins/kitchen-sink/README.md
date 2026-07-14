@@ -15,6 +15,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
   `/kitchen biome`;
 - transaction-owned `CurrentTick` in `/kitchen tick`;
 - all 20 generated particle types and all 16 typed note instruments in `/kitchen particle`;
+- registered lookup, player reads, and custom `World.GameMode` in `/kitchen game-mode`;
 - plugin lifecycle.
 
 New APIs belong here only when the example can do something real with them. This plugin is not a

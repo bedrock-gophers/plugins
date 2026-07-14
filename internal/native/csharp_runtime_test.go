@@ -12,6 +12,8 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft/nbt"
 )
 
+const csharpBuiltinGameModeDescriptor = int64(-1 << 63)
+
 func openCSharpRuntime(t testing.TB) *Runtime {
 	return openCSharpRuntimeWithHost(t, nil)
 }
@@ -67,14 +69,21 @@ func TestCSharpVanillaGameModeCommand(t *testing.T) {
 		t.Fatalf("gamemode descriptor = %#v", command)
 	}
 	player := PlayerID{UUID: [16]byte{3}, Generation: 9}
-	output, err := pluginRuntime.HandleCommand(command.Index, CommandInput{
-		Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
-		Arguments: []string{"creative"}, OnlinePlayers: []CommandPlayer{{Player: player, Name: "Danick"}},
-	})
-	if err != nil || output.Failed || output.Message != "Set Danick's game mode to creative." {
-		t.Fatalf("output=%#v error=%v", output, err)
+	for id, mode := range []string{"survival", "creative", "adventure", "spectator"} {
+		output, err := pluginRuntime.HandleCommand(command.Index, CommandInput{
+			Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+			Arguments: []string{mode}, OnlinePlayers: []CommandPlayer{{Player: player, Name: "Danick"}},
+		})
+		if err != nil || output.Failed || output.Message != "Set Danick's game mode to "+mode+"." {
+			t.Fatalf("mode %s: output=%#v error=%v", mode, output, err)
+		}
+		if got := host.values[len(host.values)-1].Integer; got != csharpBuiltinGameModeDescriptor|int64(id) {
+			t.Fatalf("mode %s descriptor=%d, want %d", mode, got, csharpBuiltinGameModeDescriptor|int64(id))
+		}
 	}
-	if !slices.Equal(host.states, []PlayerStateKind{PlayerStateGameMode}) || len(host.values) != 1 || host.values[0].Integer != 1 {
+	if !slices.Equal(host.states, []PlayerStateKind{
+		PlayerStateGameMode, PlayerStateGameMode, PlayerStateGameMode, PlayerStateGameMode,
+	}) || len(host.values) != 4 {
 		t.Fatalf("game mode host calls: states=%v values=%#v", host.states, host.values)
 	}
 }
@@ -386,7 +395,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 11 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 12 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -649,6 +658,36 @@ func TestCSharpReflectedCommands(t *testing.T) {
 			t.Fatalf("particle call %d=%+v, want invocation=42 world=0 position=%+v particle=%+v",
 				index, call, base.SourcePosition, wantParticles[index])
 		}
+	}
+
+	host.state = PlayerStateValue{Integer: csharpBuiltinGameModeDescriptor | 2}
+	input = base
+	input.Overload = 11
+	input.Arguments = []string{"game-mode"}
+	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
+	if err != nil || output.Failed || output.Message != "game_mode_id=2, registered=true, round_trip=true, custom_registered=false" {
+		t.Fatalf("game mode output=%#v error=%v", output, err)
+	}
+	if !slices.Equal(host.reads, []PlayerStateKind{PlayerStateGameMode}) ||
+		host.state.Integer != csharpBuiltinGameModeDescriptor|2 {
+		t.Fatalf("game mode getter: reads=%v descriptor=%d", host.reads, host.state.Integer)
+	}
+	if len(host.states) < 2 || !slices.Equal(host.states[len(host.states)-2:], []PlayerStateKind{PlayerStateGameMode, PlayerStateGameMode}) ||
+		len(host.values) < 2 || host.values[len(host.values)-2].Integer != 0x6b ||
+		host.values[len(host.values)-1].Integer != csharpBuiltinGameModeDescriptor|2 {
+		t.Fatalf("custom game mode setter: states=%v values=%#v", host.states, host.values)
+	}
+
+	host.state = PlayerStateValue{Integer: 0xa5}
+	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
+	if err != nil || output.Failed || output.Message != "game_mode_id=0, registered=false, round_trip=false, custom_registered=false" {
+		t.Fatalf("custom game mode output=%#v error=%v", output, err)
+	}
+	if len(host.reads) < 2 || !slices.Equal(host.reads[len(host.reads)-2:], []PlayerStateKind{PlayerStateGameMode, PlayerStateGameMode}) {
+		t.Fatalf("custom game mode getter reads=%v", host.reads)
+	}
+	if len(host.values) < 2 || host.values[len(host.values)-2].Integer != 0x6b || host.values[len(host.values)-1].Integer != 0xa5 {
+		t.Fatalf("custom game mode round trip values=%#v", host.values)
 	}
 
 	options, err := pluginRuntime.CommandEnumOptions(kitchen.Index, 5, 1, CommandEnumContext{

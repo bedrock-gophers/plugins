@@ -51,13 +51,6 @@ public sealed partial class Player : Cmd.Source, Cmd.NamedTarget
         _ => value.ToString() ?? "",
     };
 
-    public void SetGameMode(World.GameMode mode)
-    {
-        ArgumentNullException.ThrowIfNull(mode);
-        if (!World.GameModeId(mode, out var id)) return;
-        PluginBridge.Host.SetPlayerState(_invocation, Id, 0, new PlayerStateValue { Integer = id });
-    }
-
     internal ulong Invocation => _invocation;
 
     internal static unsafe Player FromCommandArgument(string argument, ulong invocation)

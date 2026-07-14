@@ -79,6 +79,7 @@ _Static_assert(offsetof(DfWorldOpenSpecV1, open_mode) == 48, "DfWorldOpenSpecV1.
 _Static_assert(offsetof(DfWorldOpenSpecV1, read_only) == 76, "DfWorldOpenSpecV1.read_only ABI offset changed");
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
 _Static_assert(sizeof(DfHostApiV27) == 656, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 28u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");

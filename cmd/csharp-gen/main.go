@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -99,6 +100,36 @@ type particleSpec struct {
 	Types       []particleType
 	Instruments []instrumentSpec
 	RGBAFields  []parameter
+}
+
+type gameModeValue struct {
+	Name         string
+	PrivateType  string
+	ID           int
+	Capabilities []bool
+}
+
+type gameModeSpec struct {
+	Methods []string
+	Modes   []gameModeValue
+}
+
+var gameModeMethodNames = []string{
+	"AllowsEditing",
+	"AllowsTakingDamage",
+	"CreativeInventory",
+	"HasCollision",
+	"AllowsFlying",
+	"AllowsInteraction",
+	"Visible",
+	"InstantPortalTravel",
+}
+
+var gameModeVariableNames = []string{
+	"GameModeSurvival",
+	"GameModeCreative",
+	"GameModeAdventure",
+	"GameModeSpectator",
 }
 
 var particleKindNames = []string{
@@ -254,6 +285,14 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	gameModes, err := inspectGameModes(filepath.Join(directory, "server", "world", "game_mode.go"))
+	if err != nil {
+		fatal(err)
+	}
+	playerGameModes, err := inspectPlayerGameModeMethods(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		fatal(err)
+	}
 	files := []generatedFile{
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Handler.g.cs"),
@@ -286,6 +325,14 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Particle.Types.g.cs"),
 			Content: generateParticles(particles),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "GameMode.Types.g.cs"),
+			Content: generateGameModes(gameModes),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.GameMode.g.cs"),
+			Content: generatePlayerGameModes(playerGameModes),
 		},
 	}
 	if err := syncGeneratedFiles(files, *check); err != nil {
@@ -921,6 +968,257 @@ func biomeEmptyStruct(spec *ast.TypeSpec) (*ast.StructType, bool) {
 	}
 	structure, ok := spec.Type.(*ast.StructType)
 	return structure, ok
+}
+
+func inspectGameModes(path string) (gameModeSpec, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return gameModeSpec{}, err
+	}
+	types := map[string]*ast.TypeSpec{}
+	variables := map[string]string{}
+	functions := map[string]*ast.FuncDecl{}
+	var registry *ast.CompositeLit
+	for _, declaration := range file.Decls {
+		switch value := declaration.(type) {
+		case *ast.GenDecl:
+			for _, raw := range value.Specs {
+				switch spec := raw.(type) {
+				case *ast.TypeSpec:
+					types[spec.Name.Name] = spec
+				case *ast.ValueSpec:
+					if identifier, ok := spec.Type.(*ast.Ident); ok {
+						for _, name := range spec.Names {
+							if name.IsExported() {
+								variables[name.Name] = identifier.Name
+							}
+						}
+					}
+					for index, name := range spec.Names {
+						if name.Name != "gameModeReg" || index >= len(spec.Values) {
+							continue
+						}
+						call, ok := spec.Values[index].(*ast.CallExpr)
+						if ok && len(call.Args) == 1 {
+							registry, _ = call.Args[0].(*ast.CompositeLit)
+						}
+					}
+				}
+			}
+		case *ast.FuncDecl:
+			if value.Recv == nil && value.Name.IsExported() {
+				functions[value.Name.Name] = value
+			}
+		}
+	}
+	methods, err := inspectGameModeInterface(types["GameMode"])
+	if err != nil {
+		return gameModeSpec{}, err
+	}
+	if !validGameModeLookupFunction(functions["GameModeByID"], true) {
+		return gameModeSpec{}, fmt.Errorf("Dragonfly world.GameModeByID signature changed")
+	}
+	if !validGameModeLookupFunction(functions["GameModeID"], false) {
+		return gameModeSpec{}, fmt.Errorf("Dragonfly world.GameModeID signature changed")
+	}
+	entries, err := inspectGameModeRegistry(registry)
+	if err != nil {
+		return gameModeSpec{}, err
+	}
+	if len(entries) != len(gameModeVariableNames) {
+		return gameModeSpec{}, fmt.Errorf("Dragonfly game mode registry has %d entries, want exactly %d", len(entries), len(gameModeVariableNames))
+	}
+	live := map[string]world.GameMode{
+		"GameModeSurvival":  world.GameModeSurvival,
+		"GameModeCreative":  world.GameModeCreative,
+		"GameModeAdventure": world.GameModeAdventure,
+		"GameModeSpectator": world.GameModeSpectator,
+	}
+	for _, name := range gameModeVariableNames {
+		if variables[name] == "" {
+			return gameModeSpec{}, fmt.Errorf("Dragonfly world.%s variable declaration not found", name)
+		}
+		structure, ok := biomeEmptyStruct(types[variables[name]])
+		if !ok || len(structure.Fields.List) != 0 {
+			return gameModeSpec{}, fmt.Errorf("Dragonfly world.%s concrete type is not an empty private struct", name)
+		}
+	}
+
+	result := gameModeSpec{Methods: methods, Modes: make([]gameModeValue, 0, len(entries))}
+	for _, entry := range entries {
+		mode := live[entry.Name]
+		if mode == nil {
+			return gameModeSpec{}, fmt.Errorf("Dragonfly game mode registry contains unexpected %s", entry.Name)
+		}
+		lookedUp, ok := world.GameModeByID(entry.ID)
+		if !ok || lookedUp != mode {
+			return gameModeSpec{}, fmt.Errorf("Dragonfly live game mode ID %d does not resolve to %s", entry.ID, entry.Name)
+		}
+		id, ok := world.GameModeID(mode)
+		if !ok || id != entry.ID {
+			return gameModeSpec{}, fmt.Errorf("Dragonfly live %s reverse ID is %d, %v", entry.Name, id, ok)
+		}
+		typeOf := reflect.TypeOf(mode)
+		if typeOf.Name() != variables[entry.Name] {
+			return gameModeSpec{}, fmt.Errorf("Dragonfly live %s type is %s, want %s", entry.Name, typeOf.Name(), variables[entry.Name])
+		}
+		capabilities, err := liveGameModeCapabilities(mode, methods)
+		if err != nil {
+			return gameModeSpec{}, fmt.Errorf("Dragonfly live %s: %w", entry.Name, err)
+		}
+		result.Modes = append(result.Modes, gameModeValue{
+			Name: entry.Name, PrivateType: variables[entry.Name], ID: entry.ID, Capabilities: capabilities,
+		})
+	}
+	unknown := math.MaxInt32
+	for _, entry := range entries {
+		if entry.ID == unknown {
+			unknown--
+		}
+	}
+	fallback, ok := world.GameModeByID(unknown)
+	if ok || fallback != world.GameModeSurvival {
+		return gameModeSpec{}, fmt.Errorf("Dragonfly unknown game mode fallback changed")
+	}
+	return result, nil
+}
+
+func inspectGameModeInterface(spec *ast.TypeSpec) ([]string, error) {
+	if spec == nil {
+		return nil, fmt.Errorf("Dragonfly world.GameMode interface not found")
+	}
+	interfaceType, ok := spec.Type.(*ast.InterfaceType)
+	if !ok {
+		return nil, fmt.Errorf("Dragonfly world.GameMode is not an interface")
+	}
+	var methods []string
+	for _, field := range interfaceType.Methods.List {
+		function, ok := field.Type.(*ast.FuncType)
+		if !ok || len(field.Names) != 1 || function.Params == nil || function.Params.NumFields() != 0 || function.Results == nil || len(function.Results.List) != 1 {
+			return nil, fmt.Errorf("Dragonfly world.GameMode contains a non-boolean method")
+		}
+		result, ok := function.Results.List[0].Type.(*ast.Ident)
+		if !ok || result.Name != "bool" {
+			return nil, fmt.Errorf("Dragonfly world.GameMode.%s does not return bool", field.Names[0].Name)
+		}
+		methods = append(methods, field.Names[0].Name)
+	}
+	if !reflect.DeepEqual(methods, gameModeMethodNames) {
+		return nil, fmt.Errorf("Dragonfly world.GameMode methods changed: got %v", methods)
+	}
+	return methods, nil
+}
+
+func validGameModeLookupFunction(function *ast.FuncDecl, byID bool) bool {
+	if function == nil || function.Type.Params == nil || function.Type.Results == nil || function.Type.Params.NumFields() != 1 || function.Type.Results.NumFields() != 2 {
+		return false
+	}
+	parameterType, resultType := "GameMode", "int"
+	if byID {
+		parameterType, resultType = "int", "GameMode"
+	}
+	return formatGoExpression(function.Type.Params.List[0].Type) == parameterType &&
+		formatGoExpression(function.Type.Results.List[0].Type) == resultType &&
+		formatGoExpression(function.Type.Results.List[1].Type) == "bool"
+}
+
+func inspectGameModeRegistry(registry *ast.CompositeLit) ([]gameModeValue, error) {
+	if registry == nil {
+		return nil, fmt.Errorf("Dragonfly gameModeReg map literal not found")
+	}
+	mapType, ok := registry.Type.(*ast.MapType)
+	if !ok || formatGoExpression(mapType.Key) != "int" || formatGoExpression(mapType.Value) != "GameMode" {
+		return nil, fmt.Errorf("Dragonfly gameModeReg is not map[int]GameMode")
+	}
+	ids := map[int]bool{}
+	names := map[string]bool{}
+	entries := make([]gameModeValue, 0, len(registry.Elts))
+	for _, raw := range registry.Elts {
+		entry, ok := raw.(*ast.KeyValueExpr)
+		if !ok {
+			return nil, fmt.Errorf("Dragonfly gameModeReg contains an unsupported entry")
+		}
+		key, keyOK := entry.Key.(*ast.BasicLit)
+		name, nameOK := entry.Value.(*ast.Ident)
+		if !keyOK || key.Kind != token.INT || !nameOK || !name.IsExported() {
+			return nil, fmt.Errorf("Dragonfly gameModeReg contains an unsupported entry")
+		}
+		id, err := strconv.ParseInt(key.Value, 0, 32)
+		if err != nil || id < 0 || id > math.MaxInt32 || ids[int(id)] || names[name.Name] {
+			return nil, fmt.Errorf("Dragonfly gameModeReg contains invalid ID/name %s:%s", key.Value, name.Name)
+		}
+		ids[int(id)], names[name.Name] = true, true
+		entries = append(entries, gameModeValue{Name: name.Name, ID: int(id)})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
+	if len(entries) != len(gameModeVariableNames) {
+		return nil, fmt.Errorf("Dragonfly game mode registry has %d entries, want exactly %d", len(entries), len(gameModeVariableNames))
+	}
+	for index, name := range gameModeVariableNames {
+		if entries[index].ID != index || entries[index].Name != name {
+			return nil, fmt.Errorf("Dragonfly game mode registry changed at ID %d: got %s", index, entries[index].Name)
+		}
+	}
+	return entries, nil
+}
+
+func liveGameModeCapabilities(mode world.GameMode, methods []string) ([]bool, error) {
+	value := reflect.ValueOf(mode)
+	capabilities := make([]bool, len(methods))
+	for index, name := range methods {
+		method := value.MethodByName(name)
+		if !method.IsValid() {
+			return nil, fmt.Errorf("method %s not found", name)
+		}
+		results := method.Call(nil)
+		if len(results) != 1 || results[0].Kind() != reflect.Bool {
+			return nil, fmt.Errorf("method %s does not return bool", name)
+		}
+		capabilities[index] = results[0].Bool()
+	}
+	return capabilities, nil
+}
+
+func inspectPlayerGameModeMethods(path string) ([]commandMethod, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	found := map[string]commandMethod{}
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || !pointerReceiver(function, "Player") || (function.Name.Name != "SetGameMode" && function.Name.Name != "GameMode") {
+			continue
+		}
+		method := commandMethod{Name: function.Name.Name}
+		switch function.Name.Name {
+		case "SetGameMode":
+			if function.Type.Params == nil || len(function.Type.Params.List) != 1 || len(function.Type.Params.List[0].Names) != 1 || function.Type.Results != nil {
+				return nil, fmt.Errorf("player.Player.SetGameMode signature changed")
+			}
+			field := function.Type.Params.List[0]
+			if field.Names[0].Name != "mode" || formatGoExpression(field.Type) != "world.GameMode" {
+				return nil, fmt.Errorf("player.Player.SetGameMode signature changed")
+			}
+			method.ReturnType = "void"
+			method.Parameters = []parameter{{Name: "mode", Type: "World.GameMode"}}
+		case "GameMode":
+			if function.Type.Params == nil || function.Type.Params.NumFields() != 0 || function.Type.Results == nil || len(function.Type.Results.List) != 1 || formatGoExpression(function.Type.Results.List[0].Type) != "world.GameMode" {
+				return nil, fmt.Errorf("player.Player.GameMode signature changed")
+			}
+			method.ReturnType = "World.GameMode"
+		}
+		found[method.Name] = method
+	}
+	result := make([]commandMethod, 0, 2)
+	for _, name := range []string{"SetGameMode", "GameMode"} {
+		method, ok := found[name]
+		if !ok {
+			return nil, fmt.Errorf("Dragonfly player.Player has no %s method", name)
+		}
+		result = append(result, method)
+	}
+	return result, nil
 }
 
 func inspectParticles(directory, instrumentPath, colourPath string) (particleSpec, error) {
@@ -1896,6 +2194,122 @@ func generateBiomes(biomes []encodedBiome) []byte {
 	output.WriteString("            return new EncodedBiome(id);\n        }\n\n")
 	output.WriteString("        private sealed record EncodedBiome(int Id) : World.Biome;\n")
 	output.WriteString("    }\n}\n")
+	return output.Bytes()
+}
+
+func generateGameModes(spec gameModeSpec) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/world/game_mode.go AST and live registry. DO NOT EDIT.\n")
+	output.WriteString("#nullable enable\nusing System;\n\nnamespace Dragonfly;\n\n")
+	output.WriteString("public sealed partial class World\n{\n")
+	output.WriteString("    public interface GameMode\n    {\n")
+	for _, method := range spec.Methods {
+		fmt.Fprintf(&output, "        bool %s();\n", method)
+	}
+	output.WriteString("    }\n\n")
+	for _, mode := range spec.Modes {
+		fmt.Fprintf(&output, "    public static readonly GameMode %s = new BuiltinGameMode(%d, 0x%02xUL);\n",
+			mode.Name, mode.ID, gameModeCapabilityMask(mode.Capabilities))
+	}
+	output.WriteString("\n    public static (GameMode GameMode, bool Ok) GameModeByID(int id) => id switch\n    {\n")
+	for _, mode := range spec.Modes {
+		fmt.Fprintf(&output, "        %d => (%s, true),\n", mode.ID, mode.Name)
+	}
+	output.WriteString("        _ => (GameModeSurvival, false),\n    };\n\n")
+	output.WriteString(`    public static (int ID, bool Ok) GameModeID(GameMode mode)
+    {
+        if (mode is BuiltinGameMode builtin) return (builtin.ID, true);
+        return (0, false);
+    }
+
+    internal static long GameModeDescriptor(GameMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(mode);
+        if (mode is BuiltinGameMode builtin)
+            return unchecked((long)(BuiltinGameModeFlag | (uint)builtin.ID));
+        ulong capabilities = 0;
+`)
+	for index, method := range spec.Methods {
+		fmt.Fprintf(&output, "        if (mode.%s()) capabilities |= 1UL << %d;\n", method, index)
+	}
+	output.WriteString(`        return (long)capabilities;
+    }
+
+    internal static GameMode GameModeFromDescriptor(long descriptor)
+    {
+        var value = unchecked((ulong)descriptor);
+        if ((value & BuiltinGameModeFlag) != 0)
+        {
+            var rawID = value & ~BuiltinGameModeFlag;
+            if (rawID > int.MaxValue)
+                throw new InvalidOperationException("invalid game mode descriptor");
+            var (mode, ok) = GameModeByID((int)rawID);
+            if (!ok) throw new InvalidOperationException("invalid game mode descriptor");
+            return mode;
+        }
+        if ((value & ~CustomGameModeMask) != 0)
+            throw new InvalidOperationException("invalid game mode descriptor");
+        return new CapabilityGameMode(value);
+    }
+
+    private const ulong BuiltinGameModeFlag = 1UL << 63;
+    private const ulong CustomGameModeMask = (1UL << 8) - 1;
+
+    private class CapabilityGameMode(ulong capabilities) : GameMode
+    {
+`)
+	for index, method := range spec.Methods {
+		fmt.Fprintf(&output, "        public bool %s() => (capabilities & (1UL << %d)) != 0;\n", method, index)
+	}
+	output.WriteString(`    }
+
+    private sealed class BuiltinGameMode(int id, ulong capabilities) : CapabilityGameMode(capabilities)
+    {
+        internal int ID { get; } = id;
+    }
+}
+`)
+	return output.Bytes()
+}
+
+func gameModeCapabilityMask(capabilities []bool) uint64 {
+	var value uint64
+	for index, enabled := range capabilities {
+		if enabled {
+			value |= 1 << index
+		}
+	}
+	return value
+}
+
+func generatePlayerGameModes(methods []commandMethod) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/player/player.go Go AST. DO NOT EDIT.\n")
+	output.WriteString("#nullable enable\nusing System;\nusing Dragonfly.Native;\n\nnamespace Dragonfly;\n\n")
+	output.WriteString("public sealed partial class Player\n{\n")
+	for index, method := range methods {
+		switch method.Name {
+		case "SetGameMode":
+			output.WriteString(`    public void SetGameMode(World.GameMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(mode);
+        PluginBridge.Host.SetPlayerState(
+            _invocation,
+            Id,
+            0,
+            new PlayerStateValue { Integer = World.GameModeDescriptor(mode) });
+    }
+`)
+		case "GameMode":
+			output.WriteString("    public World.GameMode GameMode() => PluginBridge.Host.PlayerGameMode(_invocation, Id);\n")
+		default:
+			panic("unsupported player game mode method: " + method.Name)
+		}
+		if index != len(methods)-1 {
+			output.WriteByte('\n')
+		}
+	}
+	output.WriteString("}\n")
 	return output.Bytes()
 }
 

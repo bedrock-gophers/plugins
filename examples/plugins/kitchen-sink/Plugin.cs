@@ -28,7 +28,8 @@ public sealed class KitchenSink : Plugin
             new KitchenBlock(),
             new KitchenBiome(),
             new KitchenTick(),
-            new KitchenParticle()));
+            new KitchenParticle(),
+            new KitchenGameMode()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -383,5 +384,46 @@ public sealed class KitchenSink : Plugin
                 tx.AddParticle(source.Position(), particle);
             output.Printf("particles={0}", particles.Length);
         }
+    }
+
+    internal sealed class KitchenGameMode : Cmd.Runnable
+    {
+        [Cmd.Tag("game-mode")]
+        public Cmd.SubCommand GameMode;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var current = player.GameMode();
+            var (id, registered) = World.GameModeID(current);
+            var (roundTrip, found) = World.GameModeByID(id);
+            var (roundTripId, roundTripRegistered) = World.GameModeID(roundTrip);
+            var custom = new CustomGameMode();
+            var (_, customRegistered) = World.GameModeID(custom);
+            player.SetGameMode(custom);
+            player.SetGameMode(current);
+            output.Printf(
+                "game_mode_id={0}, registered={1}, round_trip={2}, custom_registered={3}",
+                id,
+                registered ? "true" : "false",
+                registered && found && roundTripRegistered && roundTripId == id ? "true" : "false",
+                customRegistered ? "true" : "false");
+        }
+    }
+
+    private sealed class CustomGameMode : World.GameMode
+    {
+        public bool AllowsEditing() => true;
+        public bool AllowsTakingDamage() => true;
+        public bool CreativeInventory() => false;
+        public bool HasCollision() => true;
+        public bool AllowsFlying() => false;
+        public bool AllowsInteraction() => true;
+        public bool Visible() => true;
+        public bool InstantPortalTravel() => false;
     }
 }
