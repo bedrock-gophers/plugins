@@ -127,14 +127,14 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 			Overload: uint64(overload), Arguments: []string{"item"},
 			OnlinePlayers: []CommandPlayer{{Player: player, Name: "ItemTester"}},
 		})
-		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, added_empty=0" {
+		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, added_empty=0, variants=11" {
 			t.Fatalf("iteration %d: output=%#v error=%v", iteration, output, err)
 		}
 	}
 	if !reflect.DeepEqual(host.inventory, previous) || !reflect.DeepEqual(host.held, [2]ItemStack{mainHand, offHand}) {
 		t.Fatalf("command did not restore items: inventory=%#v held=%#v", host.inventory, host.held)
 	}
-	if len(host.sets) != 140 || len(host.heldSets) != 140 {
+	if len(host.sets) != 910 || len(host.heldSets) != 140 {
 		t.Fatalf("item writes=%d held writes=%d", len(host.sets), len(host.heldSets))
 	}
 	if len(host.armourSets) != 70 || len(host.adds) != 70 || host.adds[0].Identifier != "" || host.adds[0].Count != 0 {
@@ -145,6 +145,24 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 		sword.CustomName != "Kitchen sword" ||
 		!slices.Equal(sword.Lore, []string{"Generated from Dragonfly", "Restored after this command"}) {
 		t.Fatalf("typed sword transport=%#v", sword)
+	}
+	wantVariants := []ItemStack{
+		{Identifier: "minecraft:arrow", Metadata: 6, Count: 1},
+		{Identifier: "minecraft:creeper_banner_pattern", Count: 1},
+		{Identifier: "minecraft:black_dye", Count: 1},
+		{Identifier: "minecraft:goat_horn", Metadata: 7, Count: 1},
+		{Identifier: "minecraft:potion", Metadata: 42, Count: 1},
+		{Identifier: "minecraft:lingering_potion", Metadata: 21, Count: 1},
+		{Identifier: "minecraft:splash_potion", Metadata: 23, Count: 1},
+		{Identifier: "minecraft:music_disc_lava_chicken", Count: 1},
+		{Identifier: "minecraft:scrape_pottery_sherd", Count: 1},
+		{Identifier: "minecraft:bolt_armor_trim_smithing_template", Count: 1},
+		{Identifier: "minecraft:suspicious_stew", Metadata: 12, Count: 1},
+	}
+	for index, want := range wantVariants {
+		if got := host.sets[index+1]; !reflect.DeepEqual(got, want) {
+			t.Fatalf("typed variant %d=%#v, want %#v", index, got, want)
+		}
 	}
 	host.failWrites = true
 	failed, err := runtime.HandleCommand(kitchen.Index, CommandInput{

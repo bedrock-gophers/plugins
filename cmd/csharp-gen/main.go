@@ -21,8 +21,10 @@ import (
 	"github.com/bedrock-gophers/plugins/internal/host"
 	_ "github.com/df-mc/dragonfly/server/block"
 	dfitem "github.com/df-mc/dragonfly/server/item"
+	dfpotion "github.com/df-mc/dragonfly/server/item/potion"
 	"github.com/df-mc/dragonfly/server/world"
 	_ "github.com/df-mc/dragonfly/server/world/biome"
+	dfsound "github.com/df-mc/dragonfly/server/world/sound"
 )
 
 type method struct {
@@ -120,11 +122,13 @@ type itemFieldKind uint8
 const (
 	itemFieldBool itemFieldKind = iota
 	itemFieldToolTier
+	itemFieldValue
 )
 
 type itemFieldSpec struct {
-	Name string
-	Kind itemFieldKind
+	Name      string
+	Kind      itemFieldKind
+	ValueType string
 }
 
 type itemStateSpec struct {
@@ -132,6 +136,7 @@ type itemStateSpec struct {
 	Metadata   int
 	Bools      []bool
 	ToolTier   int
+	Values     []int
 }
 
 type itemTypeSpec struct {
@@ -149,7 +154,17 @@ type itemSpec struct {
 	Types          []itemTypeSpec
 	ToolTiers      []toolTierSpec
 	ToolTierFields []parameter
+	ValueTypes     []itemValueTypeSpec
 	AirIdentifier  string
+}
+
+type itemValueTypeSpec struct {
+	GoType     string
+	CSharpType string
+	Container  string
+	Name       string
+	Factories  []string
+	Values     []any
 }
 
 type formFieldSpec struct {
@@ -1531,7 +1546,11 @@ func inspectItems(directory string) (itemSpec, error) {
 	if len(tierNames) != len(liveTiers) {
 		return itemSpec{}, fmt.Errorf("Dragonfly item.ToolTiers AST/live lengths differ: %d/%d", len(tierNames), len(liveTiers))
 	}
-	result := itemSpec{ToolTierFields: tierFields, ToolTiers: make([]toolTierSpec, len(liveTiers))}
+	valueTypes, err := inspectItemValueTypes(directory, functions)
+	if err != nil {
+		return itemSpec{}, err
+	}
+	result := itemSpec{ToolTierFields: tierFields, ToolTiers: make([]toolTierSpec, len(liveTiers)), ValueTypes: valueTypes}
 	for index, tier := range liveTiers {
 		result.ToolTiers[index] = toolTierSpec{Variable: tierNames[index], Value: tier}
 	}
@@ -1558,7 +1577,7 @@ func inspectItems(directory string) (itemSpec, error) {
 
 	for typeOf, values := range registered {
 		declaration := types[typeOf.Name()]
-		fields, supported, err := inspectItemFields(declaration, typeOf.Name())
+		fields, supported, err := inspectItemFields(declaration, typeOf.Name(), valueTypes)
 		if err != nil {
 			return itemSpec{}, err
 		}
@@ -1566,20 +1585,35 @@ func inspectItems(directory string) (itemSpec, error) {
 			continue
 		}
 		definition := itemTypeSpec{Name: typeOf.Name(), Fields: fields}
-		for _, value := range values {
-			state, err := inspectItemState(typeOf, value, fields, liveTiers)
+		states := values
+		if len(fields) == 1 && fields[0].Kind == itemFieldValue {
+			valueType := findItemValueType(valueTypes, fields[0].ValueType)
+			states = make([]world.Item, 0, len(valueType.Values))
+			for _, fieldValue := range valueType.Values {
+				reflected := reflect.New(typeOf).Elem()
+				reflected.FieldByName(fields[0].Name).Set(reflect.ValueOf(fieldValue))
+				states = append(states, reflected.Interface().(world.Item))
+			}
+		}
+		for _, value := range states {
+			state, err := inspectItemState(typeOf, value, fields, liveTiers, valueTypes)
 			if err != nil {
 				return itemSpec{}, err
 			}
 			definition.States = append(definition.States, state)
 		}
-		if !completeItemType(typeOf, definition, liveTiers) {
+		if !completeItemType(typeOf, definition, liveTiers, valueTypes) {
 			continue
 		}
 		sort.Slice(definition.States, func(i, j int) bool {
 			left, right := definition.States[i], definition.States[j]
 			if left.ToolTier != right.ToolTier {
 				return left.ToolTier < right.ToolTier
+			}
+			for index := range left.Values {
+				if left.Values[index] != right.Values[index] {
+					return left.Values[index] < right.Values[index]
+				}
 			}
 			for index := range left.Bools {
 				if left.Bools[index] != right.Bools[index] {
@@ -1598,6 +1632,118 @@ func inspectItems(directory string) (itemSpec, error) {
 		return itemSpec{}, fmt.Errorf("no safely representable Dragonfly items found")
 	}
 	return result, nil
+}
+
+func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncDecl) ([]itemValueTypeSpec, error) {
+	potionFunctions, err := packageFunctions(filepath.Join(directory, "potion"), "potion")
+	if err != nil {
+		return nil, err
+	}
+	soundFunctions, err := packageFunctions(filepath.Join(filepath.Dir(directory), "world", "sound"), "sound")
+	if err != nil {
+		return nil, err
+	}
+	specs := []itemValueTypeSpec{
+		{GoType: "Colour", CSharpType: "Colour", Container: "Item", Name: "Colour", Values: anySlice(dfitem.Colours())},
+		{GoType: "SmithingTemplateType", CSharpType: "SmithingTemplateType", Container: "Item", Name: "SmithingTemplateType", Values: anySlice(dfitem.SmithingTemplates())},
+		{GoType: "BannerPatternType", CSharpType: "BannerPatternType", Container: "Item", Name: "BannerPatternType", Values: anySlice(dfitem.BannerPatterns())},
+		{GoType: "StewType", CSharpType: "StewType", Container: "Item", Name: "StewType", Values: anySlice(dfitem.StewTypes())},
+		{GoType: "SherdType", CSharpType: "SherdType", Container: "Item", Name: "SherdType", Values: anySlice(dfitem.SherdTypes())},
+		{GoType: "potion.Potion", CSharpType: "global::Dragonfly.Potion.Value", Container: "Potion", Name: "Value", Values: anySlice(dfpotion.All())},
+		{GoType: "sound.Horn", CSharpType: "Sound.Horn", Container: "Sound", Name: "Horn", Values: anySlice(dfsound.GoatHorns())},
+		{GoType: "sound.DiscType", CSharpType: "Sound.DiscType", Container: "Sound", Name: "DiscType", Values: anySlice(dfsound.MusicDiscs())},
+	}
+	collections := map[string]struct {
+		functions map[string]*ast.FuncDecl
+		name      string
+	}{
+		"Colour":               {itemFunctions, "Colours"},
+		"SmithingTemplateType": {itemFunctions, "SmithingTemplates"},
+		"BannerPatternType":    {itemFunctions, "BannerPatterns"},
+		"StewType":             {itemFunctions, "StewTypes"},
+		"SherdType":            {itemFunctions, "SherdTypes"},
+		"potion.Potion":        {potionFunctions, "All"},
+		"sound.Horn":           {soundFunctions, "GoatHorns"},
+		"sound.DiscType":       {soundFunctions, "MusicDiscs"},
+	}
+	for index := range specs {
+		collection := collections[specs[index].GoType]
+		factories, err := collectionFactoryNames(collection.functions[collection.name])
+		if err != nil {
+			return nil, fmt.Errorf("Dragonfly %s: %w", collection.name, err)
+		}
+		if len(factories) != len(specs[index].Values) {
+			return nil, fmt.Errorf("Dragonfly %s AST/live lengths differ: %d/%d", collection.name, len(factories), len(specs[index].Values))
+		}
+		specs[index].Factories = factories
+	}
+	return specs, nil
+}
+
+func packageFunctions(directory, packageName string) (map[string]*ast.FuncDecl, error) {
+	packages, err := parser.ParseDir(token.NewFileSet(), directory, func(info os.FileInfo) bool {
+		return !strings.HasSuffix(info.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		return nil, err
+	}
+	pkg, ok := packages[packageName]
+	if !ok {
+		return nil, fmt.Errorf("Dragonfly %s package not found", packageName)
+	}
+	functions := map[string]*ast.FuncDecl{}
+	for _, file := range pkg.Files {
+		for _, declaration := range file.Decls {
+			if function, ok := declaration.(*ast.FuncDecl); ok && function.Recv == nil {
+				functions[function.Name.Name] = function
+			}
+		}
+	}
+	return functions, nil
+}
+
+func collectionFactoryNames(function *ast.FuncDecl) ([]string, error) {
+	if function == nil || function.Body == nil || len(function.Body.List) != 1 {
+		return nil, fmt.Errorf("collection function body changed")
+	}
+	statement, ok := function.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(statement.Results) != 1 {
+		return nil, fmt.Errorf("collection return changed")
+	}
+	literal, ok := statement.Results[0].(*ast.CompositeLit)
+	if !ok {
+		return nil, fmt.Errorf("collection literal changed")
+	}
+	names := make([]string, 0, len(literal.Elts))
+	for _, raw := range literal.Elts {
+		call, ok := raw.(*ast.CallExpr)
+		if !ok || len(call.Args) != 0 {
+			return nil, fmt.Errorf("collection value changed")
+		}
+		name, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return nil, fmt.Errorf("collection factory changed")
+		}
+		names = append(names, name.Name)
+	}
+	return names, nil
+}
+
+func anySlice[T any](values []T) []any {
+	result := make([]any, len(values))
+	for index := range values {
+		result[index] = values[index]
+	}
+	return result
+}
+
+func findItemValueType(types []itemValueTypeSpec, goType string) *itemValueTypeSpec {
+	for index := range types {
+		if types[index].GoType == goType {
+			return &types[index]
+		}
+	}
+	return nil
 }
 
 func inspectToolTierFields(spec *ast.TypeSpec) ([]parameter, error) {
@@ -1660,7 +1806,7 @@ func inspectToolTierVariables(function *ast.FuncDecl, variables map[string]bool)
 	return names, nil
 }
 
-func inspectItemFields(spec *ast.TypeSpec, name string) ([]itemFieldSpec, bool, error) {
+func inspectItemFields(spec *ast.TypeSpec, name string, valueTypes []itemValueTypeSpec) ([]itemFieldSpec, bool, error) {
 	structure, ok := biomeEmptyStruct(spec)
 	if !ok {
 		return nil, false, nil
@@ -1672,33 +1818,35 @@ func inspectItemFields(spec *ast.TypeSpec, name string) ([]itemFieldSpec, bool, 
 			if !fieldName.IsExported() {
 				continue
 			}
-			identifier, ok := field.Type.(*ast.Ident)
-			if !ok {
-				return nil, false, nil
-			}
+			goType := formatGoExpression(field.Type)
 			fieldKind := itemFieldBool
-			switch identifier.Name {
+			valueType := ""
+			switch goType {
 			case "bool":
 			case "ToolTier":
 				fieldKind = itemFieldToolTier
 			default:
-				return nil, false, nil
+				if findItemValueType(valueTypes, goType) == nil {
+					return nil, false, nil
+				}
+				fieldKind = itemFieldValue
+				valueType = goType
 			}
 			if kind != nil && *kind != fieldKind {
 				return nil, false, nil
 			}
 			value := fieldKind
 			kind = &value
-			fields = append(fields, itemFieldSpec{Name: fieldName.Name, Kind: fieldKind})
+			fields = append(fields, itemFieldSpec{Name: fieldName.Name, Kind: fieldKind, ValueType: valueType})
 		}
 	}
-	if len(fields) > 16 || (len(fields) > 1 && fields[0].Kind == itemFieldToolTier) {
+	if len(fields) > 16 || (len(fields) > 1 && (fields[0].Kind == itemFieldToolTier || fields[0].Kind == itemFieldValue)) {
 		return nil, false, nil
 	}
 	return fields, true, nil
 }
 
-func inspectItemState(typeOf reflect.Type, value world.Item, fields []itemFieldSpec, tiers []dfitem.ToolTier) (itemStateSpec, error) {
+func inspectItemState(typeOf reflect.Type, value world.Item, fields []itemFieldSpec, tiers []dfitem.ToolTier, valueTypes []itemValueTypeSpec) (itemStateSpec, error) {
 	identifier, metadata := value.EncodeItem()
 	state := itemStateSpec{Identifier: identifier, Metadata: int(metadata), ToolTier: -1}
 	reflected := reflect.ValueOf(value)
@@ -1727,15 +1875,34 @@ func inspectItemState(typeOf reflect.Type, value world.Item, fields []itemFieldS
 			if state.ToolTier < 0 {
 				return itemStateSpec{}, fmt.Errorf("Dragonfly item.%s has unregistered ToolTier %+v", typeOf.Name(), tier)
 			}
+		case itemFieldValue:
+			valueType := findItemValueType(valueTypes, field.ValueType)
+			if valueType == nil {
+				return itemStateSpec{}, fmt.Errorf("Dragonfly item.%s.%s has unknown value type %s", typeOf.Name(), field.Name, field.ValueType)
+			}
+			valueIndex := -1
+			for index, candidate := range valueType.Values {
+				if reflect.DeepEqual(reflectedField.Interface(), candidate) {
+					valueIndex = index
+					break
+				}
+			}
+			if valueIndex < 0 {
+				return itemStateSpec{}, fmt.Errorf("Dragonfly item.%s.%s has unregistered value %+v", typeOf.Name(), field.Name, reflectedField.Interface())
+			}
+			state.Values = append(state.Values, valueIndex)
 		}
 	}
 	return state, nil
 }
 
-func completeItemType(typeOf reflect.Type, definition itemTypeSpec, tiers []dfitem.ToolTier) bool {
+func completeItemType(typeOf reflect.Type, definition itemTypeSpec, tiers []dfitem.ToolTier, valueTypes []itemValueTypeSpec) bool {
 	seen := map[string]bool{}
 	for _, state := range definition.States {
 		key := strconv.Itoa(state.ToolTier) + ":"
+		for _, value := range state.Values {
+			key += strconv.Itoa(value) + ","
+		}
 		for _, value := range state.Bools {
 			key += strconv.FormatBool(value) + ","
 		}
@@ -1761,6 +1928,18 @@ func completeItemType(typeOf reflect.Type, definition itemTypeSpec, tiers []dfit
 		}
 		for index := range tiers {
 			if !seen[strconv.Itoa(index)+":"] {
+				return false
+			}
+		}
+		return true
+	}
+	if definition.Fields[0].Kind == itemFieldValue {
+		valueType := findItemValueType(valueTypes, definition.Fields[0].ValueType)
+		if valueType == nil || len(definition.States) != len(valueType.Values) {
+			return false
+		}
+		for index := range valueType.Values {
+			if !seen["-1:"+strconv.Itoa(index)+","] {
 				return false
 			}
 		}
@@ -3248,6 +3427,12 @@ func generateItems(spec itemSpec) []byte {
 		fmt.Fprintf(&output, "        public static readonly ToolTier %s = new(%s);\n", tier.Variable, csharpToolTier(tier.Value))
 	}
 	output.WriteByte('\n')
+	for _, valueType := range spec.ValueTypes {
+		if valueType.Container != "Item" {
+			continue
+		}
+		generateItemValueType(&output, valueType, "        ")
+	}
 	for _, definition := range spec.Types {
 		if len(definition.Fields) == 0 {
 			fmt.Fprintf(&output, "        public readonly record struct %s : World.Item;\n", definition.Name)
@@ -3256,14 +3441,26 @@ func generateItems(spec itemSpec) []byte {
 		parameters := make([]parameter, len(definition.Fields))
 		for index, field := range definition.Fields {
 			typeName := "bool"
-			if field.Kind == itemFieldToolTier {
+			switch field.Kind {
+			case itemFieldToolTier:
 				typeName = "ToolTier"
+			case itemFieldValue:
+				typeName = findItemValueType(spec.ValueTypes, field.ValueType).CSharpType
 			}
 			parameters[index] = parameter{Name: field.Name, Type: typeName}
 		}
 		fmt.Fprintf(&output, "        public readonly record struct %s(%s) : World.Item;\n", definition.Name, formatParameters(parameters))
 	}
 	output.WriteString("    }\n\n")
+	for _, container := range []string{"Potion", "Sound"} {
+		fmt.Fprintf(&output, "    public static partial class %s\n    {\n", container)
+		for _, valueType := range spec.ValueTypes {
+			if valueType.Container == container {
+				generateItemValueType(&output, valueType, "        ")
+			}
+		}
+		output.WriteString("    }\n\n")
+	}
 	output.WriteString("    internal static class ItemCodec\n    {\n")
 	output.WriteString("        internal static bool TryEncode(World.Item item, out string identifier, out int metadata)\n        {\n")
 	output.WriteString("            switch (item)\n            {\n")
@@ -3275,6 +3472,9 @@ func generateItems(spec itemSpec) []byte {
 				output.WriteString(" _:\n")
 			case definition.Fields[0].Kind == itemFieldToolTier:
 				fmt.Fprintf(&output, " value when value.%s == Item.%s:\n", definition.Fields[0].Name, spec.ToolTiers[state.ToolTier].Variable)
+			case definition.Fields[0].Kind == itemFieldValue:
+				valueType := findItemValueType(spec.ValueTypes, definition.Fields[0].ValueType)
+				fmt.Fprintf(&output, " value when value.%s == %s:\n", definition.Fields[0].Name, itemValueFactory(*valueType, state.Values[0]))
 			default:
 				output.WriteString(" { ")
 				for index, field := range definition.Fields {
@@ -3298,6 +3498,9 @@ func generateItems(spec itemSpec) []byte {
 			case len(definition.Fields) == 0:
 			case definition.Fields[0].Kind == itemFieldToolTier:
 				output.WriteString("Item." + spec.ToolTiers[state.ToolTier].Variable)
+			case definition.Fields[0].Kind == itemFieldValue:
+				valueType := findItemValueType(spec.ValueTypes, definition.Fields[0].ValueType)
+				output.WriteString(itemValueFactory(*valueType, state.Values[0]))
 			default:
 				for index, value := range state.Bools {
 					if index != 0 {
@@ -3314,6 +3517,22 @@ func generateItems(spec itemSpec) []byte {
 	output.WriteString("        private sealed record EncodedItem(string Identifier, int Metadata) : World.Item;\n")
 	output.WriteString("    }\n}\n")
 	return output.Bytes()
+}
+
+func generateItemValueType(output *bytes.Buffer, spec itemValueTypeSpec, indent string) {
+	fmt.Fprintf(output, "%spublic readonly record struct %s\n%s{\n", indent, spec.Name, indent)
+	fmt.Fprintf(output, "%s    private readonly int _value;\n", indent)
+	fmt.Fprintf(output, "%s    internal %s(int value) => _value = value;\n", indent, spec.Name)
+	fmt.Fprintf(output, "%s    internal int Id => _value;\n", indent)
+	fmt.Fprintf(output, "%s}\n\n", indent)
+	for index, factory := range spec.Factories {
+		fmt.Fprintf(output, "%spublic static %s %s() => new(%d);\n", indent, spec.Name, factory, index)
+	}
+	output.WriteByte('\n')
+}
+
+func itemValueFactory(spec itemValueTypeSpec, index int) string {
+	return spec.Container + "." + spec.Factories[index] + "()"
 }
 
 func csharpToolTier(tier dfitem.ToolTier) string {

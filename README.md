@@ -69,10 +69,12 @@ var (mainHand, offHand) = player.HeldItems();
 player.SetHeldItems(sword, offHand);
 ```
 
-The current generated item slice contains 110 safe concrete Dragonfly item structs: stateless
-items, boolean variants, five tool types, and all seven `ToolTier` values. Stateful items whose
-public fields need more dependency types remain opaque during transport until those exact types
-land; raw identifiers, metadata, NBT, enchantment IDs, snapshots, and host statuses stay private.
+The current generated item slice contains 121 concrete Dragonfly item structs: stateless items,
+boolean variants, five tool types, and the finite stateful families for colours, potions, banner
+patterns, smithing templates, suspicious stews, pottery sherds, goat horns, and music discs.
+Their exact factory values come from Dragonfly's Go AST and live registries. NBT-backed item
+families remain opaque during transport until their full typed state lands; raw identifiers,
+metadata, NBT, enchantment IDs, snapshots, and host statuses stay private.
 `Inventory.Value` currently exposes `Size`, `Item`, `SetItem`, and `AddItem`; player armour
 and held-item access use the same typed `Item.Stack`. Invalid C# slot indices throw
 `ArgumentOutOfRangeException`; setters return `void`.

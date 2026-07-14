@@ -453,13 +453,38 @@ public sealed class KitchenSink : Plugin
                     output.Error("Typed item round-trip failed.");
                     return;
                 }
+
+                Dragonfly.Item.Stack[] variants =
+                [
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Arrow(Dragonfly.Potion.NightVision()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.BannerPattern(Dragonfly.Item.CreeperBannerPattern()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Dye(Dragonfly.Item.ColourBlack()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.GoatHorn(Dragonfly.Sound.Dream()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Potion(Dragonfly.Potion.StrongSlowness()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.LingeringPotion(Dragonfly.Potion.Healing()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.SplashPotion(Dragonfly.Potion.Harming()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.MusicDisc(Dragonfly.Sound.DiscLavaChicken()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.PotterySherd(Dragonfly.Item.SherdTypeScrape()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.SmithingTemplate(Dragonfly.Item.TemplateBolt()), 1),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.SuspiciousStew(Dragonfly.Item.NauseaStew()), 1),
+                ];
+                foreach (var variant in variants)
+                {
+                    inventory.SetItem(0, variant);
+                    if (!Equals(inventory.Item(0).Item(), variant.Item()))
+                    {
+                        output.Error("Stateful item round-trip failed.");
+                        return;
+                    }
+                }
                 output.Printf(
-                    "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, added_empty={4}",
+                    "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, added_empty={4}, variants={5}",
                     typed.Tier.Name,
                     stored.Count(),
                     held.Item() is Dragonfly.Item.Sword ? "true" : "false",
                     armour.Inventory().Size(),
-                    addedEmpty);
+                    addedEmpty,
+                    variants.Length);
             }
             finally
             {
