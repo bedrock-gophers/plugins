@@ -9,9 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 5u
-// Version 29 gives form response callbacks a full player snapshot and defines
-// callback-context ownership. The host table layout is unchanged.
-#define DF_HOST_ABI_VERSION 29u
+// Version 30 appends an atomic held-items snapshot operation.
+#define DF_HOST_ABI_VERSION 30u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -379,6 +378,8 @@ typedef DfStatus (*DfHostInventoryClearSlotFn)(uint64_t context, DfInvocationId 
 typedef DfStatus (*DfHostInventoryClearFn)(uint64_t context, DfInvocationId invocation, DfInventoryId inventory);
 typedef DfStatus (*DfHostPlayerHeldItemsSetFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfItemStackViewV3 *main_hand, const DfItemStackViewV3 *off_hand);
 typedef DfStatus (*DfHostPlayerHeldSlotSetFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t slot);
+/* Opens one atomic held-items read. Each returned snapshot is independently owned until item_stack_close. */
+typedef DfStatus (*DfHostPlayerHeldItemsOpenFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfItemStackSnapshot *main_hand, DfItemStackSnapshot *off_hand);
 typedef DfStatus (*DfHostWorldLookupFn)(uint64_t context, DfInvocationId invocation, DfStringView name, DfWorldId *world);
 typedef DfStatus (*DfHostWorldOpenFn)(uint64_t context, DfInvocationId invocation, DfStringView name, uint32_t dimension, DfWorldId *world);
 typedef DfStatus (*DfHostWorldOpenSpecFn)(uint64_t context, DfInvocationId invocation, DfStringView name, const DfWorldOpenSpecV1 *spec, DfWorldId *world);
@@ -502,6 +503,7 @@ typedef struct {
     DfHostWorldWeatherFn world_raining;
     DfHostWorldWeatherFn world_thundering;
     DfHostWorldCurrentTickFn world_current_tick;
+    DfHostPlayerHeldItemsOpenFn player_held_items_open;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u

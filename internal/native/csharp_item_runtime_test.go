@@ -1,0 +1,158 @@
+package native
+
+import (
+	"reflect"
+	"slices"
+	"testing"
+)
+
+type csharpItemHost struct {
+	*recordingHost
+	inventory  ItemStack
+	armour     ItemStack
+	held       [2]ItemStack
+	sets       []ItemStack
+	armourSets []ItemStack
+	adds       []ItemStack
+	heldSets   [][2]ItemStack
+	failWrites bool
+}
+
+func (h *csharpItemHost) InventorySize(_ InvocationID, inventory InventoryID) (uint32, bool) {
+	if inventory.Kind == InventoryArmour {
+		return 4, true
+	}
+	return 36, inventory.Kind == InventoryMain
+}
+
+func (h *csharpItemHost) InventoryItem(_ InvocationID, inventory InventoryID, slot uint32) (ItemStack, bool) {
+	if inventory.Kind != InventoryMain || slot != 0 {
+		if inventory.Kind == InventoryArmour && slot == 0 {
+			return h.armour, true
+		}
+		return ItemStack{}, false
+	}
+	return h.inventory, true
+}
+
+func (h *csharpItemHost) SetInventoryItem(_ InvocationID, inventory InventoryID, slot uint32, stack ItemStack) bool {
+	if h.failWrites {
+		return false
+	}
+	if inventory.Kind != InventoryMain || slot != 0 {
+		if inventory.Kind == InventoryArmour && slot == 0 {
+			h.armourSets = append(h.armourSets, cloneNativeItem(stack))
+			h.armour = cloneNativeItem(stack)
+			return true
+		}
+		return false
+	}
+	h.sets = append(h.sets, cloneNativeItem(stack))
+	h.inventory = cloneNativeItem(stack)
+	return true
+}
+
+func (h *csharpItemHost) AddInventoryItem(_ InvocationID, inventory InventoryID, stack ItemStack) (uint32, bool) {
+	if h.failWrites {
+		return 0, false
+	}
+	if inventory.Kind != InventoryMain {
+		return 0, false
+	}
+	h.adds = append(h.adds, cloneNativeItem(stack))
+	return stack.Count, true
+}
+
+func (h *csharpItemHost) HeldItem(_ InvocationID, _ PlayerID, hand uint32) (ItemStack, bool) {
+	if hand > 1 {
+		return ItemStack{}, false
+	}
+	return h.held[hand], true
+}
+
+func (h *csharpItemHost) HeldItems(InvocationID, PlayerID) (ItemStack, ItemStack, bool) {
+	return h.held[0], h.held[1], true
+}
+
+func (h *csharpItemHost) SetHeldItems(_ InvocationID, _ PlayerID, mainHand, offHand ItemStack) bool {
+	if h.failWrites {
+		return false
+	}
+	h.heldSets = append(h.heldSets, [2]ItemStack{cloneNativeItem(mainHand), cloneNativeItem(offHand)})
+	h.held = [2]ItemStack{cloneNativeItem(mainHand), cloneNativeItem(offHand)}
+	return true
+}
+
+func cloneNativeItem(value ItemStack) ItemStack {
+	value.Lore = append([]string(nil), value.Lore...)
+	value.NBT = append([]byte(nil), value.NBT...)
+	value.ValuesNBT = append([]byte(nil), value.ValuesNBT...)
+	value.Enchantments = append([]ItemEnchantment(nil), value.Enchantments...)
+	return value
+}
+
+func TestCSharpTypedItemInventoryFlow(t *testing.T) {
+	previous := ItemStack{Identifier: "minecraft:apple", Count: 3}
+	mainHand := ItemStack{
+		Identifier: "minecraft:shield", Count: 1, Damage: 4, Unbreakable: true,
+		CustomName: "Opaque main", Lore: []string{"preserve"}, NBT: []byte{10, 0, 0},
+		ValuesNBT: []byte{10, 0, 0}, Enchantments: []ItemEnchantment{{ID: 17, Level: 3}},
+	}
+	offHand := ItemStack{Identifier: "minecraft:filled_map", Metadata: 2, Count: 1, CustomName: "Opaque off"}
+	host := &csharpItemHost{
+		recordingHost: &recordingHost{},
+		inventory:     previous,
+		held:          [2]ItemStack{mainHand, offHand},
+	}
+	runtime := openCSharpRuntimeWithHost(t, host)
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	overload := -1
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "item" {
+			overload = index
+			break
+		}
+	}
+	if overload < 0 {
+		t.Fatalf("kitchen item overload missing: %#v", kitchen.Overloads)
+	}
+	player := PlayerID{UUID: [16]byte{0x91}, Generation: 8}
+	for iteration := 0; iteration < 70; iteration++ {
+		output, err := runtime.HandleCommand(kitchen.Index, CommandInput{
+			Invocation: 55, Source: "ItemTester", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+			Overload: uint64(overload), Arguments: []string{"item"},
+			OnlinePlayers: []CommandPlayer{{Player: player, Name: "ItemTester"}},
+		})
+		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, added_empty=0" {
+			t.Fatalf("iteration %d: output=%#v error=%v", iteration, output, err)
+		}
+	}
+	if !reflect.DeepEqual(host.inventory, previous) || !reflect.DeepEqual(host.held, [2]ItemStack{mainHand, offHand}) {
+		t.Fatalf("command did not restore items: inventory=%#v held=%#v", host.inventory, host.held)
+	}
+	if len(host.sets) != 140 || len(host.heldSets) != 140 {
+		t.Fatalf("item writes=%d held writes=%d", len(host.sets), len(host.heldSets))
+	}
+	if len(host.armourSets) != 70 || len(host.adds) != 70 || host.adds[0].Identifier != "" || host.adds[0].Count != 0 {
+		t.Fatalf("armour writes=%d adds=%d", len(host.armourSets), len(host.adds))
+	}
+	sword := host.sets[0]
+	if sword.Identifier != "minecraft:diamond_sword" || sword.Count != 1 ||
+		sword.CustomName != "Kitchen sword" ||
+		!slices.Equal(sword.Lore, []string{"Generated from Dragonfly", "Restored after this command"}) {
+		t.Fatalf("typed sword transport=%#v", sword)
+	}
+	host.failWrites = true
+	failed, err := runtime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 55, Source: "ItemTester", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Overload: uint64(overload), Arguments: []string{"item"},
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "ItemTester"}},
+	})
+	if err == nil && !failed.Failed {
+		t.Fatalf("failed inventory mutation was silently accepted: %#v", failed)
+	}
+}

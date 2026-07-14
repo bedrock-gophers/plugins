@@ -92,6 +92,25 @@ func TestPlayersInventoryAddClearAndOffhand(t *testing.T) {
 	})
 }
 
+func TestPlayersHeldItemsRoundTrip(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		playerID := players.Register(player, 10)
+		invocation, leave := players.BeginInvocation(player.Tx())
+		defer leave()
+		main := native.ItemStack{Identifier: "minecraft:apple", Count: 1, CustomName: "Main"}
+		offhand := native.ItemStack{Identifier: "minecraft:totem_of_undying", Count: 1, CustomName: "Offhand"}
+		if !players.SetHeldItems(invocation, playerID, main, offhand) {
+			t.Fatal("set held items")
+		}
+		gotMain, gotOffhand, ok := players.HeldItems(invocation, playerID)
+		if !ok || gotMain.Identifier != main.Identifier || gotMain.CustomName != main.CustomName ||
+			gotOffhand.Identifier != offhand.Identifier || gotOffhand.CustomName != offhand.CustomName {
+			t.Fatalf("held items = main %#v offhand %#v ok=%v", gotMain, gotOffhand, ok)
+		}
+	})
+}
+
 func TestPlayersRejectInvalidNativeItems(t *testing.T) {
 	withPlayer(t, func(player *player.Player) {
 		players := NewPlayers()

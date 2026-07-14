@@ -82,8 +82,8 @@ _Static_assert(offsetof(DfWorldOpenSpecV1, fixed_time) == 40, "DfWorldOpenSpecV1
 _Static_assert(offsetof(DfWorldOpenSpecV1, open_mode) == 48, "DfWorldOpenSpecV1.open_mode ABI offset changed");
 _Static_assert(offsetof(DfWorldOpenSpecV1, read_only) == 76, "DfWorldOpenSpecV1.read_only ABI offset changed");
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
-_Static_assert(sizeof(DfHostApiV27) == 656, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 29u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 664, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 30u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -118,6 +118,7 @@ _Static_assert(offsetof(DfHostApiV27, world_thundering_at) == 624, "DfHostApiV27
 _Static_assert(offsetof(DfHostApiV27, world_raining) == 632, "DfHostApiV27.world_raining ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_thundering) == 640, "DfHostApiV27.world_thundering ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_current_tick) == 648, "DfHostApiV27.world_current_tick ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, player_held_items_open) == 656, "DfHostApiV27.player_held_items_open ABI offset changed");
 #endif
 
 extern DfStatus bg_go_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message);
@@ -158,6 +159,7 @@ extern DfStatus bg_go_inventory_clear_slot(uint64_t context, DfInvocationId invo
 extern DfStatus bg_go_inventory_clear(uint64_t context, DfInvocationId invocation, DfInventoryId inventory);
 extern DfStatus bg_go_player_held_items_set(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfItemStackViewV3 *main_hand, const DfItemStackViewV3 *off_hand);
 extern DfStatus bg_go_player_held_slot_set(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t slot);
+extern DfStatus bg_go_player_held_items_open(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfItemStackSnapshot *main_hand, DfItemStackSnapshot *off_hand);
 extern DfStatus bg_go_world_lookup(uint64_t context, DfInvocationId invocation, DfStringView name, DfWorldId *world);
 extern DfStatus bg_go_world_open(uint64_t context, DfInvocationId invocation, DfStringView name, uint32_t dimension, DfWorldId *world);
 extern DfStatus bg_go_world_open_spec(uint64_t context, DfInvocationId invocation, DfStringView name, const DfWorldOpenSpecV1 *spec, DfWorldId *world);
@@ -304,6 +306,7 @@ static DfStatus host_inventory_clear_slot(uint64_t context, DfInvocationId invoc
 static DfStatus host_inventory_clear(uint64_t context, DfInvocationId invocation, DfInventoryId inventory) { return bg_go_inventory_clear(context, invocation, inventory); }
 static DfStatus host_player_held_items_set(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfItemStackViewV3 *main_hand, const DfItemStackViewV3 *off_hand) { return bg_go_player_held_items_set(context, invocation, player, main_hand, off_hand); }
 static DfStatus host_player_held_slot_set(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t slot) { return bg_go_player_held_slot_set(context, invocation, player, slot); }
+static DfStatus host_player_held_items_open(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfItemStackSnapshot *main_hand, DfItemStackSnapshot *off_hand) { return bg_go_player_held_items_open(context, invocation, player, main_hand, off_hand); }
 static DfStatus host_world_lookup(uint64_t context, DfInvocationId invocation, DfStringView name, DfWorldId *world) { return bg_go_world_lookup(context, invocation, name, world); }
 static DfStatus host_world_open(uint64_t context, DfInvocationId invocation, DfStringView name, uint32_t dimension, DfWorldId *world) { return bg_go_world_open(context, invocation, name, dimension, world); }
 static DfStatus host_world_open_spec(uint64_t context, DfInvocationId invocation, DfStringView name, const DfWorldOpenSpecV1 *spec, DfWorldId *world) { return bg_go_world_open_spec(context, invocation, name, spec, world); }
@@ -552,6 +555,7 @@ DfStatus bg_runtime_open(
         .world_raining = host_world_raining,
         .world_thundering = host_world_thundering,
         .world_current_tick = host_world_current_tick,
+        .player_held_items_open = host_player_held_items_open,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

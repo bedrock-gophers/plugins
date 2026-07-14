@@ -43,9 +43,10 @@ public sealed class Example : Plugin
 The project name is the plugin ID. A compile-time generator emits the hidden native entry point.
 
 Current C# slice: loading, lifecycle, reflected commands, player text actions, game mode, typed
-forms, movement, chat, food loss, jump, teleport, sprint/sneak toggles, punch-air, and quit
-handlers. Player handler, command-interface, player-text, game-mode, and form surfaces are
-generated from Dragonfly's Go AST.
+forms, typed items and player inventories, movement, chat, food loss, jump, teleport,
+sprint/sneak toggles, punch-air, and quit handlers. Player handler, command-interface,
+player-text, game-mode, form, item, and player-inventory surfaces are generated from Dragonfly's
+Go AST.
 `World.GameMode` includes Dragonfly's four registered values and exact `GameModeByID`/`GameModeID`
 lookups. `Player.SetGameMode` accepts custom implementations just like Dragonfly, and
 `Player.GameMode` returns their capabilities without exposing the transport descriptor.
@@ -54,6 +55,27 @@ with typed elements, submitted values, `Closer`, and callback-owned `World.Tx`. 
 remains open for custom implementations, matching Dragonfly's public `form.Form` interface.
 `examples/plugins/kitchen-sink` compiles against every exposed C# API and grows with each parity
 slice.
+
+Item code uses Dragonfly types, never Minecraft identifiers:
+
+```csharp
+var sword = Item.NewStack(new Item.Sword(Item.ToolTierDiamond), 1)
+    .WithCustomName("Arena sword")
+    .WithLore("Unranked");
+var inventory = player.Inventory();
+var previous = inventory.Item(0);
+inventory.SetItem(0, sword);
+var (mainHand, offHand) = player.HeldItems();
+player.SetHeldItems(sword, offHand);
+```
+
+The current generated item slice contains 110 safe concrete Dragonfly item structs: stateless
+items, boolean variants, five tool types, and all seven `ToolTier` values. Stateful items whose
+public fields need more dependency types remain opaque during transport until those exact types
+land; raw identifiers, metadata, NBT, enchantment IDs, snapshots, and host statuses stay private.
+`Inventory.Value` currently exposes `Size`, `Item`, `SetItem`, and `AddItem`; player armour
+and held-item access use the same typed `Item.Stack`. Invalid C# slot indices throw
+`ArgumentOutOfRangeException`; setters return `void`.
 
 World callbacks now carry Dragonfly-shaped transactions. `Player.Context` inherits
 `World.Context`, which inherits `World.Tx`; commands receive the same `World.Tx`. `Cube.Pos`,
@@ -90,9 +112,9 @@ tx.AddParticle(source.Position(), new Particle.Note(Sound.Piano(), 12));
 `BlocksWithin` stays lazy across the private ABI: each C# enumerator owns a transaction-scoped
 Dragonfly iterator and closes it on exhaustion, early exit, or callback completion.
 
-Public block, liquid, biome, particle, colour, and instrument types come from Dragonfly's Go AST.
+Public block, liquid, biome, particle, colour, instrument, and item types come from Dragonfly's Go AST.
 Live registries feed internal generated codecs, so Minecraft identifiers, state NBT, numeric biome
-IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 29 preserves the
+IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 30 preserves the
 separate “no liquid” result, nullable liquid removal, signed nanosecond scheduling delays,
 biome/weather queries, particle payloads, registered/custom game-mode capabilities, and full
 callback-scoped player snapshots for form responses. Structurally valid form contexts receive

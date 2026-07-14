@@ -31,6 +31,7 @@ public sealed class KitchenSink : Plugin
             new KitchenTick(),
             new KitchenParticle(),
             new KitchenGameMode(),
+            new KitchenItem(),
             new KitchenForm(),
             new KitchenRawFormCommand()));
         Console.WriteLine("kitchen-sink enabled");
@@ -415,6 +416,56 @@ public sealed class KitchenSink : Plugin
                 registered ? "true" : "false",
                 registered && found && roundTripRegistered && roundTripId == id ? "true" : "false",
                 customRegistered ? "true" : "false");
+        }
+    }
+
+    internal sealed class KitchenItem : Cmd.Runnable
+    {
+        public Cmd.SubCommand Item;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var inventory = player.Inventory();
+            var previous = inventory.Item(0);
+            var (mainHand, offHand) = player.HeldItems();
+            var sword = Dragonfly.Item.NewStack(
+                    new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond),
+                    1)
+                .WithCustomName("Kitchen sword")
+                .WithLore("Generated from Dragonfly", "Restored after this command");
+            try
+            {
+                inventory.SetItem(0, sword);
+                player.SetHeldItems(sword, offHand);
+                var stored = inventory.Item(0);
+                var (held, _) = player.HeldItems();
+                var armour = player.Armour();
+                var helmet = armour.Helmet();
+                armour.SetHelmet(helmet);
+                var addedEmpty = inventory.AddItem(default);
+                if (stored.Item() is not Dragonfly.Item.Sword typed)
+                {
+                    output.Error("Typed item round-trip failed.");
+                    return;
+                }
+                output.Printf(
+                    "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, added_empty={4}",
+                    typed.Tier.Name,
+                    stored.Count(),
+                    held.Item() is Dragonfly.Item.Sword ? "true" : "false",
+                    armour.Inventory().Size(),
+                    addedEmpty);
+            }
+            finally
+            {
+                inventory.SetItem(0, previous);
+                player.SetHeldItems(mainHand, offHand);
+            }
         }
     }
 

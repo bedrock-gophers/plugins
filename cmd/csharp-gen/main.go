@@ -20,6 +20,7 @@ import (
 
 	"github.com/bedrock-gophers/plugins/internal/host"
 	_ "github.com/df-mc/dragonfly/server/block"
+	dfitem "github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/world"
 	_ "github.com/df-mc/dragonfly/server/world/biome"
 )
@@ -112,6 +113,43 @@ type gameModeValue struct {
 type gameModeSpec struct {
 	Methods []string
 	Modes   []gameModeValue
+}
+
+type itemFieldKind uint8
+
+const (
+	itemFieldBool itemFieldKind = iota
+	itemFieldToolTier
+)
+
+type itemFieldSpec struct {
+	Name string
+	Kind itemFieldKind
+}
+
+type itemStateSpec struct {
+	Identifier string
+	Metadata   int
+	Bools      []bool
+	ToolTier   int
+}
+
+type itemTypeSpec struct {
+	Name   string
+	Fields []itemFieldSpec
+	States []itemStateSpec
+}
+
+type toolTierSpec struct {
+	Variable string
+	Value    dfitem.ToolTier
+}
+
+type itemSpec struct {
+	Types          []itemTypeSpec
+	ToolTiers      []toolTierSpec
+	ToolTierFields []parameter
+	AirIdentifier  string
 }
 
 type formFieldSpec struct {
@@ -298,6 +336,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	playerItemMethods, err := inspectPlayerItemMethods(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		fatal(err)
+	}
 	forms, err := inspectForms(filepath.Join(directory, "server", "player", "form"))
 	if err != nil {
 		fatal(err)
@@ -323,6 +365,14 @@ func main() {
 		fatal(err)
 	}
 	biomes, err := inspectBiomes(filepath.Join(directory, "server", "world", "biome"))
+	if err != nil {
+		fatal(err)
+	}
+	items, err := inspectItems(filepath.Join(directory, "server", "item"))
+	if err != nil {
+		fatal(err)
+	}
+	inventories, err := inspectInventories(filepath.Join(directory, "server", "item", "inventory"))
 	if err != nil {
 		fatal(err)
 	}
@@ -356,6 +406,10 @@ func main() {
 			Content: generatePlayerFormMethods(playerFormMethods),
 		},
 		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Item.g.cs"),
+			Content: generatePlayerItemMethods(playerItemMethods),
+		},
+		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Form.Types.g.cs"),
 			Content: generateForms(forms),
 		},
@@ -378,6 +432,14 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Biome.Types.g.cs"),
 			Content: generateBiomes(biomes),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Item.Types.g.cs"),
+			Content: generateItems(items),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Inventory.g.cs"),
+			Content: generateInventories(inventories),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Particle.Types.g.cs"),
@@ -1419,6 +1481,292 @@ func biomeEmptyStruct(spec *ast.TypeSpec) (*ast.StructType, bool) {
 	}
 	structure, ok := spec.Type.(*ast.StructType)
 	return structure, ok
+}
+
+func inspectItems(directory string) (itemSpec, error) {
+	packages, err := parser.ParseDir(token.NewFileSet(), directory, func(info os.FileInfo) bool {
+		return !strings.HasSuffix(info.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		return itemSpec{}, err
+	}
+	pkg, ok := packages["item"]
+	if !ok {
+		return itemSpec{}, fmt.Errorf("Dragonfly item package not found")
+	}
+	types := map[string]*ast.TypeSpec{}
+	variables := map[string]bool{}
+	functions := map[string]*ast.FuncDecl{}
+	for _, file := range pkg.Files {
+		for _, declaration := range file.Decls {
+			switch value := declaration.(type) {
+			case *ast.GenDecl:
+				for _, raw := range value.Specs {
+					switch spec := raw.(type) {
+					case *ast.TypeSpec:
+						types[spec.Name.Name] = spec
+					case *ast.ValueSpec:
+						for _, name := range spec.Names {
+							variables[name.Name] = true
+						}
+					}
+				}
+			case *ast.FuncDecl:
+				if value.Recv == nil {
+					functions[value.Name.Name] = value
+				}
+			}
+		}
+	}
+
+	tierFields, err := inspectToolTierFields(types["ToolTier"])
+	if err != nil {
+		return itemSpec{}, err
+	}
+	tierNames, err := inspectToolTierVariables(functions["ToolTiers"], variables)
+	if err != nil {
+		return itemSpec{}, err
+	}
+	liveTiers := dfitem.ToolTiers()
+	if len(tierNames) != len(liveTiers) {
+		return itemSpec{}, fmt.Errorf("Dragonfly item.ToolTiers AST/live lengths differ: %d/%d", len(tierNames), len(liveTiers))
+	}
+	result := itemSpec{ToolTierFields: tierFields, ToolTiers: make([]toolTierSpec, len(liveTiers))}
+	for index, tier := range liveTiers {
+		result.ToolTiers[index] = toolTierSpec{Variable: tierNames[index], Value: tier}
+	}
+
+	registered := map[reflect.Type][]world.Item{}
+	for _, value := range world.Items() {
+		typeOf := reflect.TypeOf(value)
+		if typeOf == nil {
+			continue
+		}
+		if typeOf.Kind() == reflect.Pointer {
+			typeOf = typeOf.Elem()
+		}
+		if typeOf.PkgPath() == "github.com/df-mc/dragonfly/server/block" && typeOf.Name() == "Air" {
+			result.AirIdentifier, _ = value.EncodeItem()
+		}
+		if typeOf.Kind() == reflect.Struct && typeOf.PkgPath() == "github.com/df-mc/dragonfly/server/item" && ast.IsExported(typeOf.Name()) {
+			registered[typeOf] = append(registered[typeOf], value)
+		}
+	}
+	if result.AirIdentifier == "" {
+		return itemSpec{}, fmt.Errorf("Dragonfly registered block.Air item not found")
+	}
+
+	for typeOf, values := range registered {
+		declaration := types[typeOf.Name()]
+		fields, supported, err := inspectItemFields(declaration, typeOf.Name())
+		if err != nil {
+			return itemSpec{}, err
+		}
+		if !supported {
+			continue
+		}
+		definition := itemTypeSpec{Name: typeOf.Name(), Fields: fields}
+		for _, value := range values {
+			state, err := inspectItemState(typeOf, value, fields, liveTiers)
+			if err != nil {
+				return itemSpec{}, err
+			}
+			definition.States = append(definition.States, state)
+		}
+		if !completeItemType(typeOf, definition, liveTiers) {
+			continue
+		}
+		sort.Slice(definition.States, func(i, j int) bool {
+			left, right := definition.States[i], definition.States[j]
+			if left.ToolTier != right.ToolTier {
+				return left.ToolTier < right.ToolTier
+			}
+			for index := range left.Bools {
+				if left.Bools[index] != right.Bools[index] {
+					return !left.Bools[index]
+				}
+			}
+			if left.Identifier != right.Identifier {
+				return left.Identifier < right.Identifier
+			}
+			return left.Metadata < right.Metadata
+		})
+		result.Types = append(result.Types, definition)
+	}
+	sort.Slice(result.Types, func(i, j int) bool { return result.Types[i].Name < result.Types[j].Name })
+	if len(result.Types) == 0 {
+		return itemSpec{}, fmt.Errorf("no safely representable Dragonfly items found")
+	}
+	return result, nil
+}
+
+func inspectToolTierFields(spec *ast.TypeSpec) ([]parameter, error) {
+	structure, ok := biomeEmptyStruct(spec)
+	if !ok {
+		return nil, fmt.Errorf("Dragonfly item.ToolTier is not a struct")
+	}
+	var fields []parameter
+	for _, field := range structure.Fields.List {
+		identifier, ok := field.Type.(*ast.Ident)
+		if !ok {
+			return nil, fmt.Errorf("Dragonfly item.ToolTier has unsupported field type %s", formatGoExpression(field.Type))
+		}
+		typeName, ok := map[string]string{"int": "int", "float64": "double", "string": "string"}[identifier.Name]
+		if !ok {
+			return nil, fmt.Errorf("Dragonfly item.ToolTier has unsupported field type %s", identifier.Name)
+		}
+		for _, name := range field.Names {
+			if name.IsExported() {
+				fields = append(fields, parameter{Name: name.Name, Type: typeName})
+			}
+		}
+	}
+	want := []parameter{
+		{Name: "HarvestLevel", Type: "int"},
+		{Name: "BaseMiningEfficiency", Type: "double"},
+		{Name: "BaseAttackDamage", Type: "double"},
+		{Name: "EnchantmentValue", Type: "int"},
+		{Name: "Durability", Type: "int"},
+		{Name: "Name", Type: "string"},
+	}
+	if !reflect.DeepEqual(fields, want) {
+		return nil, fmt.Errorf("Dragonfly item.ToolTier fields changed: %v", fields)
+	}
+	return fields, nil
+}
+
+func inspectToolTierVariables(function *ast.FuncDecl, variables map[string]bool) ([]string, error) {
+	if function == nil || function.Type.Params == nil || function.Type.Params.NumFields() != 0 ||
+		function.Type.Results == nil || len(function.Type.Results.List) != 1 ||
+		formatGoExpression(function.Type.Results.List[0].Type) != "[]ToolTier" || function.Body == nil || len(function.Body.List) != 1 {
+		return nil, fmt.Errorf("Dragonfly item.ToolTiers signature/body changed")
+	}
+	statement, ok := function.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(statement.Results) != 1 {
+		return nil, fmt.Errorf("Dragonfly item.ToolTiers body changed")
+	}
+	literal, ok := statement.Results[0].(*ast.CompositeLit)
+	if !ok || formatGoExpression(literal.Type) != "[]ToolTier" {
+		return nil, fmt.Errorf("Dragonfly item.ToolTiers body changed")
+	}
+	names := make([]string, 0, len(literal.Elts))
+	for _, raw := range literal.Elts {
+		name, ok := raw.(*ast.Ident)
+		if !ok || !strings.HasPrefix(name.Name, "ToolTier") || !variables[name.Name] {
+			return nil, fmt.Errorf("Dragonfly item.ToolTiers contains unsupported value")
+		}
+		names = append(names, name.Name)
+	}
+	return names, nil
+}
+
+func inspectItemFields(spec *ast.TypeSpec, name string) ([]itemFieldSpec, bool, error) {
+	structure, ok := biomeEmptyStruct(spec)
+	if !ok {
+		return nil, false, nil
+	}
+	var fields []itemFieldSpec
+	var kind *itemFieldKind
+	for _, field := range structure.Fields.List {
+		for _, fieldName := range field.Names {
+			if !fieldName.IsExported() {
+				continue
+			}
+			identifier, ok := field.Type.(*ast.Ident)
+			if !ok {
+				return nil, false, nil
+			}
+			fieldKind := itemFieldBool
+			switch identifier.Name {
+			case "bool":
+			case "ToolTier":
+				fieldKind = itemFieldToolTier
+			default:
+				return nil, false, nil
+			}
+			if kind != nil && *kind != fieldKind {
+				return nil, false, nil
+			}
+			value := fieldKind
+			kind = &value
+			fields = append(fields, itemFieldSpec{Name: fieldName.Name, Kind: fieldKind})
+		}
+	}
+	if len(fields) > 16 || (len(fields) > 1 && fields[0].Kind == itemFieldToolTier) {
+		return nil, false, nil
+	}
+	return fields, true, nil
+}
+
+func inspectItemState(typeOf reflect.Type, value world.Item, fields []itemFieldSpec, tiers []dfitem.ToolTier) (itemStateSpec, error) {
+	identifier, metadata := value.EncodeItem()
+	state := itemStateSpec{Identifier: identifier, Metadata: int(metadata), ToolTier: -1}
+	reflected := reflect.ValueOf(value)
+	if reflected.Kind() == reflect.Pointer {
+		reflected = reflected.Elem()
+	}
+	for _, field := range fields {
+		reflectedField := reflected.FieldByName(field.Name)
+		if !reflectedField.IsValid() {
+			return itemStateSpec{}, fmt.Errorf("Dragonfly item.%s field %s missing from live type", typeOf.Name(), field.Name)
+		}
+		switch field.Kind {
+		case itemFieldBool:
+			state.Bools = append(state.Bools, reflectedField.Bool())
+		case itemFieldToolTier:
+			tier, ok := reflectedField.Interface().(dfitem.ToolTier)
+			if !ok {
+				return itemStateSpec{}, fmt.Errorf("Dragonfly item.%s.%s is not item.ToolTier", typeOf.Name(), field.Name)
+			}
+			for index, candidate := range tiers {
+				if tier == candidate {
+					state.ToolTier = index
+					break
+				}
+			}
+			if state.ToolTier < 0 {
+				return itemStateSpec{}, fmt.Errorf("Dragonfly item.%s has unregistered ToolTier %+v", typeOf.Name(), tier)
+			}
+		}
+	}
+	return state, nil
+}
+
+func completeItemType(typeOf reflect.Type, definition itemTypeSpec, tiers []dfitem.ToolTier) bool {
+	seen := map[string]bool{}
+	for _, state := range definition.States {
+		key := strconv.Itoa(state.ToolTier) + ":"
+		for _, value := range state.Bools {
+			key += strconv.FormatBool(value) + ","
+		}
+		if seen[key] {
+			return false
+		}
+		seen[key] = true
+	}
+	if len(definition.Fields) == 0 {
+		if len(definition.States) != 1 {
+			return false
+		}
+		zero, ok := reflect.Zero(typeOf).Interface().(world.Item)
+		if !ok {
+			return false
+		}
+		identifier, metadata := zero.EncodeItem()
+		return identifier == definition.States[0].Identifier && int(metadata) == definition.States[0].Metadata
+	}
+	if definition.Fields[0].Kind == itemFieldToolTier {
+		if len(definition.States) != len(tiers) {
+			return false
+		}
+		for index := range tiers {
+			if !seen[strconv.Itoa(index)+":"] {
+				return false
+			}
+		}
+		return true
+	}
+	return len(definition.States) == 1<<len(definition.Fields)
 }
 
 func inspectGameModes(path string) (gameModeSpec, error) {
@@ -2888,6 +3236,99 @@ func generateBiomes(biomes []encodedBiome) []byte {
 	output.WriteString("        private sealed record EncodedBiome(int Id) : World.Biome;\n")
 	output.WriteString("    }\n}\n")
 	return output.Bytes()
+}
+
+func generateItems(spec itemSpec) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/item Go AST and live registry. DO NOT EDIT.\n")
+	output.WriteString("#nullable enable\n\nnamespace Dragonfly\n{\n")
+	output.WriteString("    public static partial class Item\n    {\n")
+	fmt.Fprintf(&output, "        public readonly record struct ToolTier(%s);\n\n", formatParameters(spec.ToolTierFields))
+	for _, tier := range spec.ToolTiers {
+		fmt.Fprintf(&output, "        public static readonly ToolTier %s = new(%s);\n", tier.Variable, csharpToolTier(tier.Value))
+	}
+	output.WriteByte('\n')
+	for _, definition := range spec.Types {
+		if len(definition.Fields) == 0 {
+			fmt.Fprintf(&output, "        public readonly record struct %s : World.Item;\n", definition.Name)
+			continue
+		}
+		parameters := make([]parameter, len(definition.Fields))
+		for index, field := range definition.Fields {
+			typeName := "bool"
+			if field.Kind == itemFieldToolTier {
+				typeName = "ToolTier"
+			}
+			parameters[index] = parameter{Name: field.Name, Type: typeName}
+		}
+		fmt.Fprintf(&output, "        public readonly record struct %s(%s) : World.Item;\n", definition.Name, formatParameters(parameters))
+	}
+	output.WriteString("    }\n\n")
+	output.WriteString("    internal static class ItemCodec\n    {\n")
+	output.WriteString("        internal static bool TryEncode(World.Item item, out string identifier, out int metadata)\n        {\n")
+	output.WriteString("            switch (item)\n            {\n")
+	for _, definition := range spec.Types {
+		for _, state := range definition.States {
+			fmt.Fprintf(&output, "                case Item.%s", definition.Name)
+			switch {
+			case len(definition.Fields) == 0:
+				output.WriteString(" _:\n")
+			case definition.Fields[0].Kind == itemFieldToolTier:
+				fmt.Fprintf(&output, " value when value.%s == Item.%s:\n", definition.Fields[0].Name, spec.ToolTiers[state.ToolTier].Variable)
+			default:
+				output.WriteString(" { ")
+				for index, field := range definition.Fields {
+					if index != 0 {
+						output.WriteString(", ")
+					}
+					fmt.Fprintf(&output, "%s: %t", field.Name, state.Bools[index])
+				}
+				output.WriteString(" }:\n")
+			}
+			fmt.Fprintf(&output, "                    identifier = %s; metadata = %d; return true;\n", strconv.Quote(state.Identifier), state.Metadata)
+		}
+	}
+	output.WriteString("                case EncodedItem encoded:\n                    identifier = encoded.Identifier; metadata = encoded.Metadata; return true;\n")
+	output.WriteString("                default:\n                    identifier = string.Empty; metadata = 0; return false;\n            }\n        }\n\n")
+	output.WriteString("        internal static World.Item Decode(string identifier, int metadata)\n        {\n")
+	for _, definition := range spec.Types {
+		for _, state := range definition.States {
+			fmt.Fprintf(&output, "            if (identifier == %s && metadata == %d) return new Item.%s(", strconv.Quote(state.Identifier), state.Metadata, definition.Name)
+			switch {
+			case len(definition.Fields) == 0:
+			case definition.Fields[0].Kind == itemFieldToolTier:
+				output.WriteString("Item." + spec.ToolTiers[state.ToolTier].Variable)
+			default:
+				for index, value := range state.Bools {
+					if index != 0 {
+						output.WriteString(", ")
+					}
+					output.WriteString(strconv.FormatBool(value))
+				}
+			}
+			output.WriteString(");\n")
+		}
+	}
+	output.WriteString("            return new EncodedItem(identifier, metadata);\n        }\n\n")
+	fmt.Fprintf(&output, "        internal static bool IsAir(World.Item item) =>\n            TryEncode(item, out var identifier, out _) && identifier == %s;\n\n", strconv.Quote(spec.AirIdentifier))
+	output.WriteString("        private sealed record EncodedItem(string Identifier, int Metadata) : World.Item;\n")
+	output.WriteString("    }\n}\n")
+	return output.Bytes()
+}
+
+func csharpToolTier(tier dfitem.ToolTier) string {
+	return strings.Join([]string{
+		strconv.Itoa(tier.HarvestLevel),
+		csharpDouble(tier.BaseMiningEfficiency),
+		csharpDouble(tier.BaseAttackDamage),
+		strconv.Itoa(tier.EnchantmentValue),
+		strconv.Itoa(tier.Durability),
+		strconv.Quote(tier.Name),
+	}, ", ")
+}
+
+func csharpDouble(value float64) string {
+	return strconv.FormatFloat(value, 'g', -1, 64) + "d"
 }
 
 func generateGameModes(spec gameModeSpec) []byte {

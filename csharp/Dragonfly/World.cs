@@ -2,6 +2,8 @@ namespace Dragonfly;
 
 public sealed partial class World
 {
+    public interface Item { }
+
     public partial class Tx
     {
         internal Tx(ulong invocation) => Invocation = invocation;

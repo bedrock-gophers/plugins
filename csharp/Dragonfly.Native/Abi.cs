@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 5;
-    public const uint HostVersion = 29;
+    public const uint HostVersion = 30;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerMoveEvent = 1;
@@ -45,6 +45,9 @@ public static class Abi
     public const uint PlayerTextJukeboxPopup = 3;
     public const uint PlayerTextNameTag = 4;
     public const uint PlayerTextDisconnect = 5;
+    public const uint InventoryMain = 0;
+    public const uint InventoryArmour = 1;
+    public const uint InventoryOffhand = 2;
     public const uint SetBlockDisableBlockUpdates = 1;
     public const uint SetBlockDisableLiquidDisplacement = 1 << 1;
     public const uint SetBlockDisableRedstoneUpdates = 1 << 2;
@@ -132,17 +135,17 @@ public unsafe struct HostApi
     public void* PlayerSkinRead;
     public void* PlayerSkinClose;
     public void* PlayerSkinSet;
-    public void* InventorySize;
-    public void* InventoryItemOpen;
-    public void* PlayerHeldItemOpen;
-    public void* ItemStackRead;
-    public void* ItemStackClose;
-    public void* InventoryItemSet;
-    public void* InventoryItemAdd;
-    public void* InventoryClearSlot;
-    public void* InventoryClear;
-    public void* PlayerHeldItemsSet;
-    public void* PlayerHeldSlotSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, InventoryId, uint*, int> InventorySize;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, InventoryId, uint, ulong*, ItemStackInfo*, int> InventoryItemOpen;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, ulong*, ItemStackInfo*, int> PlayerHeldItemOpen;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, ItemStackData*, int> ItemStackRead;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, void> ItemStackClose;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, InventoryId, uint, ItemStackViewV3*, int> InventoryItemSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, InventoryId, ItemStackViewV3*, uint*, int> InventoryItemAdd;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, InventoryId, uint, int> InventoryClearSlot;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, InventoryId, int> InventoryClear;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, ItemStackViewV3*, ItemStackViewV3*, int> PlayerHeldItemsSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, int> PlayerHeldSlotSet;
     public void* PlayerScoreboard;
     public void* PlayerScoreboardRemove;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, FormView*, int> PlayerFormSend;
@@ -199,6 +202,7 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, byte*, int> WorldRaining;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, byte*, int> WorldThundering;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, long*, int> WorldCurrentTick;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, ItemStackSnapshot*, ItemStackSnapshot*, int> PlayerHeldItemsOpen;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -225,6 +229,84 @@ public unsafe struct PlayerId
 {
     public fixed byte Bytes[16];
     public ulong Generation;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct InventoryId
+{
+    public PlayerId Player;
+    public uint Kind;
+    public uint Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct ByteSpan
+{
+    public ulong Offset;
+    public ulong Length;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct ItemEnchantment
+{
+    public uint Id;
+    public uint Level;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct ItemStackInfo
+{
+    public int Metadata;
+    public uint Count;
+    public uint Damage;
+    public byte Unbreakable;
+    public int AnvilCost;
+    public ulong IdentifierLength;
+    public ulong CustomNameLength;
+    public ulong LoreBytesLength;
+    public ulong LoreCount;
+    public ulong NbtLength;
+    public ulong ValuesNbtLength;
+    public ulong EnchantmentCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct ItemStackSnapshot
+{
+    public ulong Snapshot;
+    public ItemStackInfo Info;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct ItemStackData
+{
+    public StringBuffer Identifier;
+    public StringBuffer CustomName;
+    public StringBuffer LoreBytes;
+    public StringBuffer Nbt;
+    public StringBuffer ValuesNbt;
+    public ByteSpan* Lore;
+    public ulong LoreCapacity;
+    public ItemEnchantment* Enchantments;
+    public ulong EnchantmentCapacity;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct ItemStackViewV3
+{
+    public StringView Identifier;
+    public int Metadata;
+    public uint Count;
+    public uint Damage;
+    public byte Unbreakable;
+    public int AnvilCost;
+    public StringView CustomName;
+    public StringView* Lore;
+    public ulong LoreCount;
+    public StringView Nbt;
+    public StringView ValuesNbt;
+    public ItemEnchantment* Enchantments;
+    public ulong EnchantmentCount;
 }
 
 [StructLayout(LayoutKind.Sequential)]

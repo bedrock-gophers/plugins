@@ -45,7 +45,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    plugins never handle identifiers, NBT, numeric biome IDs, world handles, iterator handles, or
    host errors. `Liquid` preserves Dragonfly's `(Liquid, bool)` result, and passing `null` to
    `SetLiquid` removes the liquid. Host
-   ABI 29 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
+   ABI 30 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
    particles, registered/custom game-mode capabilities, and the transaction owner's current tick
    without exposing them publicly. Form response callbacks additionally receive a borrowed full
    player snapshot, and ownership transfer guarantees exactly one response or drop callback.
@@ -63,8 +63,24 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    remains open for plugin-defined forms and exposes byte-oriented `MarshalJSON`/`SubmitJSON`;
    a null response preserves Dragonfly's close signal. `Element` and `MenuElement` retain their
    public JSON-marshalling contract too.
-6. Items, entities, remaining sounds, and remaining world/block methods.
-7. Convert practice-core and expand parity tests against Dragonfly.
+6. Items. The first landed item slice generates `World.Item`, `Item.ToolTier`, all seven tier
+   values, five tiered tools, and every registered item-package type whose exported state is
+   exactly representable by no fields or boolean fields: 110 concrete item structs total.
+   Dragonfly's live item registry supplies the private identifier/metadata codec. `Item.Stack`
+   starts with `NewStack`, `Count`, `Empty`, `Item`, `Grow`, `CustomName`, `WithCustomName`, `Lore`,
+   and `WithLore`. Generated player methods expose `Inventory`, `Armour`, `HeldItems`,
+   `SetHeldItems`, and `SetHeldSlot`; `Inventory.Value` exposes `Size`, `Item`, `SetItem`, and
+   `AddItem`. C# setters return `void` as the chosen language adaptation, and invalid slots
+   throw `ArgumentOutOfRangeException`; host statuses never enter the public API. The existing
+   ABI 30 adds one atomic held-item pair snapshot, so `HeldItems` observes the same player state
+   with one host read. Bounded open/read/close item snapshots preserve damage, unbreakable state, anvil cost, custom
+   names, lore, item NBT, plugin values, and enchantments internally. Unknown registered stateful
+   items decode to a private opaque item and round-trip losslessly. Atomic inventory snapshots,
+   remaining stack behavior, armour behavior, enchantment types, all stateful item dependency
+   types, ender chests, custom items, and item events remain next; no public identifier fallback is
+   added.
+7. Entities, remaining sounds, and remaining world/block methods.
+8. Convert practice-core and expand parity tests against Dragonfly.
 
 Each slice removes the replaced legacy implementation. Unsupported API remains absent rather than gaining a parallel abstraction.
 
@@ -85,6 +101,8 @@ temperature and weather query in this slice.
 instruments through the transaction-owned `AddParticle` call.
 `/kitchen game-mode` exercises registered lookup, player reads, and a custom capability-backed
 game mode.
+`/kitchen item` builds a typed diamond sword, round-trips it through player inventory and held-item
+access, verifies its concrete type, then restores all changed player state.
 `/kitchen form` exercises reflected menu, custom, and modal forms, every built-in element,
 submitted values, closers, and nested sends. `/kitchen raw-form` exercises the open `Form.Value`
 contract plus public element/menu-element JSON marshalling.

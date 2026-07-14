@@ -104,23 +104,26 @@ func (p *Players) AddInventoryItem(invocation native.InvocationID, id native.Inv
 	if !ok {
 		return 0, false
 	}
-	return readPlayer(p, invocation, id.Player, func(connected *player.Player) uint32 {
+	var added uint32
+	ok = p.mutatePlayer(invocation, id.Player, func(connected *player.Player) {
 		if id.Kind == native.InventoryOffhand {
 			main, offhand := connected.HeldItems()
 			temporary := inventory.New(1, nil)
 			_ = temporary.SetItem(0, offhand)
-			added, _ := temporary.AddItem(stack)
+			count, _ := temporary.AddItem(stack)
 			offhand, _ = temporary.Item(0)
 			connected.SetHeldItems(main, offhand)
-			return uint32(added)
+			added = uint32(count)
+			return
 		}
 		inv, valid := playerInventory(connected, id.Kind)
 		if !valid {
-			return 0
+			return
 		}
-		added, _ := inv.AddItem(stack)
-		return uint32(added)
+		count, _ := inv.AddItem(stack)
+		added = uint32(count)
 	})
+	return added, ok
 }
 
 func (p *Players) ClearInventory(invocation native.InvocationID, id native.InventoryID) bool {
@@ -155,6 +158,22 @@ func (p *Players) HeldItem(invocation native.InvocationID, id native.PlayerID, h
 		}{converted, valid}
 	})
 	return value.value, ok && value.ok
+}
+
+func (p *Players) HeldItems(invocation native.InvocationID, id native.PlayerID) (native.ItemStack, native.ItemStack, bool) {
+	value, ok := readPlayer(p, invocation, id, func(connected *player.Player) struct {
+		main, offhand native.ItemStack
+		ok            bool
+	} {
+		main, offhand := connected.HeldItems()
+		mainValue, mainOK := itemStackToNative(main)
+		offhandValue, offhandOK := itemStackToNative(offhand)
+		return struct {
+			main, offhand native.ItemStack
+			ok            bool
+		}{main: mainValue, offhand: offhandValue, ok: mainOK && offhandOK}
+	})
+	return value.main, value.offhand, ok && value.ok
 }
 
 func (p *Players) SetHeldItems(invocation native.InvocationID, id native.PlayerID, mainValue, offhandValue native.ItemStack) bool {

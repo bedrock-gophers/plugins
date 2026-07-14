@@ -51,6 +51,286 @@ internal static unsafe class PluginBridge
         internal static World.GameMode PlayerGameMode(ulong invocation, PlayerId player) =>
             World.GameModeFromDescriptor(GetPlayerState(invocation, player, 0).Integer);
 
+        internal static int InventorySize(ulong invocation, InventoryId inventory)
+        {
+            var api = Api;
+            if (api is null || api->InventorySize == null)
+                throw new InvalidOperationException("inventory is unavailable");
+            uint size;
+            if (api->InventorySize(api->Context, invocation, inventory, &size) != Abi.Ok || size > int.MaxValue)
+                throw new InvalidOperationException("inventory is no longer available");
+            return (int)size;
+        }
+
+        internal static Item.Stack InventoryItem(ulong invocation, InventoryId inventory, int slot)
+        {
+            var api = Api;
+            if (api is null || api->InventoryItemOpen == null || api->ItemStackRead == null || api->ItemStackClose == null)
+                throw new InvalidOperationException("inventory is unavailable");
+            ulong snapshot;
+            ItemStackInfo info;
+            if (api->InventoryItemOpen(api->Context, invocation, inventory, checked((uint)slot), &snapshot, &info) != Abi.Ok)
+                throw new InvalidOperationException("inventory is no longer available");
+            return ReadItemStack(api, invocation, snapshot, info);
+        }
+
+        internal static Item.Stack HeldItem(ulong invocation, PlayerId player, uint hand)
+        {
+            var api = Api;
+            if (api is null || api->PlayerHeldItemOpen == null || api->ItemStackRead == null || api->ItemStackClose == null)
+                throw new InvalidOperationException("player is unavailable");
+            ulong snapshot;
+            ItemStackInfo info;
+            if (api->PlayerHeldItemOpen(api->Context, invocation, player, hand, &snapshot, &info) != Abi.Ok)
+                throw new InvalidOperationException("player is no longer available");
+            return ReadItemStack(api, invocation, snapshot, info);
+        }
+
+        internal static (Item.Stack MainHand, Item.Stack OffHand) HeldItems(ulong invocation, PlayerId player)
+        {
+            var api = Api;
+            if (api is null || api->PlayerHeldItemsOpen == null || api->ItemStackRead == null || api->ItemStackClose == null)
+                throw new InvalidOperationException("player is unavailable");
+            ItemStackSnapshot mainHand;
+            ItemStackSnapshot offHand;
+            if (api->PlayerHeldItemsOpen(api->Context, invocation, player, &mainHand, &offHand) != Abi.Ok)
+                throw new InvalidOperationException("player is no longer available");
+            var mainOpen = true;
+            var offOpen = true;
+            try
+            {
+                mainOpen = false;
+                var main = ReadItemStack(api, invocation, mainHand.Snapshot, mainHand.Info);
+                offOpen = false;
+                var off = ReadItemStack(api, invocation, offHand.Snapshot, offHand.Info);
+                return (main, off);
+            }
+            finally
+            {
+                if (mainOpen) api->ItemStackClose(api->Context, invocation, mainHand.Snapshot);
+                if (offOpen) api->ItemStackClose(api->Context, invocation, offHand.Snapshot);
+            }
+        }
+
+        internal static void SetInventoryItem(ulong invocation, InventoryId inventory, int slot, Item.Stack item)
+        {
+            var api = Api;
+            if (api is null || api->InventoryItemSet == null)
+                throw new InvalidOperationException("inventory is unavailable");
+            using var lease = new ItemViewLease(item);
+            var view = lease.View;
+            if (api->InventoryItemSet(api->Context, invocation, inventory, checked((uint)slot), &view) != Abi.Ok)
+                throw new InvalidOperationException("inventory is no longer available");
+        }
+
+        internal static int AddInventoryItem(ulong invocation, InventoryId inventory, Item.Stack item)
+        {
+            var api = Api;
+            if (api is null || api->InventoryItemAdd == null)
+                throw new InvalidOperationException("inventory is unavailable");
+            using var lease = new ItemViewLease(item);
+            var view = lease.View;
+            uint added;
+            if (api->InventoryItemAdd(api->Context, invocation, inventory, &view, &added) != Abi.Ok)
+                throw new InvalidOperationException("inventory is no longer available");
+            return checked((int)added);
+        }
+
+        internal static void SetHeldItems(ulong invocation, PlayerId player, Item.Stack mainHand, Item.Stack offHand)
+        {
+            var api = Api;
+            if (api is null || api->PlayerHeldItemsSet == null)
+                throw new InvalidOperationException("player is unavailable");
+            using var mainLease = new ItemViewLease(mainHand);
+            using var offLease = new ItemViewLease(offHand);
+            var main = mainLease.View;
+            var off = offLease.View;
+            if (api->PlayerHeldItemsSet(api->Context, invocation, player, &main, &off) != Abi.Ok)
+                throw new InvalidOperationException("player is no longer available");
+        }
+
+        internal static void SetHeldSlot(ulong invocation, PlayerId player, int slot)
+        {
+            if (slot is < 0 or > 8) throw new ArgumentOutOfRangeException(nameof(slot));
+            var api = Api;
+            if (api is null || api->PlayerHeldSlotSet == null)
+                throw new InvalidOperationException("player is unavailable");
+            if (api->PlayerHeldSlotSet(api->Context, invocation, player, (uint)slot) != Abi.Ok)
+                throw new InvalidOperationException("player is no longer available");
+        }
+
+        private static Item.Stack ReadItemStack(HostApi* api, ulong invocation, ulong snapshot, ItemStackInfo info)
+        {
+            try
+            {
+                const ulong maxData = 16UL << 20;
+                if (info.IdentifierLength > 256 || info.CustomNameLength > 4096 || info.LoreCount > 256 ||
+                    info.EnchantmentCount > 256 || info.IdentifierLength + info.CustomNameLength +
+                    info.LoreBytesLength + info.NbtLength + info.ValuesNbtLength > maxData ||
+                    info.Count > int.MaxValue)
+                    throw new InvalidOperationException("invalid item stack returned by server");
+
+                var identifier = new byte[checked((int)info.IdentifierLength)];
+                var customName = new byte[checked((int)info.CustomNameLength)];
+                var loreBytes = new byte[checked((int)info.LoreBytesLength)];
+                var itemNbt = new byte[checked((int)info.NbtLength)];
+                var valuesNbt = new byte[checked((int)info.ValuesNbtLength)];
+                var lore = new ByteSpan[checked((int)info.LoreCount)];
+                var enchantments = new ItemEnchantment[checked((int)info.EnchantmentCount)];
+                fixed (byte* identifierData = identifier)
+                fixed (byte* customNameData = customName)
+                fixed (byte* loreData = loreBytes)
+                fixed (byte* itemNbtData = itemNbt)
+                fixed (byte* valuesNbtData = valuesNbt)
+                fixed (ByteSpan* loreSpans = lore)
+                fixed (ItemEnchantment* enchantmentData = enchantments)
+                {
+                    var data = new ItemStackData
+                    {
+                        Identifier = Buffer(identifierData, identifier.Length),
+                        CustomName = Buffer(customNameData, customName.Length),
+                        LoreBytes = Buffer(loreData, loreBytes.Length),
+                        Nbt = Buffer(itemNbtData, itemNbt.Length),
+                        ValuesNbt = Buffer(valuesNbtData, valuesNbt.Length),
+                        Lore = loreSpans,
+                        LoreCapacity = (ulong)lore.Length,
+                        Enchantments = enchantmentData,
+                        EnchantmentCapacity = (ulong)enchantments.Length,
+                    };
+                    if (api->ItemStackRead(api->Context, invocation, snapshot, &data) != Abi.Ok)
+                        throw new InvalidOperationException("item stack is no longer available");
+                }
+
+                if (info.Count == 0) return default;
+                var lines = new string[lore.Length];
+                for (var index = 0; index < lore.Length; index++)
+                {
+                    var span = lore[index];
+                    if (span.Offset > (ulong)loreBytes.Length || span.Length > (ulong)loreBytes.Length - span.Offset)
+                        throw new InvalidOperationException("invalid item lore returned by server");
+                    lines[index] = Encoding.UTF8.GetString(loreBytes, checked((int)span.Offset), checked((int)span.Length));
+                }
+                var item = ItemCodec.Decode(Encoding.UTF8.GetString(identifier), info.Metadata);
+                return new Item.Stack(
+                    item,
+                    checked((int)info.Count),
+                    info.Damage,
+                    info.Unbreakable != 0,
+                    info.AnvilCost,
+                    Encoding.UTF8.GetString(customName),
+                    lines,
+                    itemNbt,
+                    valuesNbt,
+                    enchantments);
+            }
+            finally
+            {
+                api->ItemStackClose(api->Context, invocation, snapshot);
+            }
+        }
+
+        private static StringBuffer Buffer(byte* data, int length) => new()
+        {
+            Data = data,
+            Capacity = (ulong)length,
+        };
+
+        private sealed class ItemViewLease : IDisposable
+        {
+            private readonly List<nint> _allocations = [];
+            internal ItemStackViewV3 View;
+
+            internal ItemViewLease(Item.Stack stack)
+            {
+                try
+                {
+                    var empty = stack.Empty();
+                    if (empty)
+                    {
+                        View = default;
+                        return;
+                    }
+                    var identifier = string.Empty;
+                    var metadata = 0;
+                    if (!stack.TryEncode(out identifier, out metadata))
+                        throw new ArgumentException("item type is not registered", nameof(stack));
+                    var lore = stack.Lore();
+                    ValidateItemView(stack, identifier, lore);
+                    var loreViews = AllocateViews(lore.Length);
+                    for (var index = 0; index < lore.Length; index++) loreViews[index] = AllocateUtf8(lore[index]);
+                    var enchantments = stack.Enchantments;
+                    var enchantmentData = AllocateArray<ItemEnchantment>(enchantments.Length);
+                    if (enchantments.Length != 0) enchantments.CopyTo(new Span<ItemEnchantment>(enchantmentData, enchantments.Length));
+                    View = new ItemStackViewV3
+                    {
+                        Identifier = AllocateUtf8(identifier),
+                        Metadata = metadata,
+                        Count = checked((uint)stack.Count()),
+                        Damage = stack.Damage,
+                        Unbreakable = stack.IsUnbreakable ? (byte)1 : (byte)0,
+                        AnvilCost = stack.AnvilCostValue,
+                        CustomName = AllocateUtf8(stack.CustomName()),
+                        Lore = loreViews,
+                        LoreCount = (ulong)lore.Length,
+                        Nbt = Allocate(stack.ItemNbt),
+                        ValuesNbt = Allocate(stack.ValuesNbt),
+                        Enchantments = enchantmentData,
+                        EnchantmentCount = (ulong)enchantments.Length,
+                    };
+                }
+                catch
+                {
+                    Dispose();
+                    throw;
+                }
+            }
+
+            private static void ValidateItemView(Item.Stack stack, string identifier, string[] lore)
+            {
+                const int maxData = 16 << 20;
+                if (Encoding.UTF8.GetByteCount(identifier) > 256 ||
+                    Encoding.UTF8.GetByteCount(stack.CustomName()) > 4096 ||
+                    lore.Length > 256 || stack.Enchantments.Length > 256)
+                    throw new ArgumentException("item stack data exceeds server limits", nameof(stack));
+                long total = Encoding.UTF8.GetByteCount(identifier) + Encoding.UTF8.GetByteCount(stack.CustomName()) +
+                    stack.ItemNbt.Length + stack.ValuesNbt.Length;
+                foreach (var line in lore)
+                {
+                    var length = Encoding.UTF8.GetByteCount(line);
+                    if (length > 4096) throw new ArgumentException("item lore exceeds server limits", nameof(stack));
+                    total += length;
+                }
+                if (total > maxData) throw new ArgumentException("item stack data exceeds server limits", nameof(stack));
+            }
+
+            private StringView AllocateUtf8(string value) => Allocate(Encoding.UTF8.GetBytes(value));
+
+            private StringView Allocate(byte[] value)
+            {
+                if (value.Length == 0) return default;
+                var data = (byte*)NativeMemory.Alloc((nuint)value.Length);
+                _allocations.Add((nint)data);
+                value.CopyTo(new Span<byte>(data, value.Length));
+                return new StringView { Data = data, Length = (ulong)value.Length };
+            }
+
+            private StringView* AllocateViews(int count) => AllocateArray<StringView>(count);
+
+            private T* AllocateArray<T>(int count) where T : unmanaged
+            {
+                if (count == 0) return null;
+                var data = (T*)NativeMemory.Alloc((nuint)count, (nuint)sizeof(T));
+                _allocations.Add((nint)data);
+                return data;
+            }
+
+            public void Dispose()
+            {
+                foreach (var allocation in _allocations) NativeMemory.Free((void*)allocation);
+                _allocations.Clear();
+            }
+        }
+
         internal static void SendPlayerForm(ulong invocation, PlayerId player, Form.Value form)
         {
             ArgumentNullException.ThrowIfNull(form);
@@ -812,7 +1092,7 @@ internal static unsafe class PluginBridge
     {
         if (host is null) return Abi.Error;
         var header = (HostHeader*)host;
-        if (header->Version != Abi.HostVersion || header->Size < 656) return Abi.Error;
+        if (header->Version != Abi.HostVersion || header->Size < 664) return Abi.Error;
         Host.Api = (HostApi*)host;
         return Abi.Ok;
     }

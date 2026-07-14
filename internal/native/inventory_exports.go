@@ -52,6 +52,28 @@ func bg_go_player_held_item_open(context C.uint64_t, invocation C.DfInvocationId
 	return openItemSnapshot(uint64(context), value, ok, snapshot, info)
 }
 
+//export bg_go_player_held_items_open
+func bg_go_player_held_items_open(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, mainHand, offHand *C.DfItemStackSnapshot) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || mainHand == nil || offHand == nil || mainHand == offHand {
+		return C.DF_STATUS_ERROR
+	}
+	mainValue, offhandValue, ok := host.HeldItems(InvocationID(invocation), playerID(player))
+	if !ok || !validNativeItem(mainValue) || !validNativeItem(offhandValue) {
+		return C.DF_STATUS_ERROR
+	}
+	mainID, offhandID, ok := registerItemSnapshotPair(uint64(context), mainValue, offhandValue)
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	var mainInfo, offhandInfo C.DfItemStackInfo
+	fillItemStackInfo(&mainInfo, mainValue)
+	fillItemStackInfo(&offhandInfo, offhandValue)
+	*mainHand = C.DfItemStackSnapshot{snapshot: C.uint64_t(mainID), info: mainInfo}
+	*offHand = C.DfItemStackSnapshot{snapshot: C.uint64_t(offhandID), info: offhandInfo}
+	return C.DF_STATUS_OK
+}
+
 //export bg_go_item_stack_read
 func bg_go_item_stack_read(context C.uint64_t, invocation C.DfInvocationId, snapshot C.uint64_t, data *C.DfItemStackData) C.DfStatus {
 	value, ok := resolveItemSnapshot(uint64(context), uint64(snapshot))

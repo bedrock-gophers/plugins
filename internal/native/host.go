@@ -410,6 +410,7 @@ type Host interface {
 	AddInventoryItem(InvocationID, InventoryID, ItemStack) (uint32, bool)
 	ClearInventory(InvocationID, InventoryID) bool
 	HeldItem(InvocationID, PlayerID, uint32) (ItemStack, bool)
+	HeldItems(InvocationID, PlayerID) (ItemStack, ItemStack, bool)
 	SetHeldItems(InvocationID, PlayerID, ItemStack, ItemStack) bool
 	SetHeldSlot(InvocationID, PlayerID, uint32) bool
 	WorldByName(InvocationID, string) (WorldID, bool)
@@ -499,8 +500,11 @@ func (noopHost) SetInventoryItem(InvocationID, InventoryID, uint32, ItemStack) b
 func (noopHost) AddInventoryItem(InvocationID, InventoryID, ItemStack) (uint32, bool) {
 	return 0, false
 }
-func (noopHost) ClearInventory(InvocationID, InventoryID) bool                  { return false }
-func (noopHost) HeldItem(InvocationID, PlayerID, uint32) (ItemStack, bool)      { return ItemStack{}, false }
+func (noopHost) ClearInventory(InvocationID, InventoryID) bool             { return false }
+func (noopHost) HeldItem(InvocationID, PlayerID, uint32) (ItemStack, bool) { return ItemStack{}, false }
+func (noopHost) HeldItems(InvocationID, PlayerID) (ItemStack, ItemStack, bool) {
+	return ItemStack{}, ItemStack{}, false
+}
 func (noopHost) SetHeldItems(InvocationID, PlayerID, ItemStack, ItemStack) bool { return false }
 func (noopHost) SetHeldSlot(InvocationID, PlayerID, uint32) bool                { return false }
 func (noopHost) WorldByName(InvocationID, string) (WorldID, bool)               { return 0, false }
@@ -943,6 +947,20 @@ func registerItemSnapshot(host uint64, item ItemStack) (uint64, bool) {
 	itemSnapshots[id] = itemSnapshot{host: host, item: cloneItemStack(item)}
 	itemSnapshotCounts[host]++
 	return id, true
+}
+
+func registerItemSnapshotPair(host uint64, first, second ItemStack) (uint64, uint64, bool) {
+	itemSnapshotMu.Lock()
+	defer itemSnapshotMu.Unlock()
+	if itemSnapshotCounts[host] > maxItemSnapshotsPerHost-2 {
+		return 0, 0, false
+	}
+	firstID := itemSnapshotSequence.Add(1)
+	secondID := itemSnapshotSequence.Add(1)
+	itemSnapshots[firstID] = itemSnapshot{host: host, item: cloneItemStack(first)}
+	itemSnapshots[secondID] = itemSnapshot{host: host, item: cloneItemStack(second)}
+	itemSnapshotCounts[host] += 2
+	return firstID, secondID, true
 }
 
 func resolveItemSnapshot(host, id uint64) (ItemStack, bool) {
