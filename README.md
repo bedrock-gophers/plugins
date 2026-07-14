@@ -6,11 +6,17 @@ Small consumer example. Plugin source lives in `plugins/`; framework and generat
 make run
 ```
 
-The build fetches the exact framework revision pinned in `go.mod`, compiles the C# NativeAOT
-runtime, compiles every local plugin to `.so`, then starts the Go server.
+Every `make run` fetches the exact framework revision pinned in `go.mod`, rebuilds the C#
+NativeAOT runtime, rebuilds every local plugin to `.so`, replaces staged plugin binaries, then
+starts the Go server. It does not reuse an older plugin build.
 
 Every C# project under `plugins/*/` is discovered automatically. Adding another plugin only
 requires a `.csproj` and its C# source.
+
+The kitchen-sink plugin includes `/kitchen block`, demonstrating `World.Tx`, generated
+`Cube.Pos`, typed `Block.Sand`, and `World.SetOpts`. Compatible precompiled `.so` plugins remain
+supported by the loader; because the source build clears `plugins/*.so`, stage binary-only plugins
+after `make build` and start `.build/bin/server` directly.
 
 ## Docker
 
@@ -21,8 +27,10 @@ docker compose up --build
 ```
 
 The multi-stage image builds Go, the C# NativeAOT runtime, and every example plugin for the
-machine's architecture. Bedrock listens on UDP port `19132`; server data is kept in the
-`bedrock-gophers-minimal-data` Docker volume.
+machine's architecture, then bakes those `.so` files into the image. Plugin source changes require
+`docker compose up --build`; there is no plugin hot reload or mounted plugin directory. Bedrock
+listens on UDP port `19132`; server data is kept in the `bedrock-gophers-minimal-data` Docker
+volume.
 
 Plain Docker:
 

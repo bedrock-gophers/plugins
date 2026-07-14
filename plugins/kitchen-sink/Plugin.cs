@@ -24,7 +24,8 @@ public sealed class KitchenSink : Plugin
             new KitchenPing(),
             new KitchenPosition(),
             new KitchenDestination(),
-            new KitchenText()));
+            new KitchenText(),
+            new KitchenBlock()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -192,6 +193,29 @@ public sealed class KitchenSink : Plugin
                     player.Disconnect(Content);
                     break;
             }
+        }
+    }
+
+    internal sealed class KitchenBlock : Cmd.Runnable
+    {
+        public Cmd.SubCommand Block;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (tx is null)
+            {
+                output.Error("A world transaction is required.");
+                return;
+            }
+            var position = Cube.PosFromVec3(source.Position()).Side(Cube.Face.Down);
+            var wasSand = tx.Block(position) is Block.Sand;
+            tx.SetBlock(position, new Block.Sand(), new World.SetOpts
+            {
+                DisableBlockUpdates = true,
+                DisableLiquidDisplacement = true,
+                DisableRedstoneUpdates = true,
+            });
+            output.Printf("block={0}, was_sand={1}", position, wasSand ? "true" : "false");
         }
     }
 }
