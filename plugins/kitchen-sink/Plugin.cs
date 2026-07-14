@@ -23,7 +23,8 @@ public sealed class KitchenSink : Plugin
             new KitchenMode(),
             new KitchenPing(),
             new KitchenPosition(),
-            new KitchenDestination()));
+            new KitchenDestination(),
+            new KitchenText()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -143,5 +144,54 @@ public sealed class KitchenSink : Plugin
         public string Type() => "kitchen_destination";
         public IReadOnlyList<string> Options(Cmd.Source source) => ["spawn", "source"];
         public override string ToString() => value;
+    }
+
+    internal enum TextAction
+    {
+        Message,
+        Popup,
+        Tip,
+        Jukebox,
+        NameTag,
+        Disconnect,
+    }
+
+    internal sealed class KitchenText : Cmd.Runnable
+    {
+        [Cmd.Tag("text")]
+        public Cmd.SubCommand Text;
+        [Cmd.Tag("action")]
+        public TextAction Action;
+        public Cmd.Varargs Content;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            switch (Action)
+            {
+                case TextAction.Message:
+                    player.Message(Content, true, 12, 1.5, null);
+                    break;
+                case TextAction.Popup:
+                    player.SendPopup(Content);
+                    break;
+                case TextAction.Tip:
+                    player.SendTip(Content);
+                    break;
+                case TextAction.Jukebox:
+                    player.SendJukeboxPopup(Content);
+                    break;
+                case TextAction.NameTag:
+                    player.SetNameTag(Content);
+                    break;
+                case TextAction.Disconnect:
+                    player.Disconnect(Content);
+                    break;
+            }
+        }
     }
 }
