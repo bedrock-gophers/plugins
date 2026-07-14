@@ -15,7 +15,8 @@ requires a `.csproj` and its C# source.
 
 The kitchen-sink plugin includes `/kitchen block`, demonstrating generated `World.Tx` range,
 loaded-block, lazy block-search, height/light, typed block, and typed liquid APIs. It probes an
-empty liquid result, places/reads `Block.Water`, then removes it with `SetLiquid(pos, null)`.
+empty liquid result, places/reads/removes typed water, then leaves matching water present and
+schedules its update after 250 ms with `ScheduleBlockUpdate` and `TimeSpan`.
 Compatible precompiled `.so` plugins remain supported by the loader; because the source build
 clears `plugins/*.so`, stage binary-only plugins after `make build` and start `.build/bin/server`
 directly.
