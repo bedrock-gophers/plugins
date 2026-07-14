@@ -15,6 +15,9 @@ const (
 	maxBlockIdentifierBytes = 256
 	maxBlockPropertiesBytes = 64 << 10
 	maxSourceNameBytes      = 64 << 10
+	setBlockDisableUpdates  = 1
+	setBlockDisableLiquid   = 2
+	setBlockDisableRedstone = 4
 )
 
 //export bg_go_world_lookup
@@ -148,9 +151,10 @@ func worldBlockFits(identifier, properties []byte, identifierCapacity, propertie
 }
 
 //export bg_go_world_block_set
-func bg_go_world_block_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, view *C.DfBlockView) C.DfStatus {
+func bg_go_world_block_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, view *C.DfBlockView, flags C.uint32_t) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
-	if !ok || view == nil {
+	options, validOptions := worldSetOptions(uint32(flags))
+	if !ok || view == nil || !validOptions {
 		return C.DF_STATUS_ERROR
 	}
 	identifier, validIdentifier := copyWorldBytes(view.identifier, maxBlockIdentifierBytes)
@@ -158,10 +162,21 @@ func bg_go_world_block_set(context C.uint64_t, invocation C.DfInvocationId, worl
 	if !validIdentifier || !validProperties || len(identifier) == 0 || !utf8.Valid(identifier) ||
 		!host.SetWorldBlock(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position), WorldBlock{
 			Identifier: string(identifier), PropertiesNBT: properties,
-		}) {
+		}, options) {
 		return C.DF_STATUS_ERROR
 	}
 	return C.DF_STATUS_OK
+}
+
+func worldSetOptions(flags uint32) (WorldSetOpts, bool) {
+	if flags & ^uint32(setBlockDisableUpdates|setBlockDisableLiquid|setBlockDisableRedstone) != 0 {
+		return WorldSetOpts{}, false
+	}
+	return WorldSetOpts{
+		DisableBlockUpdates:       flags&setBlockDisableUpdates != 0,
+		DisableLiquidDisplacement: flags&setBlockDisableLiquid != 0,
+		DisableRedstoneUpdates:    flags&setBlockDisableRedstone != 0,
+	}, true
 }
 
 //export bg_go_world_time_get

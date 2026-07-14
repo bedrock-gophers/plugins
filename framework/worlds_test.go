@@ -131,10 +131,13 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 		}
 		name, state := gold.EncodeBlock()
 		stateNBT, ok := encodeBlockProperties(state)
-		if !ok || !manager.SetWorldBlock(invocation, id, native.BlockPos{X: 2, Y: 3, Z: 4}, native.WorldBlock{Identifier: name, PropertiesNBT: stateNBT}) {
+		options := native.WorldSetOpts{
+			DisableBlockUpdates: true, DisableLiquidDisplacement: true, DisableRedstoneUpdates: true,
+		}
+		if !ok || !manager.SetWorldBlock(invocation, 0, native.BlockPos{X: 2, Y: 3, Z: 4}, native.WorldBlock{Identifier: name, PropertiesNBT: stateNBT}, options) {
 			t.Fatal("SetWorldBlock() failed")
 		}
-		got, ok := manager.WorldBlock(invocation, id, native.BlockPos{X: 2, Y: 3, Z: 4})
+		got, ok := manager.WorldBlock(invocation, 0, native.BlockPos{X: 2, Y: 3, Z: 4})
 		if !ok || got.Identifier != name {
 			t.Fatalf("WorldBlock() = %#v, %v", got, ok)
 		}
@@ -155,6 +158,9 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 		}
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	if _, ok := manager.WorldBlock(9999, 0, native.BlockPos{}); ok {
+		t.Fatal("stale invocation resolved current world")
 	}
 	if !manager.SetWorldTime(0, id, 6000) {
 		t.Fatal("SetWorldTime failed")

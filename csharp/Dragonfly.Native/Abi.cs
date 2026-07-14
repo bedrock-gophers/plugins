@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 5;
-    public const uint HostVersion = 20;
+    public const uint HostVersion = 21;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerMoveEvent = 1;
@@ -45,6 +45,9 @@ public static class Abi
     public const uint PlayerTextJukeboxPopup = 3;
     public const uint PlayerTextNameTag = 4;
     public const uint PlayerTextDisconnect = 5;
+    public const uint SetBlockDisableBlockUpdates = 1;
+    public const uint SetBlockDisableLiquidDisplacement = 1 << 1;
+    public const uint SetBlockDisableRedstoneUpdates = 1 << 2;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -104,6 +107,35 @@ public unsafe struct HostApi
     public void* PlayerRotation;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, PlayerStateValue, int> PlayerStateSet;
     public void* PlayerStateGet;
+    public void* PlayerEffect;
+    public void* PlayerEntityVisibility;
+    public void* PlayerSkinOpen;
+    public void* PlayerSkinAnimationInfo;
+    public void* PlayerSkinRead;
+    public void* PlayerSkinClose;
+    public void* PlayerSkinSet;
+    public void* InventorySize;
+    public void* InventoryItemOpen;
+    public void* PlayerHeldItemOpen;
+    public void* ItemStackRead;
+    public void* ItemStackClose;
+    public void* InventoryItemSet;
+    public void* InventoryItemAdd;
+    public void* InventoryClearSlot;
+    public void* InventoryClear;
+    public void* PlayerHeldItemsSet;
+    public void* PlayerHeldSlotSet;
+    public void* PlayerScoreboard;
+    public void* PlayerScoreboardRemove;
+    public void* PlayerFormSend;
+    public void* PlayerFormClose;
+    public void* WorldLookup;
+    public void* WorldOpen;
+    public void* WorldName;
+    public void* WorldUnload;
+    public void* WorldSave;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, BlockData*, int> WorldBlockGet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, BlockView*, uint, int> WorldBlockSet;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -138,6 +170,34 @@ public struct Vec3
     public double X;
     public double Y;
     public double Z;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct BlockPos
+{
+    public int X;
+    public int Y;
+    public int Z;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldId
+{
+    public ulong Value;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct BlockData
+{
+    public StringBuffer Identifier;
+    public StringBuffer PropertiesNbt;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct BlockView
+{
+    public StringView Identifier;
+    public StringView PropertiesNbt;
 }
 
 [StructLayout(LayoutKind.Sequential)]

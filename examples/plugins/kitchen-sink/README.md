@@ -7,7 +7,9 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - player-action telemetry;
 - reflected command arguments and overloads;
 - direct `Player.Message` output;
+- transaction-safe block reads and writes through `World.Tx`;
+- generated `Cube.Pos`, `Block.Sand`, and all `World.SetOpts` flags in `/kitchen block`;
 - plugin lifecycle.
 
-New commands, worlds, items, blocks, forms, entities, and handlers belong here only when the
-example can do something real with them. This plugin is not a compile-time API dumping ground.
+New APIs belong here only when the example can do something real with them. This plugin is not a
+compile-time API dumping ground.

@@ -191,6 +191,7 @@ type recordingHost struct {
 	worldLiquidOK      bool
 	worldBlockPos      BlockPos
 	worldBlockSet      WorldBlock
+	worldSetOpts       WorldSetOpts
 	worldSaved         bool
 	worldUnloaded      bool
 	worldTime          int64
@@ -357,15 +358,15 @@ func (h *recordingHost) WorldName(_ InvocationID, id WorldID) (string, bool) {
 }
 func (h *recordingHost) WorldBlock(_ InvocationID, id WorldID, position BlockPos) (WorldBlock, bool) {
 	h.worldBlockPos = position
-	return h.worldBlock, id == h.worldID && h.worldBlockOK
+	return h.worldBlock, (id == 0 || id == h.worldID) && h.worldBlockOK
 }
 func (h *recordingHost) WorldLiquid(_ InvocationID, id WorldID, position BlockPos) (WorldBlock, bool) {
 	h.worldBlockPos = position
 	return h.worldLiquid, id == h.worldID && h.worldLiquidOK
 }
-func (h *recordingHost) SetWorldBlock(_ InvocationID, id WorldID, position BlockPos, value WorldBlock) bool {
-	h.worldBlockPos, h.worldBlockSet = position, value
-	return id == h.worldID
+func (h *recordingHost) SetWorldBlock(_ InvocationID, id WorldID, position BlockPos, value WorldBlock, options WorldSetOpts) bool {
+	h.worldBlockPos, h.worldBlockSet, h.worldSetOpts = position, value, options
+	return id == 0 || id == h.worldID
 }
 func (h *recordingHost) SaveWorld(_ InvocationID, id WorldID) bool {
 	h.worldSaved = id == h.worldID

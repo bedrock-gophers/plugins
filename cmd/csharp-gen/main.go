@@ -11,7 +11,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/bedrock-gophers/plugins/internal/host"
+	_ "github.com/df-mc/dragonfly/server/block"
+	"github.com/df-mc/dragonfly/server/world"
 )
 
 type method struct {
@@ -40,6 +47,21 @@ type commandMethod struct {
 type generatedFile struct {
 	Path    string
 	Content []byte
+}
+
+type cubeSpec struct {
+	Faces []string
+}
+
+type encodedBlock struct {
+	Name          string
+	Identifier    string
+	PropertiesNBT []byte
+}
+
+type blockSpec struct {
+	Stateless []encodedBlock
+	Sand      [2]encodedBlock
 }
 
 var supportedPlayerHandlers = map[string]uint64{
@@ -100,6 +122,18 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	cube, err := inspectCube(filepath.Join(directory, "server", "block", "cube"))
+	if err != nil {
+		fatal(err)
+	}
+	setOpts, err := inspectSetOpts(filepath.Join(directory, "server", "world", "world.go"))
+	if err != nil {
+		fatal(err)
+	}
+	blocks, err := inspectBlocks(filepath.Join(directory, "server", "block"))
+	if err != nil {
+		fatal(err)
+	}
 	files := []generatedFile{
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Handler.g.cs"),
@@ -112,6 +146,18 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Cmd.Interfaces.g.cs"),
 			Content: generateCommandInterfaces(interfaces),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Cube.g.cs"),
+			Content: generateCube(cube),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Block.g.cs"),
+			Content: generateWorldBlock(setOpts),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Block.Types.g.cs"),
+			Content: generateBlocks(blocks),
 		},
 	}
 	if err := syncGeneratedFiles(files, *check); err != nil {
@@ -169,6 +215,273 @@ func playerMethod(function *ast.FuncDecl) bool {
 	}
 	receiver, ok := pointer.X.(*ast.Ident)
 	return ok && receiver.Name == "Player"
+}
+
+func inspectCube(directory string) (cubeSpec, error) {
+	if err := requireArrayType(filepath.Join(directory, "pos.go"), "Pos", 3, "int"); err != nil {
+		return cubeSpec{}, err
+	}
+	if err := requireArrayType(filepath.Join(directory, "range.go"), "Range", 2, "int"); err != nil {
+		return cubeSpec{}, err
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(directory, "face.go"), nil, 0)
+	if err != nil {
+		return cubeSpec{}, err
+	}
+	if !hasNamedType(file, "Face", "int") {
+		return cubeSpec{}, fmt.Errorf("cube.Face is not backed by int")
+	}
+	var faces []string
+	for _, declaration := range file.Decls {
+		gen, ok := declaration.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		for _, raw := range gen.Specs {
+			spec, ok := raw.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, name := range spec.Names {
+				if strings.HasPrefix(name.Name, "Face") {
+					faces = append(faces, strings.TrimPrefix(name.Name, "Face"))
+				}
+			}
+		}
+	}
+	want := []string{"Down", "Up", "North", "South", "West", "East"}
+	if !reflect.DeepEqual(faces, want) {
+		return cubeSpec{}, fmt.Errorf("cube.Face values changed: %v", faces)
+	}
+	return cubeSpec{Faces: faces}, nil
+}
+
+func requireArrayType(path, name string, length int64, element string) error {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return err
+	}
+	for _, declaration := range file.Decls {
+		gen, ok := declaration.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, raw := range gen.Specs {
+			spec, ok := raw.(*ast.TypeSpec)
+			if !ok || spec.Name.Name != name {
+				continue
+			}
+			array, ok := spec.Type.(*ast.ArrayType)
+			if !ok || array.Len == nil {
+				return fmt.Errorf("cube.%s is not a fixed array", name)
+			}
+			literal, ok := array.Len.(*ast.BasicLit)
+			if !ok || literal.Kind != token.INT || literal.Value != strconv.FormatInt(length, 10) {
+				return fmt.Errorf("cube.%s length changed", name)
+			}
+			identifier, ok := array.Elt.(*ast.Ident)
+			if !ok || identifier.Name != element {
+				return fmt.Errorf("cube.%s element changed", name)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("cube.%s not found", name)
+}
+
+func hasNamedType(file *ast.File, name, underlying string) bool {
+	for _, declaration := range file.Decls {
+		gen, ok := declaration.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, raw := range gen.Specs {
+			spec, ok := raw.(*ast.TypeSpec)
+			if !ok || spec.Name.Name != name {
+				continue
+			}
+			identifier, ok := spec.Type.(*ast.Ident)
+			return ok && identifier.Name == underlying
+		}
+	}
+	return false
+}
+
+func inspectSetOpts(path string) ([]string, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	for _, declaration := range file.Decls {
+		gen, ok := declaration.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, raw := range gen.Specs {
+			spec, ok := raw.(*ast.TypeSpec)
+			if !ok || spec.Name.Name != "SetOpts" {
+				continue
+			}
+			structure, ok := spec.Type.(*ast.StructType)
+			if !ok {
+				return nil, fmt.Errorf("world.SetOpts is not a struct")
+			}
+			var fields []string
+			for _, field := range structure.Fields.List {
+				identifier, ok := field.Type.(*ast.Ident)
+				if !ok || identifier.Name != "bool" {
+					return nil, fmt.Errorf("world.SetOpts contains a non-bool field")
+				}
+				for _, name := range field.Names {
+					if name.IsExported() {
+						fields = append(fields, name.Name)
+					}
+				}
+			}
+			if len(fields) == 0 {
+				return nil, fmt.Errorf("world.SetOpts has no exported fields")
+			}
+			return fields, nil
+		}
+	}
+	return nil, fmt.Errorf("world.SetOpts not found")
+}
+
+func inspectBlocks(directory string) (blockSpec, error) {
+	packages, err := parser.ParseDir(token.NewFileSet(), directory, func(info os.FileInfo) bool {
+		return !strings.HasSuffix(info.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		return blockSpec{}, err
+	}
+	pkg, ok := packages["block"]
+	if !ok {
+		return blockSpec{}, fmt.Errorf("Dragonfly block package not found")
+	}
+	declarations := map[string]*ast.TypeSpec{}
+	for _, file := range pkg.Files {
+		for _, declaration := range file.Decls {
+			gen, ok := declaration.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, raw := range gen.Specs {
+				typeSpec, ok := raw.(*ast.TypeSpec)
+				if ok && typeSpec.Name.IsExported() {
+					declarations[typeSpec.Name.Name] = typeSpec
+				}
+			}
+		}
+	}
+
+	world.DefaultBlockRegistry.Finalize()
+	registered := map[reflect.Type][]world.Block{}
+	for _, value := range world.DefaultBlockRegistry.Blocks() {
+		typeOf := reflect.TypeOf(value)
+		if typeOf == nil {
+			continue
+		}
+		if typeOf.Kind() == reflect.Pointer {
+			typeOf = typeOf.Elem()
+		}
+		if typeOf.PkgPath() == "github.com/df-mc/dragonfly/server/block" && typeOf.Name() != "" {
+			registered[typeOf] = append(registered[typeOf], value)
+		}
+	}
+
+	var result blockSpec
+	for typeOf, states := range registered {
+		if declarations[typeOf.Name()] == nil {
+			return blockSpec{}, fmt.Errorf("registered block %s has no exported AST declaration", typeOf.Name())
+		}
+		exported := 0
+		for index := 0; index < typeOf.NumField(); index++ {
+			if typeOf.Field(index).IsExported() {
+				exported++
+			}
+		}
+		if exported != 0 {
+			continue
+		}
+		zero, ok := reflect.Zero(typeOf).Interface().(world.Block)
+		if !ok {
+			continue
+		}
+		encoded, err := encodeRegisteredBlock(typeOf.Name(), zero, states)
+		if err != nil {
+			return blockSpec{}, err
+		}
+		result.Stateless = append(result.Stateless, encoded)
+	}
+	sort.Slice(result.Stateless, func(i, j int) bool { return result.Stateless[i].Name < result.Stateless[j].Name })
+	if len(result.Stateless) == 0 {
+		return blockSpec{}, fmt.Errorf("no stateless Dragonfly blocks found")
+	}
+
+	var sandType reflect.Type
+	var sandStates []world.Block
+	for typeOf, states := range registered {
+		if typeOf.Name() == "Sand" {
+			sandType, sandStates = typeOf, states
+			break
+		}
+	}
+	if sandType == nil || !sandHasRedBool(declarations["Sand"]) {
+		return blockSpec{}, fmt.Errorf("Dragonfly block.Sand.Red bool field not found")
+	}
+	for index, red := range []bool{false, true} {
+		value := reflect.New(sandType).Elem()
+		value.FieldByName("Red").SetBool(red)
+		block := value.Interface().(world.Block)
+		encoded, err := encodeRegisteredBlock("Sand", block, sandStates)
+		if err != nil {
+			return blockSpec{}, err
+		}
+		result.Sand[index] = encoded
+	}
+	return result, nil
+}
+
+func sandHasRedBool(spec *ast.TypeSpec) bool {
+	if spec == nil {
+		return false
+	}
+	structure, ok := spec.Type.(*ast.StructType)
+	if !ok {
+		return false
+	}
+	for _, field := range structure.Fields.List {
+		identifier, ok := field.Type.(*ast.Ident)
+		if !ok || identifier.Name != "bool" {
+			continue
+		}
+		for _, name := range field.Names {
+			if name.Name == "Red" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func encodeRegisteredBlock(typeName string, value world.Block, registered []world.Block) (encodedBlock, error) {
+	identifier, properties := value.EncodeBlock()
+	found := false
+	for _, candidate := range registered {
+		candidateIdentifier, candidateProperties := candidate.EncodeBlock()
+		if identifier == candidateIdentifier && reflect.DeepEqual(properties, candidateProperties) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return encodedBlock{}, fmt.Errorf("block.%s zero state is not registered", typeName)
+	}
+	encoded, ok := host.EncodeBlockProperties(properties)
+	if !ok {
+		return encodedBlock{}, fmt.Errorf("block.%s has unsupported properties", typeName)
+	}
+	return encodedBlock{Name: typeName, Identifier: identifier, PropertiesNBT: encoded}, nil
 }
 
 func syncGeneratedFiles(files []generatedFile, check bool) error {
@@ -544,6 +857,164 @@ func generateCommandInterfaces(interfaces []commandInterface) []byte {
 	}
 	output.WriteString("}\n")
 	return output.Bytes()
+}
+
+func generateCube(spec cubeSpec) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/block/cube Go AST. DO NOT EDIT.\n")
+	output.WriteString("namespace Dragonfly;\n\n")
+	output.WriteString("public static partial class Cube\n{\n")
+	output.WriteString("    public enum Face\n    {\n")
+	for index, face := range spec.Faces {
+		fmt.Fprintf(&output, "        %s = %d,\n", face, index)
+	}
+	output.WriteString("    }\n\n")
+	output.WriteString(`    public readonly record struct Range(int Minimum, int Maximum)
+    {
+        public int Min() => Minimum;
+        public int Max() => Maximum;
+        public int Height() => Maximum - Minimum;
+    }
+
+    public readonly record struct Pos
+    {
+        private readonly int _x;
+        private readonly int _y;
+        private readonly int _z;
+
+        public Pos(int x, int y, int z) => (_x, _y, _z) = (x, y, z);
+
+        public int X() => _x;
+        public int Y() => _y;
+        public int Z() => _z;
+        public bool OutOfBounds(Range range) => _y > range.Max() || _y < range.Min();
+        public bool Within(Pos min, Pos max) =>
+            _x >= min._x && _x <= max._x &&
+            _y >= min._y && _y <= max._y &&
+            _z >= min._z && _z <= max._z;
+        public Pos Add(Pos other) => new(_x + other._x, _y + other._y, _z + other._z);
+        public Pos Sub(Pos other) => new(_x - other._x, _y - other._y, _z - other._z);
+        public Vector3 Vec3() => new(_x, _y, _z);
+        public Vector3 Vec3Middle() => new(_x + 0.5, _y, _z + 0.5);
+        public Vector3 Vec3Centre() => new(_x + 0.5, _y + 0.5, _z + 0.5);
+
+        public Pos Side(Face face) => face switch
+        {
+            Cube.Face.Up => new(_x, _y + 1, _z),
+            Cube.Face.Down => new(_x, _y - 1, _z),
+            Cube.Face.North => new(_x, _y, _z - 1),
+            Cube.Face.South => new(_x, _y, _z + 1),
+            Cube.Face.West => new(_x - 1, _y, _z),
+            Cube.Face.East => new(_x + 1, _y, _z),
+            _ => this,
+        };
+
+        public Face Face(Pos other) => NeighbourFace(other).Face;
+
+        public (Face Face, bool Ok) NeighbourFace(Pos other) => other.Sub(this) switch
+        {
+            Pos { _x: 0, _y: 1, _z: 0 } => (Cube.Face.Up, true),
+            Pos { _x: 0, _y: -1, _z: 0 } => (Cube.Face.Down, true),
+            Pos { _x: 0, _y: 0, _z: -1 } => (Cube.Face.North, true),
+            Pos { _x: 0, _y: 0, _z: 1 } => (Cube.Face.South, true),
+            Pos { _x: -1, _y: 0, _z: 0 } => (Cube.Face.West, true),
+            Pos { _x: 1, _y: 0, _z: 0 } => (Cube.Face.East, true),
+            _ => (Cube.Face.Up, false),
+        };
+
+        public override string ToString() => $"({_x},{_y},{_z})";
+    }
+
+    public static Pos PosFromVec3(Vector3 value) => new(
+        checked((int)Math.Floor(value.X)),
+        checked((int)Math.Floor(value.Y)),
+        checked((int)Math.Floor(value.Z)));
+
+    public static Pos Min(Pos first, Pos second) => new(
+        Math.Min(first.X(), second.X()),
+        Math.Min(first.Y(), second.Y()),
+        Math.Min(first.Z(), second.Z()));
+
+    public static Pos Max(Pos first, Pos second) => new(
+        Math.Max(first.X(), second.X()),
+        Math.Max(first.Y(), second.Y()),
+        Math.Max(first.Z(), second.Z()));
+}
+`)
+	return output.Bytes()
+}
+
+func generateWorldBlock(setOpts []string) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/world Go AST. DO NOT EDIT.\n")
+	output.WriteString("#nullable enable\n\n")
+	output.WriteString("namespace Dragonfly;\n\n")
+	output.WriteString("public sealed partial class World\n{\n")
+	output.WriteString("    public interface Block { }\n\n")
+	output.WriteString("    public sealed class SetOpts\n    {\n")
+	for _, field := range setOpts {
+		fmt.Fprintf(&output, "        public bool %s;\n", field)
+	}
+	output.WriteString("    }\n\n")
+	output.WriteString(`    public partial class Tx
+    {
+        public Block Block(Cube.Pos position) => PluginBridge.Host.WorldBlock(Invocation, position);
+
+        public void SetBlock(Cube.Pos position, Block? block, SetOpts? options = null) =>
+            PluginBridge.Host.SetWorldBlock(Invocation, position, block, options);
+    }
+}
+`)
+	return output.Bytes()
+}
+
+func generateBlocks(spec blockSpec) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/block Go AST and registry. DO NOT EDIT.\n")
+	output.WriteString("#nullable enable\nusing System;\nusing Dragonfly;\n\n")
+	output.WriteString("namespace Dragonfly\n{\n    public static partial class Block\n    {\n")
+	for _, block := range spec.Stateless {
+		fmt.Fprintf(&output, "        public readonly record struct %s : World.Block;\n", block.Name)
+	}
+	output.WriteString("        public readonly record struct Sand(bool Red = false) : World.Block;\n")
+	output.WriteString("    }\n\n")
+	output.WriteString("    internal static class BlockCodec\n    {\n")
+	states := append([]encodedBlock(nil), spec.Stateless...)
+	states = append(states, spec.Sand[:]...)
+	for index, state := range states {
+		fmt.Fprintf(&output, "        private static readonly byte[] State%d = %s;\n", index, csharpBytes(state.PropertiesNBT))
+	}
+	output.WriteString("\n        internal static bool TryEncode(World.Block block, out string identifier, out byte[] properties)\n        {\n")
+	output.WriteString("            switch (block)\n            {\n")
+	for index, block := range spec.Stateless {
+		fmt.Fprintf(&output, "                case Block.%s _:\n                    identifier = %s; properties = State%d; return true;\n", block.Name, strconv.Quote(block.Identifier), index)
+	}
+	sandOffset := len(spec.Stateless)
+	fmt.Fprintf(&output, "                case Block.Sand { Red: true }:\n                    identifier = %s; properties = State%d; return true;\n", strconv.Quote(spec.Sand[1].Identifier), sandOffset+1)
+	fmt.Fprintf(&output, "                case Block.Sand:\n                    identifier = %s; properties = State%d; return true;\n", strconv.Quote(spec.Sand[0].Identifier), sandOffset)
+	output.WriteString("                case EncodedBlock encoded:\n                    identifier = encoded.Identifier; properties = encoded.Properties; return true;\n")
+	output.WriteString("                default:\n                    identifier = string.Empty; properties = Array.Empty<byte>(); return false;\n            }\n        }\n\n")
+	output.WriteString("        internal static World.Block Decode(string identifier, ReadOnlySpan<byte> properties)\n        {\n")
+	for index, block := range spec.Stateless {
+		fmt.Fprintf(&output, "            if (identifier == %s && properties.SequenceEqual(State%d)) return new Block.%s();\n", strconv.Quote(block.Identifier), index, block.Name)
+	}
+	fmt.Fprintf(&output, "            if (identifier == %s && properties.SequenceEqual(State%d)) return new Block.Sand();\n", strconv.Quote(spec.Sand[0].Identifier), sandOffset)
+	fmt.Fprintf(&output, "            if (identifier == %s && properties.SequenceEqual(State%d)) return new Block.Sand(true);\n", strconv.Quote(spec.Sand[1].Identifier), sandOffset+1)
+	output.WriteString("            return new EncodedBlock(identifier, properties.ToArray());\n        }\n\n")
+	output.WriteString("        private sealed record EncodedBlock(string Identifier, byte[] Properties) : World.Block;\n")
+	output.WriteString("    }\n}\n")
+	return output.Bytes()
+}
+
+func csharpBytes(value []byte) string {
+	if len(value) == 0 {
+		return "Array.Empty<byte>()"
+	}
+	parts := make([]string, len(value))
+	for index, current := range value {
+		parts[index] = fmt.Sprintf("0x%02x", current)
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 func formatParameters(parameters []parameter) string {

@@ -579,7 +579,7 @@ func (m *WorldManager) UnloadWorld(invocation native.InvocationID, id native.Wor
 }
 
 func (m *WorldManager) WorldBlock(invocation native.InvocationID, id native.WorldID, position native.BlockPos) (native.WorldBlock, bool) {
-	entry, ok := m.entryByHandle(id)
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
 		return native.WorldBlock{}, false
 	}
@@ -597,7 +597,7 @@ func (m *WorldManager) WorldBlock(invocation native.InvocationID, id native.Worl
 }
 
 func (m *WorldManager) WorldLiquid(invocation native.InvocationID, id native.WorldID, position native.BlockPos) (native.WorldBlock, bool) {
-	entry, ok := m.entryByHandle(id)
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
 		return native.WorldBlock{}, false
 	}
@@ -617,8 +617,8 @@ func (m *WorldManager) WorldLiquid(invocation native.InvocationID, id native.Wor
 	})
 }
 
-func (m *WorldManager) SetWorldBlock(invocation native.InvocationID, id native.WorldID, position native.BlockPos, value native.WorldBlock) bool {
-	entry, ok := m.entryByHandle(id)
+func (m *WorldManager) SetWorldBlock(invocation native.InvocationID, id native.WorldID, position native.BlockPos, value native.WorldBlock, options native.WorldSetOpts) bool {
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok || value.Identifier == "" {
 		return false
 	}
@@ -635,7 +635,34 @@ func (m *WorldManager) SetWorldBlock(invocation native.InvocationID, id native.W
 	if !ok {
 		return false
 	}
-	return m.writeTx(invocation, entry, func(tx *world.Tx) { tx.SetBlock(blockPosition(position), block, nil) })
+	return m.writeTx(invocation, entry, func(tx *world.Tx) {
+		tx.SetBlock(blockPosition(position), block, &world.SetOpts{
+			DisableBlockUpdates:       options.DisableBlockUpdates,
+			DisableLiquidDisplacement: options.DisableLiquidDisplacement,
+			DisableRedstoneUpdates:    options.DisableRedstoneUpdates,
+		})
+	})
+}
+
+func (m *WorldManager) entryForInvocation(invocation native.InvocationID, id native.WorldID) (*managedWorld, bool) {
+	if id != 0 {
+		return m.entryByHandle(id)
+	}
+	if invocation == 0 || m.players == nil {
+		return nil, false
+	}
+	tx, ok := m.players.InvocationTx(invocation)
+	if !ok {
+		return nil, false
+	}
+	w, ok := transactionWorld(tx)
+	if !ok {
+		return nil, false
+	}
+	m.mu.RLock()
+	entry, ok := m.byWorld[w]
+	m.mu.RUnlock()
+	return entry, ok
 }
 
 func (m *WorldManager) WorldTime(_ native.InvocationID, id native.WorldID) (int64, bool) {

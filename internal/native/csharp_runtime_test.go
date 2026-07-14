@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sync"
 	"testing"
+
+	"github.com/sandertv/gophertunnel/minecraft/nbt"
 )
 
 func openCSharpRuntime(t testing.TB) *Runtime {
@@ -84,7 +86,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 7 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 8 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -163,6 +165,23 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		if host.kinds[len(host.kinds)-1] != text.kind || host.texts[len(host.texts)-1] != text.want {
 			t.Fatalf("player text %s host call: kind=%v text=%q", text.action, host.kinds[len(host.kinds)-1], host.texts[len(host.texts)-1])
 		}
+	}
+	properties, err := nbt.MarshalEncoding(map[string]any{}, nbt.LittleEndian)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.worldBlock = WorldBlock{Identifier: "minecraft:sand", PropertiesNBT: properties}
+	host.worldBlockOK = true
+	input := base
+	input.Overload = 7
+	input.Arguments = []string{"block"}
+	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), was_sand=true" {
+		t.Fatalf("block output=%#v error=%v", output, err)
+	}
+	if host.worldBlockPos != (BlockPos{X: 1, Y: 63, Z: 2}) || host.worldBlockSet.Identifier != "minecraft:sand" ||
+		!host.worldSetOpts.DisableBlockUpdates || !host.worldSetOpts.DisableLiquidDisplacement || !host.worldSetOpts.DisableRedstoneUpdates {
+		t.Fatalf("block host call: position=%+v block=%+v options=%+v", host.worldBlockPos, host.worldBlockSet, host.worldSetOpts)
 	}
 
 	options, err := pluginRuntime.CommandEnumOptions(kitchen.Index, 5, 1, CommandEnumContext{

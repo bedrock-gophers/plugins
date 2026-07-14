@@ -99,18 +99,14 @@ public sealed partial class Player : Cmd.Source, Cmd.NamedTarget
         return true;
     }
 
-    public sealed class Context
+    public sealed class Context : World.Context
     {
-        private bool _cancelled;
-
-        internal Context(Player player, bool cancelled)
+        internal Context(Player player, bool cancelled) : base(player.Invocation, cancelled)
         {
-            Player = player;
-            _cancelled = cancelled;
+            Value = player;
         }
 
-        public Player Player { get; }
-        public bool Cancelled() => _cancelled;
-        public void Cancel() => _cancelled = true;
+        private Player Value { get; }
+        public Player Player() => Value;
     }
 }

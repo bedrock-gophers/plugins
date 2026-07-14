@@ -143,3 +143,44 @@ func TestSyncGeneratedFilesChecksEveryOutput(t *testing.T) {
 		t.Fatalf("expected stale second output error, got %v", err)
 	}
 }
+
+func TestGeneratedWorldBlockSurfaceKeepsTransportPrivate(t *testing.T) {
+	worldOutput := string(generateWorldBlock([]string{
+		"DisableBlockUpdates", "DisableLiquidDisplacement", "DisableRedstoneUpdates",
+	}))
+	for _, expected := range []string{
+		"public interface Block { }",
+		"public Block Block(Cube.Pos position)",
+		"public void SetBlock(Cube.Pos position, Block? block, SetOpts? options = null)",
+		"public bool DisableRedstoneUpdates;",
+	} {
+		if !strings.Contains(worldOutput, expected) {
+			t.Fatalf("generated world output missing %q:\n%s", expected, worldOutput)
+		}
+	}
+	if strings.Contains(worldOutput, "Identifier") || strings.Contains(worldOutput, "PropertiesNBT") {
+		t.Fatalf("public world surface exposes transport:\n%s", worldOutput)
+	}
+
+	blockOutput := string(generateBlocks(blockSpec{
+		Stateless: []encodedBlock{{Name: "Air", Identifier: "minecraft:air", PropertiesNBT: []byte{10, 0, 0, 0}}},
+		Sand: [2]encodedBlock{
+			{Name: "Sand", Identifier: "minecraft:sand", PropertiesNBT: []byte{10, 0, 0, 0}},
+			{Name: "Sand", Identifier: "minecraft:red_sand", PropertiesNBT: []byte{10, 0, 0, 0}},
+		},
+	}))
+	for _, expected := range []string{
+		"public readonly record struct Air : World.Block;",
+		"public readonly record struct Sand(bool Red = false) : World.Block;",
+		"internal static class BlockCodec",
+		"case Block.Sand { Red: true }:",
+		"private sealed record EncodedBlock",
+	} {
+		if !strings.Contains(blockOutput, expected) {
+			t.Fatalf("generated block output missing %q:\n%s", expected, blockOutput)
+		}
+	}
+	if strings.Contains(blockOutput, "public (string") || strings.Contains(blockOutput, "EncodeBlock()") {
+		t.Fatalf("typed blocks expose encoded state:\n%s", blockOutput)
+	}
+}

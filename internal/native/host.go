@@ -158,6 +158,12 @@ type WorldBlock struct {
 	PropertiesNBT []byte
 }
 
+type WorldSetOpts struct {
+	DisableBlockUpdates       bool
+	DisableLiquidDisplacement bool
+	DisableRedstoneUpdates    bool
+}
+
 type EntityKind uint32
 
 const (
@@ -396,7 +402,7 @@ type Host interface {
 	UnloadWorld(InvocationID, WorldID) bool
 	WorldBlock(InvocationID, WorldID, BlockPos) (WorldBlock, bool)
 	WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool)
-	SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock) bool
+	SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock, WorldSetOpts) bool
 	WorldTime(InvocationID, WorldID) (int64, bool)
 	SetWorldTime(InvocationID, WorldID, int64) bool
 	WorldSpawn(InvocationID, WorldID) (BlockPos, bool)
@@ -473,12 +479,14 @@ func (noopHost) WorldBlock(InvocationID, WorldID, BlockPos) (WorldBlock, bool) {
 func (noopHost) WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool) {
 	return WorldBlock{}, false
 }
-func (noopHost) SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock) bool { return false }
-func (noopHost) WorldTime(InvocationID, WorldID) (int64, bool)                  { return 0, false }
-func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool                 { return false }
-func (noopHost) WorldSpawn(InvocationID, WorldID) (BlockPos, bool)              { return BlockPos{}, false }
-func (noopHost) SetWorldSpawn(InvocationID, WorldID, BlockPos) bool             { return false }
-func (noopHost) SaveWorld(InvocationID, WorldID) bool                           { return false }
+func (noopHost) SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock, WorldSetOpts) bool {
+	return false
+}
+func (noopHost) WorldTime(InvocationID, WorldID) (int64, bool)      { return 0, false }
+func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool     { return false }
+func (noopHost) WorldSpawn(InvocationID, WorldID) (BlockPos, bool)  { return BlockPos{}, false }
+func (noopHost) SetWorldSpawn(InvocationID, WorldID, BlockPos) bool { return false }
+func (noopHost) SaveWorld(InvocationID, WorldID) bool               { return false }
 func (noopHost) SpawnWorldEntity(InvocationID, WorldID, EntitySpawn) (EntityID, bool) {
 	return EntityID{}, false
 }

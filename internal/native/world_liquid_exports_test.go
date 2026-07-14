@@ -47,3 +47,13 @@ func TestWorldLiquidExportPayloadRejectsMissingAndMalformedValues(t *testing.T) 
 		})
 	}
 }
+
+func TestWorldSetOptions(t *testing.T) {
+	options, ok := worldSetOptions(7)
+	if !ok || !options.DisableBlockUpdates || !options.DisableLiquidDisplacement || !options.DisableRedstoneUpdates {
+		t.Fatalf("options = %#v, %v", options, ok)
+	}
+	if _, ok := worldSetOptions(8); ok {
+		t.Fatal("unknown option bit accepted")
+	}
+}

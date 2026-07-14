@@ -36,6 +36,75 @@ internal static unsafe class PluginBridge
             if (api is null || api->PlayerStateSet == null) return;
             _ = api->PlayerStateSet(api->Context, invocation, player, kind, value);
         }
+
+        internal static World.Block WorldBlock(ulong invocation, Cube.Pos position)
+        {
+            var api = Api;
+            if (api is null || api->WorldBlockGet == null)
+                throw new InvalidOperationException("world transaction is unavailable");
+
+            var nativePosition = new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() };
+            var data = new BlockData();
+            _ = api->WorldBlockGet(api->Context, invocation, default, nativePosition, &data);
+            if (data.Identifier.Length > 256 || data.PropertiesNbt.Length > 64 * 1024)
+                throw new InvalidOperationException("invalid block state returned by server");
+
+            var identifierBytes = new byte[checked((int)data.Identifier.Length)];
+            var propertyBytes = new byte[checked((int)data.PropertiesNbt.Length)];
+            fixed (byte* identifier = identifierBytes)
+            fixed (byte* properties = propertyBytes)
+            {
+                data.Identifier = new StringBuffer
+                {
+                    Data = identifier,
+                    Capacity = (ulong)identifierBytes.Length,
+                };
+                data.PropertiesNbt = new StringBuffer
+                {
+                    Data = properties,
+                    Capacity = (ulong)propertyBytes.Length,
+                };
+                if (api->WorldBlockGet(api->Context, invocation, default, nativePosition, &data) != Abi.Ok)
+                    throw new InvalidOperationException("world transaction is no longer valid");
+            }
+            return BlockCodec.Decode(Encoding.UTF8.GetString(identifierBytes), propertyBytes);
+        }
+
+        internal static void SetWorldBlock(
+            ulong invocation,
+            Cube.Pos position,
+            World.Block? block,
+            World.SetOpts? options)
+        {
+            var api = Api;
+            if (api is null || api->WorldBlockSet == null) return;
+            block ??= new Block.Air();
+            if (!BlockCodec.TryEncode(block, out var identifier, out var properties))
+                throw new ArgumentException("block type is not registered", nameof(block));
+
+            uint flags = 0;
+            if (options?.DisableBlockUpdates == true) flags |= Abi.SetBlockDisableBlockUpdates;
+            if (options?.DisableLiquidDisplacement == true) flags |= Abi.SetBlockDisableLiquidDisplacement;
+            if (options?.DisableRedstoneUpdates == true) flags |= Abi.SetBlockDisableRedstoneUpdates;
+
+            var identifierBytes = Encoding.UTF8.GetBytes(identifier);
+            fixed (byte* identifierData = identifierBytes)
+            fixed (byte* propertyData = properties)
+            {
+                var view = new BlockView
+                {
+                    Identifier = new StringView { Data = identifierData, Length = (ulong)identifierBytes.Length },
+                    PropertiesNbt = new StringView { Data = propertyData, Length = (ulong)properties.Length },
+                };
+                _ = api->WorldBlockSet(
+                    api->Context,
+                    invocation,
+                    default,
+                    new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() },
+                    &view,
+                    flags);
+            }
+        }
     }
 
     internal static PluginApi* Initialize(Func<Plugin> factory, string id, ulong subscriptions)
