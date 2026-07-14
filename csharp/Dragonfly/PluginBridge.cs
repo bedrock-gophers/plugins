@@ -14,6 +14,22 @@ internal static unsafe class PluginBridge
     {
         internal static HostApi* Api;
 
+        internal static void SendPlayerText(ulong invocation, PlayerId player, uint kind, string message)
+        {
+            var api = Api;
+            if (api is null || api->PlayerText == null) return;
+            var bytes = Encoding.UTF8.GetBytes(message);
+            fixed (byte* data = bytes)
+            {
+                _ = api->PlayerText(
+                    api->Context,
+                    invocation,
+                    player,
+                    kind,
+                    new StringView { Data = data, Length = (ulong)bytes.Length });
+            }
+        }
+
         internal static void SetPlayerState(ulong invocation, PlayerId player, uint kind, PlayerStateValue value)
         {
             var api = Api;

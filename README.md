@@ -28,11 +28,11 @@ public sealed class Example : Plugin
 
     public override void HandleQuit(Player player)
     {
-        Console.WriteLine($"{player.Name} quit");
+        Console.WriteLine($"{player.Name()} quit");
     }
 }
 ```
 
 The project name is the plugin ID. A compile-time generator emits the hidden native entry point.
 
-Current C# slice: loading, lifecycle, movement, chat, food loss, jump, teleport, sprint/sneak toggles, punch-air, and quit handlers. `examples/plugins/kitchen-sink` compiles against every exposed C# API and grows with each parity slice.
+Current C# slice: loading, lifecycle, reflected commands, player text actions, game mode, movement, chat, food loss, jump, teleport, sprint/sneak toggles, punch-air, and quit handlers. Player handler, command-interface, and player-text surfaces are generated from Dragonfly's Go AST. `examples/plugins/kitchen-sink` compiles against every exposed C# API and grows with each parity slice.

@@ -5,6 +5,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - movement validation and cancellation;
 - chat and food-state mutation;
 - player-action telemetry;
+- reflected command arguments and overloads;
+- direct `Player.Message` output;
 - plugin lifecycle.
 
 New commands, worlds, items, blocks, forms, entities, and handlers belong here only when the

@@ -43,6 +43,37 @@ type Handler interface {
 	}
 }
 
+func TestPlayerTextMethodsUseGoAST(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "player.go")
+	source := `package player
+func (p *Player) Message(a ...any) {}
+func (p *Player) SendPopup(a ...any) {}
+func (p *Player) SendTip(a ...any) {}
+func (p *Player) SendJukeboxPopup(a ...any) {}
+func (p *Player) SetNameTag(name string) {}
+func (p *Player) Disconnect(msg ...any) {}`
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	methods, err := playerTextMethods(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(generatePlayerTextMethods(methods))
+	for _, expected := range []string{
+		"public void Message(params object?[] a) => SendText(Abi.PlayerTextMessage, FormatArguments(a));",
+		"public void SendPopup(params object?[] a) => SendText(Abi.PlayerTextPopup, FormatArguments(a));",
+		"public void SendTip(params object?[] a) => SendText(Abi.PlayerTextTip, FormatArguments(a));",
+		"public void SendJukeboxPopup(params object?[] a) => SendText(Abi.PlayerTextJukeboxPopup, FormatArguments(a));",
+		"public void SetNameTag(string name) => SendText(Abi.PlayerTextNameTag, name);",
+		"public void Disconnect(params object?[] msg) => SendText(Abi.PlayerTextDisconnect, FormatArguments(msg));",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("generated output missing %q:\n%s", expected, output)
+		}
+	}
+}
+
 func TestCommandInterfacesUseGoAST(t *testing.T) {
 	directory := t.TempDir()
 	source := `package cmd

@@ -63,6 +63,15 @@ var selectedCommandInterfaces = []string{
 	"Enum",
 }
 
+var selectedPlayerTextMethods = []string{
+	"Message",
+	"SendPopup",
+	"SendTip",
+	"SendJukeboxPopup",
+	"SetNameTag",
+	"Disconnect",
+}
+
 func main() {
 	root := flag.String("root", ".", "repository root")
 	dragonfly := flag.String("dragonfly", "", "Dragonfly module directory")
@@ -83,6 +92,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	playerMethods, err := playerTextMethods(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		fatal(err)
+	}
 	interfaces, err := commandInterfaces(filepath.Join(directory, "server", "cmd"))
 	if err != nil {
 		fatal(err)
@@ -93,6 +106,10 @@ func main() {
 			Content: generatePlayerHandler(methods),
 		},
 		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Text.g.cs"),
+			Content: generatePlayerTextMethods(playerMethods),
+		},
+		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Cmd.Interfaces.g.cs"),
 			Content: generateCommandInterfaces(interfaces),
 		},
@@ -100,6 +117,58 @@ func main() {
 	if err := syncGeneratedFiles(files, *check); err != nil {
 		fatal(err)
 	}
+}
+
+func playerTextMethods(path string) ([]method, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	found := map[string]method{}
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || !selectedPlayerTextMethod(function.Name.Name) || !playerMethod(function) {
+			continue
+		}
+		if function.Type.Results != nil && len(function.Type.Results.List) != 0 {
+			return nil, fmt.Errorf("player.Player.%s returns values", function.Name.Name)
+		}
+		parameters, err := translateParameters(function.Type.Params)
+		if err != nil {
+			return nil, fmt.Errorf("player.Player.%s: %w", function.Name.Name, err)
+		}
+		found[function.Name.Name] = method{Name: function.Name.Name, Parameters: parameters}
+	}
+	methods := make([]method, 0, len(selectedPlayerTextMethods))
+	for _, name := range selectedPlayerTextMethods {
+		definition, ok := found[name]
+		if !ok {
+			return nil, fmt.Errorf("Dragonfly player.Player has no supported %s method", name)
+		}
+		methods = append(methods, definition)
+	}
+	return methods, nil
+}
+
+func selectedPlayerTextMethod(name string) bool {
+	for _, selected := range selectedPlayerTextMethods {
+		if name == selected {
+			return true
+		}
+	}
+	return false
+}
+
+func playerMethod(function *ast.FuncDecl) bool {
+	if function.Recv == nil || len(function.Recv.List) != 1 {
+		return false
+	}
+	pointer, ok := function.Recv.List[0].Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	receiver, ok := pointer.X.(*ast.Ident)
+	return ok && receiver.Name == "Player"
 }
 
 func syncGeneratedFiles(files []generatedFile, check bool) error {
@@ -190,6 +259,12 @@ func translateParameters(fields *ast.FieldList) ([]parameter, error) {
 
 func csharpType(expression ast.Expr) (string, bool) {
 	switch value := expression.(type) {
+	case *ast.Ellipsis:
+		typeName, ok := csharpType(value.Elt)
+		if !ok {
+			return "", false
+		}
+		return "params " + typeName + "[]", true
 	case *ast.StarExpr:
 		typeName, ok := csharpType(value.X)
 		if !ok {
@@ -201,6 +276,7 @@ func csharpType(expression ast.Expr) (string, bool) {
 		return typeName, true
 	case *ast.Ident:
 		typeName, ok := map[string]string{
+			"any":     "object?",
 			"bool":    "bool",
 			"Context": "Player.Context",
 			"int":     "int",
@@ -413,6 +489,35 @@ func generatePlayerHandler(methods []method) []byte {
 	for _, method := range methods {
 		fmt.Fprintf(&output, "    [HandlerSubscription(%dUL)]\n", method.Subscription)
 		fmt.Fprintf(&output, "    public virtual void %s(%s) { }\n", method.Name, formatParameters(method.Parameters))
+	}
+	output.WriteString("}\n")
+	return output.Bytes()
+}
+
+func generatePlayerTextMethods(methods []method) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/player/player.go. DO NOT EDIT.\n")
+	output.WriteString("#nullable enable\n")
+	output.WriteString("using Dragonfly.Native;\n\n")
+	output.WriteString("namespace Dragonfly;\n\n")
+	output.WriteString("public sealed partial class Player\n{\n")
+	for _, method := range methods {
+		fmt.Fprintf(&output, "    public void %s(%s) => ", method.Name, formatParameters(method.Parameters))
+		switch method.Name {
+		case "Message", "SendPopup", "SendTip", "SendJukeboxPopup", "Disconnect":
+			kind := map[string]string{
+				"Message":          "Message",
+				"SendPopup":        "Popup",
+				"SendTip":          "Tip",
+				"SendJukeboxPopup": "JukeboxPopup",
+				"Disconnect":       "Disconnect",
+			}[method.Name]
+			fmt.Fprintf(&output, "SendText(Abi.PlayerText%s, FormatArguments(%s));\n", kind, method.Parameters[0].Name)
+		case "SetNameTag":
+			fmt.Fprintf(&output, "SendText(Abi.PlayerTextNameTag, %s);\n", method.Parameters[0].Name)
+		default:
+			panic("unsupported player text method: " + method.Name)
+		}
 	}
 	output.WriteString("}\n")
 	return output.Bytes()

@@ -33,6 +33,24 @@ public sealed partial class Player : Cmd.Source, Cmd.NamedTarget
     public TimeSpan Latency() => _latency;
     public Vector3 Position() => _position;
     public void SendCommandOutput(Cmd.Output output) => _commandOutput?.Merge(output);
+
+    private void SendText(uint kind, string message) =>
+        PluginBridge.Host.SendPlayerText(_invocation, Id, kind, message);
+
+    private static string FormatArguments(object?[] values) => string.Join(
+        " ",
+        values.Select(FormatArgument));
+
+    private static string FormatArgument(object? value) => value switch
+    {
+        null => "<nil>",
+        bool boolean => boolean ? "true" : "false",
+        float number => number.ToString("G", CultureInfo.InvariantCulture).Replace('E', 'e'),
+        double number => number.ToString("G", CultureInfo.InvariantCulture).Replace('E', 'e'),
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? "",
+        _ => value.ToString() ?? "",
+    };
+
     public void SetGameMode(World.GameMode mode)
     {
         ArgumentNullException.ThrowIfNull(mode);

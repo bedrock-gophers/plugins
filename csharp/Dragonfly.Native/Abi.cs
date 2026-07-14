@@ -39,6 +39,12 @@ public static class Abi
     public const uint CommandSourceUnknown = 0;
     public const uint CommandSourcePlayer = 1;
     public const uint CommandSourceConsole = 2;
+    public const uint PlayerTextMessage = 0;
+    public const uint PlayerTextTip = 1;
+    public const uint PlayerTextPopup = 2;
+    public const uint PlayerTextJukeboxPopup = 3;
+    public const uint PlayerTextNameTag = 4;
+    public const uint PlayerTextDisconnect = 5;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -92,7 +98,7 @@ public unsafe struct HostApi
     public uint Version;
     public uint Size;
     public ulong Context;
-    public void* PlayerText;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, StringView, int> PlayerText;
     public void* PlayerTitle;
     public void* PlayerTransform;
     public void* PlayerRotation;

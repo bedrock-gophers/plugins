@@ -77,13 +77,14 @@ func TestCSharpVanillaGameModeCommand(t *testing.T) {
 }
 
 func TestCSharpReflectedCommands(t *testing.T) {
-	pluginRuntime := openCSharpRuntime(t)
+	host := &recordingHost{}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
 	commands, err := pluginRuntime.Commands()
 	if err != nil {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 6 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 7 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -105,7 +106,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 
 	player := PlayerID{UUID: [16]byte{1}, Generation: 7}
 	base := CommandInput{
-		Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
 		SourcePosition: Vec3{X: 1, Y: 64, Z: 2},
 		OnlinePlayers: []CommandPlayer{{
 			Player: player, Name: "Danick", LatencyMilliseconds: 37,
@@ -139,6 +140,29 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	output, err := pluginRuntime.HandleCommand(kitchen.Index, targeted)
 	if err != nil || output.Failed || output.Message != "RestartFU's ping: 52ms" {
 		t.Fatalf("targeted player: output=%#v error=%v", output, err)
+	}
+	for _, text := range []struct {
+		action string
+		kind   PlayerTextKind
+		want   string
+	}{
+		{"message", PlayerTextMessage, "hello true 12 1.5 <nil>"},
+		{"popup", PlayerTextPopup, "hello"},
+		{"tip", PlayerTextTip, "hello"},
+		{"jukebox", PlayerTextJukeboxPopup, "hello"},
+		{"nametag", PlayerTextNameTag, "hello"},
+		{"disconnect", PlayerTextDisconnect, "hello"},
+	} {
+		input := base
+		input.Overload = 6
+		input.Arguments = []string{"text", text.action, "hello"}
+		output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
+		if err != nil || output.Failed || output.Message != "" {
+			t.Fatalf("player text %s: output=%#v error=%v", text.action, output, err)
+		}
+		if host.kinds[len(host.kinds)-1] != text.kind || host.texts[len(host.texts)-1] != text.want {
+			t.Fatalf("player text %s host call: kind=%v text=%q", text.action, host.kinds[len(host.kinds)-1], host.texts[len(host.texts)-1])
+		}
 	}
 
 	options, err := pluginRuntime.CommandEnumOptions(kitchen.Index, 5, 1, CommandEnumContext{
