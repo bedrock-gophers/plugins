@@ -13,11 +13,10 @@ starts the Go server. It does not reuse an older plugin build.
 Every C# project under `plugins/*/` is discovered automatically. Adding another plugin only
 requires a `.csproj` and its C# source.
 
-The kitchen-sink plugin includes `/kitchen block`, demonstrating `World.Tx`, generated
-`Cube.Pos`, `World.Tx.Range`, `World.Tx.BlockLoaded`, typed `Block.Sand`, and `World.SetOpts`.
-Compatible precompiled `.so` plugins remain supported by the loader; because the source build
-clears `plugins/*.so`, stage binary-only plugins after `make build` and start
-`.build/bin/server` directly.
+The kitchen-sink plugin includes `/kitchen block`, demonstrating generated `World.Tx` range,
+loaded-block, lazy block-search, height/light, and typed block APIs. Compatible precompiled `.so`
+plugins remain supported by the loader; because the source build clears `plugins/*.so`, stage
+binary-only plugins after `make build` and start `.build/bin/server` directly.
 
 ## Docker
 
