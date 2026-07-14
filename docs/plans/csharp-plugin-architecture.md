@@ -185,13 +185,13 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    the body can deadlock, and mirrored server scans in handlers on different worlds can deadlock
    each other, exactly as in Dragonfly. The private iterator closes on exhaustion, early disposal,
    callback completion, or runtime shutdown.
-   `World.Schedule(Action<World.Tx>)` is the current fire-and-forget C# adaptation of Dragonfly's
-   owner-scheduled `World.Do`. The generator validates the exact upstream `Do(func(*Tx)) *Task`
-   shape. The private callback trampoline keeps delegates plugin-owned, executes them on the
-   selected world owner with a fresh borrowed transaction, and removes them on execution or task
-   failure. Framework teardown stops admission and drains every accepted callback before closing
-   the NativeAOT runtime. Managed `Task` cancellation, waiting, and completion callbacks remain a
-   later slice; the public method does not pretend to expose those semantics yet. `World.New()`
+   `World.Do`, `World.DoAfter`, and `World.Task` are generated from Dragonfly's exact AST shapes.
+   `Task.Done`, `Err`, `Wait`, `OnDone`, and `Cancel` preserve completion and cancellation semantics;
+   C# maps Dragonfly task errors to domain exceptions without exposing ABI status. The private
+   callback trampoline keeps delegates plugin-owned and borrows a fresh transaction only during
+   execution. Framework teardown rejects new tasks, cancels pending delays, and drains running
+   callbacks before `OnDisable`. Host ABI 45 and plugin ABI 10 carry execution, terminal outcome,
+   signed delay, and cancellation. `World.New()`
    constructs Dragonfly's in-memory NOP-provider world. `World.Config.New()` transports the
    selected upstream config fields atomically; `MCDB.Config.Open(path)` selects a writable,
    persistent provider rooted below the configured worlds directory. Created worlds are owned and

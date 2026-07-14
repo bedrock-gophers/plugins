@@ -95,10 +95,10 @@ static DfStatus handle_event(void *opaque, DfEventId event, const void *input, v
     return DF_STATUS_ERROR;
 }
 
-static const DfPluginApiV9 api = {
+static const DfPluginApiV10 api = {
     .header = {
         .abi_version = DF_ABI_VERSION,
-        .struct_size = sizeof(DfPluginApiV9),
+        .struct_size = sizeof(DfPluginApiV10),
         .subscriptions = (UINT64_C(1) << 38) | (UINT64_C(1) << 39),
     },
     .plugin_id = {plugin_id, sizeof(plugin_id) - 1},
@@ -108,6 +108,6 @@ static const DfPluginApiV9 api = {
     .handle_event = handle_event,
 };
 
-const DfPluginApiV9 *df_plugin_entry_v9(void) {
+const DfPluginApiV10 *df_plugin_entry_v10(void) {
     return &api;
 }

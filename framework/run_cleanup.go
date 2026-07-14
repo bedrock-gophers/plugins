@@ -4,10 +4,9 @@ import "log/slog"
 
 // runCleanup keeps teardown ordering explicit. A started Dragonfly server is
 // closed first because Close synchronously rejects and drains player callbacks.
-// Plugin disable is two-phase: on_disable runs with custom worlds and host calls
-// available, then custom worlds drain entity callbacks, then runtime admission
-// closes. An unstarted server closes its core worlds before final admission
-// closes, because their providers may still save plugin-owned entities.
+// Pending world tasks are cancelled and running tasks drain before on_disable.
+// Plugin disable is then two-phase: on_disable runs with custom worlds and host
+// calls available, custom worlds drain entity callbacks, then admission closes.
 type runCleanup struct {
 	log            *slog.Logger
 	started        bool
@@ -29,6 +28,7 @@ func (cleanup *runCleanup) close() {
 		}
 	}
 	cleanup.stopScheduling()
+	cleanup.drainScheduled()
 	cleanup.beginPlugins()
 	if err := cleanup.closeCustom(); err != nil {
 		cleanup.log.Error("close custom worlds", "error", err)
@@ -37,7 +37,6 @@ func (cleanup *runCleanup) close() {
 	if !cleanup.started {
 		cleanup.closeUnstarted()
 	}
-	cleanup.drainScheduled()
 	cleanup.finishPlugins()
 	cleanup.closeRuntime()
 }

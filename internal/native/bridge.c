@@ -113,7 +113,7 @@ _Static_assert(sizeof(DfCommandPlayer) == 72, "DfCommandPlayer ABI layout change
 _Static_assert(sizeof(DfCommandEnumContext) == 88, "DfCommandEnumContext ABI layout changed");
 _Static_assert(sizeof(DfCommandInput) == 120, "DfCommandInput ABI layout changed");
 _Static_assert(sizeof(DfCommandState) == 32, "DfCommandState ABI layout changed");
-_Static_assert(sizeof(DfPluginApiV9) == 136, "DfPluginApiV9 ABI layout changed");
+_Static_assert(sizeof(DfPluginApiV10) == 136, "DfPluginApiV10 ABI layout changed");
 _Static_assert(sizeof(DfInventoryId) == 32, "DfInventoryId ABI layout changed");
 _Static_assert(sizeof(DfItemStackInfo) == 80, "DfItemStackInfo ABI layout changed");
 _Static_assert(sizeof(DfItemStackSnapshot) == 88, "DfItemStackSnapshot ABI layout changed");
@@ -156,12 +156,12 @@ _Static_assert(sizeof(DfEntityTypeDescriptorV2) == 40, "DfEntityTypeDescriptorV2
 _Static_assert(offsetof(DfEntityTypeDescriptorV2, type_key) == 32, "DfEntityTypeDescriptorV2.type_key ABI offset changed");
 _Static_assert(sizeof(DfEntitySpawnViewV3) == 200, "DfEntitySpawnViewV3 ABI layout changed");
 _Static_assert(offsetof(DfEntitySpawnViewV3, custom_instance) == 176, "DfEntitySpawnViewV3.custom_instance ABI offset changed");
-_Static_assert(sizeof(DfPluginApiV9) == 136, "DfPluginApiV9 ABI layout changed");
-_Static_assert(offsetof(DfPluginApiV9, entity_type_count) == 64, "DfPluginApiV9.entity_type_count ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV9, handle_entity) == 80, "DfPluginApiV9.handle_entity ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV9, handle_event) == 120, "DfPluginApiV9.handle_event ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV9, handle_scheduled) == 128, "DfPluginApiV9.handle_scheduled ABI offset changed");
-_Static_assert(DF_ABI_VERSION == 9u, "plugin ABI version changed without bridge review");
+_Static_assert(sizeof(DfPluginApiV10) == 136, "DfPluginApiV10 ABI layout changed");
+_Static_assert(offsetof(DfPluginApiV10, entity_type_count) == 64, "DfPluginApiV10.entity_type_count ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV10, handle_entity) == 80, "DfPluginApiV10.handle_entity ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV10, handle_event) == 120, "DfPluginApiV10.handle_event ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV10, handle_scheduled) == 128, "DfPluginApiV10.handle_scheduled ABI offset changed");
+_Static_assert(DF_ABI_VERSION == 10u, "plugin ABI version changed without bridge review");
 _Static_assert(sizeof(DfEntityState) == 128, "DfEntityState ABI layout changed");
 _Static_assert(offsetof(DfEntityState, world) == 72, "DfEntityState.world ABI offset changed");
 _Static_assert(sizeof(DfPlayerKinematics) == 64, "DfPlayerKinematics ABI layout changed");
@@ -206,8 +206,8 @@ _Static_assert(sizeof(DfWorldCloseInput) == 8, "DfWorldCloseInput ABI layout cha
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
 _Static_assert(sizeof(DfEntityHandleId) == 16, "DfEntityHandleId ABI layout changed");
 _Static_assert(sizeof(DfUuid) == 16, "DfUuid ABI layout changed");
-_Static_assert(sizeof(DfHostApiV27) == 848, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 44u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 856, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 45u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -225,6 +225,7 @@ _Static_assert(offsetof(DfHostApiV27, world_entities_within_open) == 816, "DfHos
 _Static_assert(offsetof(DfHostApiV27, block_by_name) == 824, "DfHostApiV27.block_by_name ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, entity_new) == 832, "DfHostApiV27.entity_new ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, entity_handle_type) == 840, "DfHostApiV27.entity_handle_type ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, world_task_cancel) == 848, "DfHostApiV27.world_task_cancel ABI offset changed");
 _Static_assert(sizeof(DfEntityNewView) == 152, "DfEntityNewView ABI layout changed");
 _Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
 _Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
@@ -377,7 +378,8 @@ extern DfStatus bg_go_server_player_count(uint64_t context, int64_t *count);
 extern DfStatus bg_go_server_player_by_xuid(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found);
 extern DfStatus bg_go_player_xuid(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid);
 extern DfStatus bg_go_server_world(uint64_t context, uint32_t dimension, DfWorldId *world);
-extern DfStatus bg_go_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback);
+extern DfStatus bg_go_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds);
+extern DfStatus bg_go_world_task_cancel(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled);
 extern DfStatus bg_go_world_new(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world);
 
 static DfStatus host_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message) {
@@ -547,7 +549,8 @@ static DfStatus host_server_player_count(uint64_t context, int64_t *count) { ret
 static DfStatus host_server_player_by_xuid(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found) { return bg_go_server_player_by_xuid(context, xuid, player, found); }
 static DfStatus host_player_xuid(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid) { return bg_go_player_xuid(context, invocation, player, xuid); }
 static DfStatus host_server_world(uint64_t context, uint32_t dimension, DfWorldId *world) { return bg_go_server_world(context, dimension, world); }
-static DfStatus host_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback) { return bg_go_world_schedule(context, world, plugin, callback); }
+static DfStatus host_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds) { return bg_go_world_schedule(context, world, plugin, callback, delay_nanoseconds); }
+static DfStatus host_world_task_cancel(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled) { return bg_go_world_task_cancel(context, plugin, callback, cancelled); }
 static DfStatus host_world_new(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world) { return bg_go_world_new(context, config, world); }
 
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
@@ -571,7 +574,7 @@ typedef DfStatus (*RuntimeCommandAtFn)(const DfRuntime *, uint64_t, DfCommandDes
 typedef DfStatus (*RuntimeCommandFn)(DfRuntime *, uint64_t, const DfCommandInput *, DfCommandState *);
 typedef DfStatus (*RuntimeCommandEnumFn)(DfRuntime *, uint64_t, uint64_t, uint64_t, const DfCommandEnumContext *, DfStringBuffer *);
 typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *);
-typedef DfStatus (*RuntimeScheduledFn)(DfRuntime *, uint64_t, uint64_t, DfInvocationId, uint8_t);
+typedef DfStatus (*RuntimeScheduledFn)(DfRuntime *, uint64_t, uint64_t, DfInvocationId, uint32_t, uint32_t);
 
 struct BgRuntimeLibrary {
     DfRuntime *runtime;
@@ -789,6 +792,7 @@ DfStatus bg_runtime_open(
         .block_by_name = host_block_by_name,
         .entity_new = host_entity_new,
         .entity_handle_type = host_entity_handle_type,
+        .world_task_cancel = host_world_task_cancel,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {
@@ -986,12 +990,13 @@ DfStatus bg_runtime_handle_scheduled(
     uint64_t plugin,
     uint64_t callback,
     DfInvocationId invocation,
-    uint8_t execute
+    uint32_t phase,
+    uint32_t result
 ) {
-    if (library == NULL || plugin == 0 || callback == 0 || execute > 1) {
+    if (library == NULL || plugin == 0 || callback == 0 || phase > DF_WORLD_TASK_PHASE_COMPLETE || result > DF_WORLD_TASK_FAILED) {
         return DF_STATUS_ERROR;
     }
-    return library->handle_scheduled(library->runtime, plugin, callback, invocation, execute);
+    return library->handle_scheduled(library->runtime, plugin, callback, invocation, phase, result);
 }
 
 DfStatus bg_runtime_handle_player_move(

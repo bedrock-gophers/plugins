@@ -134,7 +134,9 @@ type closeWorldRuntime struct {
 }
 
 func (*closeWorldRuntime) Subscriptions() uint64 { return native.WorldCloseSubscription }
-func (*closeWorldRuntime) HandleWorldScheduled(uint64, uint64, native.InvocationID, bool) error {
+func (*closeWorldRuntime) HandleWorldScheduled(
+	uint64, uint64, native.InvocationID, native.WorldTaskPhase, native.WorldTaskResult,
+) error {
 	return nil
 }
 

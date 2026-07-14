@@ -432,7 +432,7 @@ public sealed class KitchenSink : Plugin
                 return;
             }
             var memory = plugin._memoryWorld ??= Dragonfly.World.New();
-            memory.Schedule(worldTx =>
+            _ = memory.Do(worldTx =>
                 worldTx.SetBlock(new Cube.Pos(0, 0, 0), new Block.Stone()));
             var arena = plugin._persistentWorld ??= new Dragonfly.World.Config
             {
@@ -805,7 +805,16 @@ public sealed class KitchenSink : Plugin
             var server = plugin.Server();
             var overworld = server.World();
             _ = (overworld, server.Nether(), server.End());
-            overworld.Schedule(_ => Increment(ref plugin._scheduled));
+            var scheduled = overworld.Do(_ => Increment(ref plugin._scheduled));
+            scheduled.OnDone(error => { if (error is not null) Console.Error.WriteLine(error.Message); });
+            _ = (scheduled.Done(), scheduled.Err());
+            var delayed = overworld.DoAfter(TimeSpan.FromHours(1), _ => Increment(ref plugin._scheduled));
+            if (!delayed.Cancel() || delayed.Wait() is not System.Threading.Tasks.TaskCanceledException ||
+                delayed.Err() is not System.Threading.Tasks.TaskCanceledException)
+            {
+                output.Error("World task cancellation failed.");
+                return;
+            }
             var count = 0;
             World.EntityHandle? first = null;
             foreach (var connected in server.Players(tx))

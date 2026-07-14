@@ -72,7 +72,8 @@ DfStatus bg_runtime_handle_scheduled(
     uint64_t plugin,
     uint64_t callback,
     DfInvocationId invocation,
-    uint8_t execute
+    uint32_t phase,
+    uint32_t result
 );
 DfStatus bg_runtime_handle_player_move(
     BgRuntimeLibrary *library,

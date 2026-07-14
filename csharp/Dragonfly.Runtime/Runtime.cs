@@ -111,7 +111,7 @@ internal unsafe sealed class RuntimeState : IDisposable
         // leaves those handlers pointing into unmapped code, so the process owns every successful
         // load until exit even when validation or later server startup fails.
         var library = NativeLibrary.Load(path);
-        var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v9");
+        var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v10");
         var api = entry();
         if (api is null || api->Header.Version != Abi.PluginVersion || api->Header.Size < sizeof(PluginApi))
             throw new InvalidOperationException($"{path} has an incompatible plugin API");
@@ -502,17 +502,17 @@ internal unsafe sealed class RuntimeState : IDisposable
         }
     }
 
-    internal int HandleScheduled(ulong pluginToken, ulong callback, ulong invocation, byte execute)
+    internal int HandleScheduled(ulong pluginToken, ulong callback, ulong invocation, uint phase, uint result)
     {
-        if (execute > 1) return Abi.Error;
+        if (phase > Abi.WorldTaskComplete || result > Abi.WorldTaskFailed) return Abi.Error;
         Interlocked.Increment(ref _activeCalls);
         try
         {
             var plugin = Plugins.FirstOrDefault(candidate => (ulong)(nuint)candidate.Api == pluginToken);
             if (plugin is null || plugin.Api->HandleScheduled == null ||
-                execute != 0 && !(plugin.Enabling || (_enabling || _running) && plugin.Enabled))
+                phase == Abi.WorldTaskExecute && !(plugin.Enabling || (_enabling || _running) && plugin.Enabled))
                 return Abi.Error;
-            return plugin.Api->HandleScheduled(plugin.Instance, callback, invocation, execute);
+            return plugin.Api->HandleScheduled(plugin.Instance, callback, invocation, phase, result);
         }
         finally
         {
@@ -710,9 +710,9 @@ public static unsafe class Exports
     }
 
     [UnmanagedCallersOnly(EntryPoint = "df_runtime_handle_scheduled", CallConvs = [typeof(CallConvCdecl)])]
-    public static int HandleScheduled(void* runtime, ulong plugin, ulong callback, ulong invocation, byte execute)
+    public static int HandleScheduled(void* runtime, ulong plugin, ulong callback, ulong invocation, uint phase, uint result)
     {
-        try { return State(runtime).HandleScheduled(plugin, callback, invocation, execute); }
+        try { return State(runtime).HandleScheduled(plugin, callback, invocation, phase, result); }
         catch { return Abi.Error; }
     }
 

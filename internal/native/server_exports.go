@@ -150,11 +150,25 @@ func bg_go_server_world(context C.uint64_t, dimension C.uint32_t, output *C.DfWo
 }
 
 //export bg_go_world_schedule
-func bg_go_world_schedule(context C.uint64_t, world C.DfWorldId, plugin C.uint64_t, callback C.uint64_t) C.DfStatus {
+func bg_go_world_schedule(context C.uint64_t, world C.DfWorldId, plugin C.uint64_t, callback C.uint64_t, delayNanoseconds C.int64_t) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
-	if !ok || world.value == 0 || plugin == 0 || callback == 0 || !host.ScheduleWorld(WorldID(world.value), uint64(plugin), uint64(callback)) {
+	if !ok || world.value == 0 || plugin == 0 || callback == 0 || !host.ScheduleWorld(WorldID(world.value), uint64(plugin), uint64(callback), int64(delayNanoseconds)) {
 		return C.DF_STATUS_ERROR
 	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_task_cancel
+func bg_go_world_task_cancel(context C.uint64_t, plugin C.uint64_t, callback C.uint64_t, cancelled *C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || plugin == 0 || callback == 0 || cancelled == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, found := host.CancelWorldTask(uint64(plugin), uint64(callback))
+	if !found {
+		return C.DF_STATUS_ERROR
+	}
+	*cancelled = C.uint8_t(boolByte(value))
 	return C.DF_STATUS_OK
 }
 

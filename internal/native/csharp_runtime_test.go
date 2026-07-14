@@ -397,11 +397,15 @@ func (h *csharpWorldHost) CurrentWorld(invocation InvocationID) (WorldID, bool) 
 	return h.worldID, h.worldID != 0
 }
 
-func (h *csharpWorldHost) ScheduleWorld(world WorldID, plugin, callback uint64) bool {
+func (h *csharpWorldHost) ScheduleWorld(world WorldID, plugin, callback uint64, _ int64) bool {
 	h.scheduledWorlds = append(h.scheduledWorlds, world)
 	h.scheduledPlugins = append(h.scheduledPlugins, plugin)
 	h.scheduledCallbacks = append(h.scheduledCallbacks, callback)
 	return world != 0 && plugin != 0 && callback != 0
+}
+
+func (*csharpWorldHost) CancelWorldTask(uint64, uint64) (bool, bool) {
+	return false, false
 }
 
 func (h *csharpWorldHost) OpenWorldEntityIterator(invocation InvocationID, world WorldID, playersOnly bool) (EntityIteratorID, bool) {

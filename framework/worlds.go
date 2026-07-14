@@ -141,7 +141,25 @@ type WorldManager struct {
 	detachedEntities map[native.EntityHandleID]func()
 	scheduleMu       sync.Mutex
 	scheduleClosing  bool
+	scheduledTasks   map[worldTaskKey]*scheduledWorldTask
 	scheduleWG       sync.WaitGroup
+}
+
+type worldTaskKey struct {
+	plugin, callback uint64
+}
+
+type scheduledWorldTask struct {
+	ready chan struct{}
+	task  *world.Task
+}
+
+func (t *scheduledWorldTask) cancel() bool {
+	if t == nil {
+		return false
+	}
+	<-t.ready
+	return t.task != nil && t.task.Cancel()
 }
 
 // NewWorldManager constructs an in-memory manager, primarily useful to embedders and tests.
@@ -178,6 +196,7 @@ func newWorldManager(root string, log *slog.Logger, players *host.Players) *Worl
 		blockIterators:   make(map[native.BlockIteratorID]*blockPositionIterator),
 		entityIterators:  make(map[native.EntityIteratorID]*worldEntityIterator),
 		detachedEntities: make(map[native.EntityHandleID]func()),
+		scheduledTasks:   make(map[worldTaskKey]*scheduledWorldTask),
 		root:             root, log: log, players: players, entityHandles: entityHandles,
 	}
 }
@@ -818,9 +837,8 @@ func constructWorld(config world.Config) (created *world.World, err error) {
 	return config.New(), nil
 }
 
-// ScheduleWorld runs a managed callback on the Dragonfly world owner with a
-// fresh, callback-scoped transaction invocation.
-func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64) bool {
+// ScheduleWorld mirrors World.Do and World.DoAfter with a borrowed transaction.
+func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64, delayNanoseconds int64) bool {
 	if id == 0 || plugin == 0 || callback == 0 || m.players == nil {
 		return false
 	}
@@ -834,46 +852,68 @@ func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64)
 	if runtime == nil {
 		return false
 	}
+	key := worldTaskKey{plugin: plugin, callback: callback}
+	pending := &scheduledWorldTask{ready: make(chan struct{})}
 	m.scheduleMu.Lock()
-	if m.scheduleClosing {
+	if m.scheduleClosing || m.scheduledTasks[key] != nil {
 		m.scheduleMu.Unlock()
 		return false
 	}
+	m.scheduledTasks[key] = pending
 	m.scheduleWG.Add(1)
 	m.scheduleMu.Unlock()
-	var once sync.Once
-	finish := func(drop bool) {
-		once.Do(func() {
-			if drop {
-				_ = runtime.HandleWorldScheduled(plugin, callback, 0, false)
-			}
-			m.scheduleWG.Done()
-		})
-	}
-	task := entry.world.Do(func(tx *world.Tx) {
+	callbackFunction := func(tx *world.Tx) {
 		invocation, end := m.players.BeginInvocation(tx)
 		defer end()
 		if invocation == 0 {
-			finish(true)
-			return
+			panic("scheduled world callback has no invocation")
 		}
-		if err := runtime.HandleWorldScheduled(plugin, callback, invocation, true); err != nil {
-			finish(true)
-			m.log.Error("native scheduled world callback failed", "world", entry.name, "error", err)
-			return
+		if err := runtime.HandleWorldScheduled(plugin, callback, invocation, native.WorldTaskExecute, native.WorldTaskSuccess); err != nil {
+			panic(err)
 		}
-		finish(false)
-	})
-	if err := task.Err(); err != nil {
-		task.OnDone(func(error) { finish(true) })
-		return false
 	}
+	var task *world.Task
+	if delayNanoseconds <= 0 {
+		task = entry.world.Do(callbackFunction)
+	} else {
+		task = entry.world.DoAfter(time.Duration(delayNanoseconds), callbackFunction)
+	}
+	pending.task = task
+	close(pending.ready)
 	task.OnDone(func(err error) {
-		if err != nil {
-			finish(true)
+		result := native.WorldTaskSuccess
+		switch {
+		case errors.Is(err, world.ErrTaskCancelled):
+			result = native.WorldTaskCancelled
+		case errors.Is(err, world.ErrWorldClosed):
+			result = native.WorldTaskWorldClosed
+		case errors.Is(err, world.ErrTaskPanicked):
+			result = native.WorldTaskPanicked
+		case err != nil:
+			result = native.WorldTaskFailed
 		}
+		if callbackErr := runtime.HandleWorldScheduled(plugin, callback, 0, native.WorldTaskComplete, result); callbackErr != nil {
+			m.log.Error("complete native world task", "world", entry.name, "error", callbackErr)
+		}
+		m.scheduleMu.Lock()
+		if m.scheduledTasks[key] == pending {
+			delete(m.scheduledTasks, key)
+		}
+		m.scheduleMu.Unlock()
+		m.scheduleWG.Done()
 	})
 	return true
+}
+
+func (m *WorldManager) CancelWorldTask(plugin, callback uint64) (bool, bool) {
+	key := worldTaskKey{plugin: plugin, callback: callback}
+	m.scheduleMu.Lock()
+	pending, ok := m.scheduledTasks[key]
+	m.scheduleMu.Unlock()
+	if !ok {
+		return false, false
+	}
+	return pending.cancel(), true
 }
 
 // StopScheduling rejects new managed world callbacks. DrainScheduled must be
@@ -881,7 +921,14 @@ func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64)
 func (m *WorldManager) StopScheduling() {
 	m.scheduleMu.Lock()
 	m.scheduleClosing = true
+	pending := make([]*scheduledWorldTask, 0, len(m.scheduledTasks))
+	for _, task := range m.scheduledTasks {
+		pending = append(pending, task)
+	}
 	m.scheduleMu.Unlock()
+	for _, task := range pending {
+		task.cancel()
+	}
 }
 
 // DrainScheduled waits until every accepted callback has executed or dropped.

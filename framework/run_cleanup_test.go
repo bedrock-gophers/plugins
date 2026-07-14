@@ -42,7 +42,7 @@ func TestRunCleanupStartedOrder(t *testing.T) {
 		closeRuntime:   func() { calls = append(calls, "runtime") },
 	}
 	cleanup.close()
-	want := []string{"server", "stop schedules", "begin plugins", "custom", "detached", "drain schedules", "finish plugins", "runtime"}
+	want := []string{"server", "stop schedules", "drain schedules", "begin plugins", "custom", "detached", "finish plugins", "runtime"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("cleanup order = %v, want %v", calls, want)
 	}
@@ -66,7 +66,7 @@ func TestRunCleanupUnstartedEnabledOrder(t *testing.T) {
 		closeRuntime:   func() { calls = append(calls, "runtime") },
 	}
 	cleanup.close()
-	want := []string{"stop schedules", "begin plugins", "custom", "detached", "core", "drain schedules", "finish plugins", "runtime"}
+	want := []string{"stop schedules", "drain schedules", "begin plugins", "custom", "detached", "core", "finish plugins", "runtime"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("cleanup order = %v, want %v", calls, want)
 	}
@@ -90,7 +90,7 @@ func TestRunCleanupFailedEnableFinalizesPartialState(t *testing.T) {
 		closeRuntime:   func() { calls = append(calls, "runtime") },
 	}
 	cleanup.close()
-	want := []string{"stop schedules", "begin plugins", "custom", "detached", "core", "drain schedules", "finish plugins", "runtime"}
+	want := []string{"stop schedules", "drain schedules", "begin plugins", "custom", "detached", "core", "finish plugins", "runtime"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("cleanup order = %v, want %v", calls, want)
 	}

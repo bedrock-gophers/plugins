@@ -13,7 +13,8 @@ internal static unsafe class PluginBridge
     private static PluginState? CurrentState;
     private static PluginApi* Descriptor;
     private static readonly Dictionary<string, nint> EntityTypeStrings = [];
-    private static readonly ConcurrentDictionary<ulong, Action<World.Tx>> Scheduled = new();
+    private sealed record ScheduledWorldTask(Action<World.Tx> Callback, World.Task Task);
+    private static readonly ConcurrentDictionary<ulong, ScheduledWorldTask> Scheduled = new();
     private static long NextScheduled;
 
     internal static class Host
@@ -2051,21 +2052,33 @@ internal static unsafe class PluginBridge
             return new World(0, world);
         }
 
-        internal static void ScheduleWorld(World world, Action<World.Tx> callback)
+        internal static World.Task ScheduleWorld(World world, TimeSpan delay, Action<World.Tx> callback)
         {
             ArgumentNullException.ThrowIfNull(world);
             ArgumentNullException.ThrowIfNull(callback);
-            var api = Api;
-            if (api is null || api->WorldSchedule == null || Descriptor is null)
-                throw new InvalidOperationException("world scheduling is unavailable");
+            var delayNanoseconds = checked(delay.Ticks * 100);
             var next = Interlocked.Increment(ref NextScheduled);
             if (next <= 0) throw new InvalidOperationException("world callback IDs exhausted");
             var id = (ulong)next;
-            if (!Scheduled.TryAdd(id, callback))
+            var task = new World.Task(id);
+            if (!Scheduled.TryAdd(id, new ScheduledWorldTask(callback, task)))
                 throw new InvalidOperationException("world callback ID collision");
-            if (api->WorldSchedule(api->Context, world.Id, (ulong)(nuint)Descriptor, id) == Abi.Ok) return;
+            var api = Api;
+            if (api is not null && api->WorldSchedule != null && Descriptor is not null &&
+                api->WorldSchedule(api->Context, world.Id, (ulong)(nuint)Descriptor, id, delayNanoseconds) == Abi.Ok)
+                return task;
             Scheduled.TryRemove(id, out _);
-            throw new InvalidOperationException("world is unavailable");
+            task.Complete(Abi.WorldTaskFailed);
+            return task;
+        }
+
+        internal static bool CancelWorldTask(ulong callback)
+        {
+            var api = Api;
+            if (api is null || api->WorldTaskCancel == null || Descriptor is null) return false;
+            byte cancelled;
+            return api->WorldTaskCancel(api->Context, (ulong)(nuint)Descriptor, callback, &cancelled) == Abi.Ok &&
+                   cancelled == 1;
         }
 
         internal static (World.EntityHandle? Player, bool Ok) ServerPlayer(Guid uuid)
@@ -2568,6 +2581,7 @@ internal static unsafe class PluginBridge
         EntityTypeStrings.Clear();
         Host.Api = null;
         CommandRegistry.Clear();
+        foreach (var task in Scheduled.Values) task.Task.Complete(Abi.WorldTaskFailed);
         Scheduled.Clear();
     }
 
@@ -2776,15 +2790,29 @@ internal static unsafe class PluginBridge
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static int HandleScheduled(void* instance, ulong callback, ulong invocation, byte execute)
+    private static int HandleScheduled(void* instance, ulong callback, ulong invocation, uint phase, uint result)
     {
         try
         {
-            if (instance is null || execute > 1) return Abi.Error;
-            if (!Scheduled.TryRemove(callback, out var action))
-                return execute == 0 ? Abi.Ok : Abi.Error;
-            if (execute != 0) action(new World.Tx(invocation));
-            return Abi.Ok;
+            if (instance is null || phase > Abi.WorldTaskComplete || result > Abi.WorldTaskFailed)
+                return Abi.Error;
+            if (phase == Abi.WorldTaskComplete)
+            {
+                if (!Scheduled.TryRemove(callback, out var completed)) return Abi.Ok;
+                completed.Task.Complete(result);
+                return Abi.Ok;
+            }
+            if (invocation == 0 || !Scheduled.TryGetValue(callback, out var scheduled)) return Abi.Error;
+            try
+            {
+                scheduled.Callback(new World.Tx(invocation));
+                return Abi.Ok;
+            }
+            catch (Exception error)
+            {
+                scheduled.Task.CallbackFailed(error);
+                return Abi.Error;
+            }
         }
         catch { return Abi.Error; }
     }

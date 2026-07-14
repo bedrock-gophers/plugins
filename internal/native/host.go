@@ -155,6 +155,23 @@ type WorldSetOpts struct {
 	DisableRedstoneUpdates    bool
 }
 
+type WorldTaskPhase uint32
+
+const (
+	WorldTaskExecute WorldTaskPhase = iota
+	WorldTaskComplete
+)
+
+type WorldTaskResult uint32
+
+const (
+	WorldTaskSuccess WorldTaskResult = iota
+	WorldTaskCancelled
+	WorldTaskWorldClosed
+	WorldTaskPanicked
+	WorldTaskFailed
+)
+
 type EntityKind uint32
 
 const (
@@ -429,7 +446,8 @@ type Host interface {
 	ServerPlayerByXUID(string) (EntityHandleID, bool, bool)
 	PlayerXUID(InvocationID, PlayerID) (string, bool)
 	ServerWorld(WorldDimension) (WorldID, bool)
-	ScheduleWorld(WorldID, uint64, uint64) bool
+	ScheduleWorld(WorldID, uint64, uint64, int64) bool
+	CancelWorldTask(uint64, uint64) (bool, bool)
 	EntityHandle(InvocationID, EntityID) (EntityHandleID, bool)
 	EntityHandleEntity(InvocationID, EntityHandleID) (EntityID, bool, bool)
 	EntityHandleUUID(EntityHandleID) ([16]byte, bool)
@@ -594,9 +612,10 @@ func (noopHost) ServerPlayerByName(string) (EntityHandleID, bool, bool) {
 func (noopHost) ServerPlayerByXUID(string) (EntityHandleID, bool, bool) {
 	return EntityHandleID{}, false, false
 }
-func (noopHost) PlayerXUID(InvocationID, PlayerID) (string, bool) { return "", false }
-func (noopHost) ServerWorld(WorldDimension) (WorldID, bool)       { return 0, false }
-func (noopHost) ScheduleWorld(WorldID, uint64, uint64) bool       { return false }
+func (noopHost) PlayerXUID(InvocationID, PlayerID) (string, bool)  { return "", false }
+func (noopHost) ServerWorld(WorldDimension) (WorldID, bool)        { return 0, false }
+func (noopHost) ScheduleWorld(WorldID, uint64, uint64, int64) bool { return false }
+func (noopHost) CancelWorldTask(uint64, uint64) (bool, bool)       { return false, false }
 func (noopHost) EntityHandle(InvocationID, EntityID) (EntityHandleID, bool) {
 	return EntityHandleID{}, false
 }

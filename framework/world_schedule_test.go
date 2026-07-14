@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/bedrock-gophers/plugins/internal/host"
 	"github.com/bedrock-gophers/plugins/internal/native"
@@ -15,23 +16,25 @@ type scheduledWorldRuntime struct {
 	players *host.Players
 	fail    bool
 
-	mu         sync.Mutex
-	executions int
-	drops      int
-	plugin     uint64
-	callback   uint64
-	invocation native.InvocationID
-	live       bool
+	mu          sync.Mutex
+	executions  int
+	completions int
+	plugin      uint64
+	callback    uint64
+	invocation  native.InvocationID
+	result      native.WorldTaskResult
+	live        bool
 }
 
 func (*scheduledWorldRuntime) Subscriptions() uint64 { return 0 }
 
-func (r *scheduledWorldRuntime) HandleWorldScheduled(plugin, callback uint64, invocation native.InvocationID, execute bool) error {
+func (r *scheduledWorldRuntime) HandleWorldScheduled(plugin, callback uint64, invocation native.InvocationID, phase native.WorldTaskPhase, result native.WorldTaskResult) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.plugin, r.callback = plugin, callback
-	if !execute {
-		r.drops++
+	if phase == native.WorldTaskComplete {
+		r.completions++
+		r.result = result
 		return nil
 	}
 	r.executions++
@@ -53,23 +56,23 @@ func TestWorldScheduleRunsOnceWithBorrowedTransaction(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = manager.CloseCustom() })
 	id, _ := manager.WorldByName(0, "example:scheduled")
-	if !manager.ScheduleWorld(id, 41, 73) {
+	if !manager.ScheduleWorld(id, 41, 73, 0) {
 		t.Fatal("ScheduleWorld rejected a live world")
 	}
 	manager.DrainScheduled()
 	runtime.mu.Lock()
-	executions, drops := runtime.executions, runtime.drops
-	plugin, callback, invocation, live := runtime.plugin, runtime.callback, runtime.invocation, runtime.live
+	executions, completions := runtime.executions, runtime.completions
+	plugin, callback, invocation, result, live := runtime.plugin, runtime.callback, runtime.invocation, runtime.result, runtime.live
 	runtime.mu.Unlock()
-	if executions != 1 || drops != 0 || plugin != 41 || callback != 73 || invocation == 0 || !live {
-		t.Fatalf("scheduled callback = executions %d drops %d plugin %d callback %d invocation %d live %v", executions, drops, plugin, callback, invocation, live)
+	if executions != 1 || completions != 1 || result != native.WorldTaskSuccess || plugin != 41 || callback != 73 || invocation == 0 || !live {
+		t.Fatalf("scheduled callback = executions %d completions %d result %d plugin %d callback %d invocation %d live %v", executions, completions, result, plugin, callback, invocation, live)
 	}
 	if _, ok := players.InvocationTx(invocation); ok {
 		t.Fatal("scheduled transaction escaped its callback")
 	}
 }
 
-func TestWorldScheduleDropsFailedCallbackAndStopsAdmission(t *testing.T) {
+func TestWorldScheduleReportsPanickedCallbackAndStopsAdmission(t *testing.T) {
 	players := host.NewPlayers()
 	manager := newWorldManager("", nil, players)
 	runtime := &scheduledWorldRuntime{players: players, fail: true}
@@ -79,26 +82,26 @@ func TestWorldScheduleDropsFailedCallbackAndStopsAdmission(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = manager.CloseCustom() })
 	id, _ := manager.WorldByName(0, "example:scheduled")
-	if !manager.ScheduleWorld(id, 5, 9) {
+	if !manager.ScheduleWorld(id, 5, 9, 0) {
 		t.Fatal("ScheduleWorld rejected a live world")
 	}
 	manager.DrainScheduled()
 	runtime.mu.Lock()
-	executions, drops := runtime.executions, runtime.drops
+	executions, completions, result := runtime.executions, runtime.completions, runtime.result
 	runtime.mu.Unlock()
-	if executions != 1 || drops != 1 {
-		t.Fatalf("failed callback = executions %d drops %d, want 1, 1", executions, drops)
+	if executions != 1 || completions != 1 || result != native.WorldTaskPanicked {
+		t.Fatalf("failed callback = executions %d completions %d result %d", executions, completions, result)
 	}
 	manager.StopScheduling()
-	if manager.ScheduleWorld(id, 5, 10) {
+	if manager.ScheduleWorld(id, 5, 10, 0) {
 		t.Fatal("ScheduleWorld accepted after StopScheduling")
 	}
-	if manager.ScheduleWorld(native.WorldID(999), 5, 11) {
+	if manager.ScheduleWorld(native.WorldID(999), 5, 11, 0) {
 		t.Fatal("ScheduleWorld accepted an unknown world")
 	}
 }
 
-func TestWorldScheduleDropsTaskRejectedByClosedWorld(t *testing.T) {
+func TestWorldScheduleReturnsCompletedTaskForClosedWorld(t *testing.T) {
 	players := host.NewPlayers()
 	manager := newWorldManager("", nil, players)
 	runtime := &scheduledWorldRuntime{players: players}
@@ -111,15 +114,43 @@ func TestWorldScheduleDropsTaskRejectedByClosedWorld(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if manager.ScheduleWorld(id, 7, 11) {
-		t.Fatal("ScheduleWorld accepted a closed world")
+	if !manager.ScheduleWorld(id, 7, 11, 0) {
+		t.Fatal("ScheduleWorld rejected a known closed world")
 	}
 	manager.StopScheduling()
 	manager.DrainScheduled()
 	runtime.mu.Lock()
-	executions, drops := runtime.executions, runtime.drops
+	executions, completions, result := runtime.executions, runtime.completions, runtime.result
 	runtime.mu.Unlock()
-	if executions != 0 || drops != 1 {
-		t.Fatalf("closed-world callback = executions %d drops %d, want 0, 1", executions, drops)
+	if executions != 0 || completions != 1 || result != native.WorldTaskWorldClosed {
+		t.Fatalf("closed-world callback = executions %d completions %d result %d", executions, completions, result)
+	}
+}
+
+func TestWorldScheduleCancelStopsDelayedTask(t *testing.T) {
+	players := host.NewPlayers()
+	manager := newWorldManager("", nil, players)
+	runtime := &scheduledWorldRuntime{players: players}
+	manager.attachRuntime(runtime)
+	if _, err := manager.Create("example:delayed", world.Config{Synchronous: true}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.CloseCustom() })
+	id, _ := manager.WorldByName(0, "example:delayed")
+	if !manager.ScheduleWorld(id, 8, 12, int64(time.Hour)) {
+		t.Fatal("ScheduleWorld rejected delayed task")
+	}
+	if cancelled, found := manager.CancelWorldTask(8, 12); !found || !cancelled {
+		t.Fatalf("CancelWorldTask() = %v, %v", cancelled, found)
+	}
+	manager.DrainScheduled()
+	runtime.mu.Lock()
+	executions, completions, result := runtime.executions, runtime.completions, runtime.result
+	runtime.mu.Unlock()
+	if executions != 0 || completions != 1 || result != native.WorldTaskCancelled {
+		t.Fatalf("cancelled callback = executions %d completions %d result %d", executions, completions, result)
+	}
+	if cancelled, found := manager.CancelWorldTask(8, 12); found || cancelled {
+		t.Fatalf("completed CancelWorldTask() = %v, %v", cancelled, found)
 	}
 }

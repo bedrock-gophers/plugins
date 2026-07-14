@@ -219,7 +219,7 @@ if (found && byName is not null)
 }
 var (byXuid, foundXuid) = server.PlayerByXUID("2533274790000000");
 
-overworld.Schedule(tx =>
+var task = overworld.Do(tx =>
 {
     // Runs on the overworld owner with a fresh Dragonfly transaction.
     tx.SetBlock(new Cube.Pos(0, 64, 0), new Block.Stone());
@@ -241,14 +241,15 @@ var (barrel, validState) = World.BlockByName("minecraft:barrel", new()
 });
 if (validState && barrel is not null)
 {
-    arena.Schedule(tx => tx.SetBlock(new Cube.Pos(0, 64, 0), barrel));
+    arena.Do(tx => tx.SetBlock(new Cube.Pos(0, 64, 0), barrel));
 }
 ```
 
-`World.Schedule(Action<World.Tx>)` is the fire-and-forget C# adaptation of Dragonfly's `World.Do`.
-The callback runs once on that world's owner. Its `World.Tx` is borrowed and expires when the
-callback returns; do not retain it or values borrowed through it. Scheduling is rejected once
-server shutdown starts, and accepted callbacks are drained or dropped before plugin unload.
+`World.Do` and `DoAfter` are AST-generated from Dragonfly. Returned `World.Task` exposes `Done`,
+`Err`, `Wait`, `OnDone`, and `Cancel`. The callback runs once on that world's owner. Its `World.Tx`
+is borrowed and expires when the callback returns; do not retain it or values borrowed through it.
+Calling `Wait` from the same world owner deadlocks, matching Dragonfly. Shutdown rejects new tasks,
+cancels pending delays, and drains running callbacks before plugin disable.
 `World.New()` uses Dragonfly's `NopProvider`, so it is genuinely in-memory. An MCDB provider is
 opened atomically with the world and persists normal `Save()` calls and automatic saves. Provider
 paths are relative to the server's worlds directory; traversal, symlink escapes, and opening the

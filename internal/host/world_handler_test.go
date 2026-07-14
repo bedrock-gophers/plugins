@@ -64,7 +64,9 @@ type worldRuntimeStub struct {
 }
 
 func (r *worldRuntimeStub) Subscriptions() uint64 { return r.subscriptions }
-func (r *worldRuntimeStub) HandleWorldScheduled(uint64, uint64, native.InvocationID, bool) error {
+func (r *worldRuntimeStub) HandleWorldScheduled(
+	uint64, uint64, native.InvocationID, native.WorldTaskPhase, native.WorldTaskResult,
+) error {
 	return nil
 }
 func (r *worldRuntimeStub) called(name string, invocation native.InvocationID) {

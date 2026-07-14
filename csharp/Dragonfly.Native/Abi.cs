@@ -4,10 +4,18 @@ namespace Dragonfly.Native;
 
 public static class Abi
 {
-    public const uint PluginVersion = 9;
-    public const uint HostVersion = 44;
+    public const uint PluginVersion = 10;
+    public const uint HostVersion = 45;
     public const int Ok = 0;
     public const int Error = 1;
+
+    public const uint WorldTaskExecute = 0;
+    public const uint WorldTaskComplete = 1;
+    public const uint WorldTaskSuccess = 0;
+    public const uint WorldTaskCancelled = 1;
+    public const uint WorldTaskWorldClosed = 2;
+    public const uint WorldTaskPanicked = 3;
+    public const uint WorldTaskFailed = 4;
     public const uint EntityOperationAdopt = 0;
     public const uint EntityOperationLoad = 1;
     public const uint EntityOperationSave = 2;
@@ -407,12 +415,13 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, StringView, EntityHandleId*, byte*, int> ServerPlayerByXuid;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, StringBuffer*, int> PlayerXuid;
     public delegate* unmanaged[Cdecl]<ulong, uint, WorldId*, int> ServerWorld;
-    public delegate* unmanaged[Cdecl]<ulong, WorldId, ulong, ulong, int> WorldSchedule;
+    public delegate* unmanaged[Cdecl]<ulong, WorldId, ulong, ulong, long, int> WorldSchedule;
     public delegate* unmanaged[Cdecl]<ulong, WorldConfigV1*, WorldId*, int> WorldNew;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BBox, ulong*, int> WorldEntitiesWithinOpen;
     public delegate* unmanaged[Cdecl]<ulong, StringView, StringView, byte*, BlockData*, int> BlockByName;
     public delegate* unmanaged[Cdecl]<ulong, EntityNewView*, EntityHandleId*, int> EntityNew;
     public delegate* unmanaged[Cdecl]<ulong, EntityHandleId, StringBuffer*, int> EntityHandleType;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, byte*, int> WorldTaskCancel;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -432,7 +441,7 @@ public unsafe struct PluginApi
     public delegate* unmanaged[Cdecl]<void*, void*, int> SetHost;
     public delegate* unmanaged[Cdecl]<void*, void> Destroy;
     public delegate* unmanaged[Cdecl]<void*, uint, void*, void*, int> HandleEvent;
-    public delegate* unmanaged[Cdecl]<void*, ulong, ulong, byte, int> HandleScheduled;
+    public delegate* unmanaged[Cdecl]<void*, ulong, ulong, uint, uint, int> HandleScheduled;
 }
 
 [StructLayout(LayoutKind.Sequential)]
