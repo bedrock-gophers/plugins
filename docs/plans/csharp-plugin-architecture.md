@@ -182,6 +182,13 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    the body can deadlock, and mirrored server scans in handlers on different worlds can deadlock
    each other, exactly as in Dragonfly. The private iterator closes on exhaustion, early disposal,
    callback completion, or runtime shutdown.
+   `World.Schedule(Action<World.Tx>)` is the current fire-and-forget C# adaptation of Dragonfly's
+   owner-scheduled `World.Do`. The generator validates the exact upstream `Do(func(*Tx)) *Task`
+   shape. The private ABI 40 callback trampoline keeps delegates plugin-owned, executes them on the
+   selected world owner with a fresh borrowed transaction, and removes them on execution or task
+   failure. Framework teardown stops admission and drains every accepted callback before closing
+   the NativeAOT runtime. Managed `Task` cancellation, waiting, and completion callbacks remain a
+   later slice; the public method does not pretend to expose those semantics yet.
    The sound slice AST-generates all 87 concrete `server/world/sound` structs as `Sound.*` values
    implementing `World.Sound`. `HandleSound` materialises their exported bool, scalar, block, item,
    liquid, instrument, disc, horn, pitch, and stage fields. Bucket sounds preserve the exact typed

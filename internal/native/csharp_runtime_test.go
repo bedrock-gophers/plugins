@@ -718,7 +718,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		arguments []string
 		want      string
 	}{
-		{0, nil, "jumps=0, punches=0, sprints=0, sneaks=0, quits=0"},
+		{0, nil, "jumps=0, punches=0, sprints=0, sneaks=0, quits=0, scheduled=0"},
 		{1, []string{"echo", "hello world"}, "hello world"},
 		{2, []string{"mode", "Creative"}, "mode=Creative"},
 		{3, []string{"ping"}, "Danick's ping: 37ms"},

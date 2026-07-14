@@ -51,6 +51,22 @@ const (
 
 const maxWorldExplosionValues = 1 << 20
 
+// HandleWorldScheduled dispatches or drops one managed callback registered by
+// a plugin. Execution receives a callback-scoped Dragonfly transaction.
+func (r *Runtime) HandleWorldScheduled(plugin, callback uint64, invocation InvocationID, execute bool) error {
+	if r == nil || r.ptr == nil || plugin == 0 || callback == 0 || execute && invocation == 0 {
+		return errors.New("invalid scheduled world callback")
+	}
+	var executeValue C.uint8_t
+	if execute {
+		executeValue = 1
+	}
+	if status := C.bg_runtime_handle_scheduled(r.ptr, C.uint64_t(plugin), C.uint64_t(callback), C.DfInvocationId(invocation), executeValue); status != C.DF_STATUS_OK {
+		return errors.New("scheduled world callback failed")
+	}
+	return nil
+}
+
 type WorldLiquidFlowInput struct {
 	From, Into       BlockPos
 	Liquid, Replaced WorldBlock

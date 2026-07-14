@@ -112,6 +112,9 @@ type WorldManager struct {
 	nextEntityIter   native.EntityIteratorID
 	detachedEntityMu sync.Mutex
 	detachedEntities map[native.EntityHandleID]func()
+	scheduleMu        sync.Mutex
+	scheduleClosing   bool
+	scheduleWG        sync.WaitGroup
 }
 
 // NewWorldManager constructs an in-memory manager, primarily useful to embedders and tests.
@@ -619,6 +622,75 @@ func (m *WorldManager) ServerWorld(dimension native.WorldDimension) (native.Worl
 	}
 	return m.WorldByName(0, string(name))
 }
+
+// ScheduleWorld runs a managed callback on the Dragonfly world owner with a
+// fresh, callback-scoped transaction invocation.
+func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64) bool {
+	if id == 0 || plugin == 0 || callback == 0 || m.players == nil {
+		return false
+	}
+	entry, ok := m.entryByHandle(id)
+	if !ok {
+		return false
+	}
+	m.mu.RLock()
+	runtime := m.runtime
+	m.mu.RUnlock()
+	if runtime == nil {
+		return false
+	}
+	m.scheduleMu.Lock()
+	if m.scheduleClosing {
+		m.scheduleMu.Unlock()
+		return false
+	}
+	m.scheduleWG.Add(1)
+	m.scheduleMu.Unlock()
+	var once sync.Once
+	finish := func(drop bool) {
+		once.Do(func() {
+			if drop {
+				_ = runtime.HandleWorldScheduled(plugin, callback, 0, false)
+			}
+			m.scheduleWG.Done()
+		})
+	}
+	task := entry.world.Do(func(tx *world.Tx) {
+		invocation, end := m.players.BeginInvocation(tx)
+		defer end()
+		if invocation == 0 {
+			finish(true)
+			return
+		}
+		if err := runtime.HandleWorldScheduled(plugin, callback, invocation, true); err != nil {
+			finish(true)
+			m.log.Error("native scheduled world callback failed", "world", entry.name, "error", err)
+			return
+		}
+		finish(false)
+	})
+	if err := task.Err(); err != nil {
+		task.OnDone(func(error) { finish(true) })
+		return false
+	}
+	task.OnDone(func(err error) {
+		if err != nil {
+			finish(true)
+		}
+	})
+	return true
+}
+
+// StopScheduling rejects new managed world callbacks. DrainScheduled must be
+// called before the native runtime is closed.
+func (m *WorldManager) StopScheduling() {
+	m.scheduleMu.Lock()
+	m.scheduleClosing = true
+	m.scheduleMu.Unlock()
+}
+
+// DrainScheduled waits until every accepted callback has executed or dropped.
+func (m *WorldManager) DrainScheduled() { m.scheduleWG.Wait() }
 
 func (m *WorldManager) WorldByName(_ native.InvocationID, name string) (native.WorldID, bool) {
 	entry, ok := m.entryByName(WorldID(name))

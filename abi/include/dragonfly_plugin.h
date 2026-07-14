@@ -8,9 +8,9 @@
 extern "C" {
 #endif
 
-#define DF_ABI_VERSION 7u
-// Version 39 adds Dragonfly Server.World, Server.Nether, and Server.End.
-#define DF_HOST_ABI_VERSION 39u
+#define DF_ABI_VERSION 8u
+// Version 40 adds world-owner callback scheduling.
+#define DF_HOST_ABI_VERSION 40u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -442,6 +442,7 @@ typedef DfStatus (*DfHostServerCountFn)(uint64_t context, int64_t *count);
 typedef DfStatus (*DfHostServerPlayerByXuidFn)(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found);
 typedef DfStatus (*DfHostPlayerXuidFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid);
 typedef DfStatus (*DfHostServerWorldFn)(uint64_t context, uint32_t dimension, DfWorldId *world);
+typedef DfStatus (*DfHostWorldScheduleFn)(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback);
 typedef DfStatus (*DfHostEntityHandleFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityHandleId *handle);
 typedef DfStatus (*DfHostEntityHandleEntityFn)(uint64_t context, DfInvocationId invocation, DfEntityHandleId handle, DfEntityId *entity, uint8_t *found);
 typedef DfStatus (*DfHostEntityHandleUuidFn)(uint64_t context, DfEntityHandleId handle, DfUuid *uuid);
@@ -554,6 +555,7 @@ typedef struct {
     DfHostServerPlayerByXuidFn server_player_by_xuid;
     DfHostPlayerXuidFn player_xuid;
     DfHostServerWorldFn server_world;
+    DfHostWorldScheduleFn world_schedule;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
@@ -1274,6 +1276,7 @@ typedef DfStatus (*DfHandleCommandFn)(void *instance, uint64_t command, const Df
 typedef DfStatus (*DfCommandEnumOptionsFn)(void *instance, uint64_t command, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
 typedef DfStatus (*DfPluginSetHostFn)(void *instance, const DfHostApiV27 *host);
 typedef void (*DfPluginDestroyFn)(void *instance);
+typedef DfStatus (*DfPluginScheduledFn)(void *instance, uint64_t callback, DfInvocationId invocation, uint8_t execute);
 
 typedef struct {
     DfAbiHeader header;
@@ -1290,9 +1293,10 @@ typedef struct {
     DfPluginSetHostFn set_host;
     DfPluginDestroyFn destroy;
     DfHandleEventFn handle_event;
-} DfPluginApiV7;
+    DfPluginScheduledFn handle_scheduled;
+} DfPluginApiV8;
 
-typedef const DfPluginApiV7 *(*DfPluginEntryV7Fn)(void);
+typedef const DfPluginApiV8 *(*DfPluginEntryV8Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
 typedef struct { DfStringView plugin_directory; const DfHostApiV27 *host; } DfRuntimeConfig;
@@ -1320,6 +1324,7 @@ DfStatus df_runtime_command_at(const DfRuntime *runtime, uint64_t index, DfComma
 DfStatus df_runtime_handle_command(DfRuntime *runtime, uint64_t index, const DfCommandInput *input, DfCommandState *state);
 DfStatus df_runtime_command_enum_options(DfRuntime *runtime, uint64_t index, uint64_t overload, uint64_t parameter, const DfCommandEnumContext *context, DfStringBuffer *output);
 DfStatus df_runtime_handle_event(DfRuntime *runtime, DfEventId event_id, const void *input, void *state);
+DfStatus df_runtime_handle_scheduled(DfRuntime *runtime, uint64_t plugin, uint64_t callback, DfInvocationId invocation, uint8_t execute);
 
 #ifdef __cplusplus
 }

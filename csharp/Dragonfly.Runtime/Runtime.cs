@@ -10,6 +10,7 @@ internal unsafe sealed class PluginLibrary : IDisposable
     internal PluginApi* Api;
     internal void* Instance;
     internal volatile bool Enabled;
+    internal volatile bool Enabling;
 
     internal void Disable()
     {
@@ -44,13 +45,14 @@ internal unsafe sealed class RuntimeState : IDisposable
     internal readonly List<RuntimeCommand> Commands = [];
     internal ulong Subscriptions;
     private volatile bool _running;
+    private volatile bool _enabling;
     private int _activeCalls;
 
     internal static RuntimeState Load(string directory, void* host)
     {
         if (host is null) throw new InvalidOperationException("null host API");
         var hostHeader = (HostHeader*)host;
-        if (hostHeader->Version != Abi.HostVersion || hostHeader->Size < 824)
+        if (hostHeader->Version != Abi.HostVersion || hostHeader->Size < 832)
             throw new InvalidOperationException("incompatible host API");
 
         var runtime = new RuntimeState();
@@ -73,7 +75,7 @@ internal unsafe sealed class RuntimeState : IDisposable
         // leaves those handlers pointing into unmapped code, so the process owns every successful
         // load until exit even when validation or later server startup fails.
         var library = NativeLibrary.Load(path);
-        var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v7");
+        var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v8");
         var api = entry();
         if (api is null || api->Header.Version != Abi.PluginVersion || api->Header.Size < sizeof(PluginApi))
             throw new InvalidOperationException($"{path} has an incompatible plugin API");
@@ -101,33 +103,41 @@ internal unsafe sealed class RuntimeState : IDisposable
         lock (Gate)
         {
             if (_running) return;
-            for (var index = 0; index < Plugins.Count; index++)
-            {
-                var plugin = Plugins[index];
-                var status = plugin.Api->Enable == null ? Abi.Ok : plugin.Api->Enable(plugin.Instance, error);
-                if (status == Abi.Ok && (error is null || error->Length == 0))
-                {
-                    plugin.Enabled = true;
-                    continue;
-                }
-                for (var previous = index - 1; previous >= 0; previous--) Plugins[previous].Disable();
-                var detail = error is null || error->Length == 0
-                    ? string.Empty
-                    : Encoding.UTF8.GetString(new ReadOnlySpan<byte>(error->Data, checked((int)error->Length)));
-                var suffix = detail.Length == 0 ? string.Empty : $": {detail}";
-                throw new InvalidOperationException($"plugin {Utf8(plugin.Api->Id)} failed to enable{suffix}");
-            }
+            _enabling = true;
             try
             {
-                PublishCommands();
+                for (var index = 0; index < Plugins.Count; index++)
+                {
+                    var plugin = Plugins[index];
+                    plugin.Enabling = true;
+                    int status;
+                    try { status = plugin.Api->Enable == null ? Abi.Ok : plugin.Api->Enable(plugin.Instance, error); }
+                    finally { plugin.Enabling = false; }
+                    if (status == Abi.Ok && (error is null || error->Length == 0))
+                    {
+                        plugin.Enabled = true;
+                        continue;
+                    }
+                    for (var previous = index - 1; previous >= 0; previous--) Plugins[previous].Disable();
+                    var detail = error is null || error->Length == 0
+                        ? string.Empty
+                        : Encoding.UTF8.GetString(new ReadOnlySpan<byte>(error->Data, checked((int)error->Length)));
+                    var suffix = detail.Length == 0 ? string.Empty : $": {detail}";
+                    throw new InvalidOperationException($"plugin {Utf8(plugin.Api->Id)} failed to enable{suffix}");
+                }
+                try
+                {
+                    PublishCommands();
+                }
+                catch
+                {
+                    Commands.Clear();
+                    for (var index = Plugins.Count - 1; index >= 0; index--) Plugins[index].Disable();
+                    throw;
+                }
+                _running = true;
             }
-            catch
-            {
-                Commands.Clear();
-                for (var index = Plugins.Count - 1; index >= 0; index--) Plugins[index].Disable();
-                throw;
-            }
-            _running = true;
+            finally { _enabling = false; }
         }
     }
 
@@ -249,6 +259,24 @@ internal unsafe sealed class RuntimeState : IDisposable
                 if (plugin.Api->HandleEvent(plugin.Instance, eventId, input, state) != Abi.Ok) return Abi.Error;
             }
             return Abi.Ok;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeCalls);
+        }
+    }
+
+    internal int HandleScheduled(ulong pluginToken, ulong callback, ulong invocation, byte execute)
+    {
+        if (execute > 1) return Abi.Error;
+        Interlocked.Increment(ref _activeCalls);
+        try
+        {
+            var plugin = Plugins.FirstOrDefault(candidate => (ulong)(nuint)candidate.Api == pluginToken);
+            if (plugin is null || plugin.Api->HandleScheduled == null ||
+                execute != 0 && !(plugin.Enabling || (_enabling || _running) && plugin.Enabled))
+                return Abi.Error;
+            return plugin.Api->HandleScheduled(plugin.Instance, callback, invocation, execute);
         }
         finally
         {
@@ -391,6 +419,13 @@ public static unsafe class Exports
     public static int HandleEvent(void* runtime, uint eventId, void* input, void* state)
     {
         try { return State(runtime).HandleEvent(eventId, input, state); }
+        catch { return Abi.Error; }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "df_runtime_handle_scheduled", CallConvs = [typeof(CallConvCdecl)])]
+    public static int HandleScheduled(void* runtime, ulong plugin, ulong callback, ulong invocation, byte execute)
+    {
+        try { return State(runtime).HandleScheduled(plugin, callback, invocation, execute); }
         catch { return Abi.Error; }
     }
 

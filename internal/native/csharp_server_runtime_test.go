@@ -25,6 +25,9 @@ type csharpServerHost struct {
 	playerCountCalls       int
 	playerXUIDInvocations  []InvocationID
 	serverWorldDimensions  []WorldDimension
+	scheduledWorlds        []WorldID
+	scheduledPlugins       []uint64
+	scheduledCallbacks     []uint64
 	entityHandleUUIDs      map[EntityHandleID][16]byte
 	entityHandleCalls      []EntityID
 	entityHandleInvocation []InvocationID
@@ -90,6 +93,13 @@ func (h *csharpServerHost) PlayerXUID(invocation InvocationID, player PlayerID) 
 func (h *csharpServerHost) ServerWorld(dimension WorldDimension) (WorldID, bool) {
 	h.serverWorldDimensions = append(h.serverWorldDimensions, dimension)
 	return WorldID(dimension) + 10, dimension <= WorldDimensionEnd
+}
+
+func (h *csharpServerHost) ScheduleWorld(world WorldID, plugin, callback uint64) bool {
+	h.scheduledWorlds = append(h.scheduledWorlds, world)
+	h.scheduledPlugins = append(h.scheduledPlugins, plugin)
+	h.scheduledCallbacks = append(h.scheduledCallbacks, callback)
+	return world != 0 && plugin != 0 && callback != 0
 }
 
 func (h *csharpServerHost) EntityHandle(invocation InvocationID, entity EntityID) (EntityHandleID, bool) {
@@ -161,6 +171,24 @@ func TestCSharpServerPlayersAndLookup(t *testing.T) {
 	})
 	if err != nil || output.Failed || output.Message != "players=2, first=02000000-0000-0000-0000-000000000000" {
 		t.Fatalf("server output=%#v error=%v", output, err)
+	}
+	if !slices.Equal(host.scheduledWorlds, []WorldID{10}) || len(host.scheduledPlugins) != 1 ||
+		len(host.scheduledCallbacks) != 1 || host.scheduledPlugins[0] == 0 || host.scheduledCallbacks[0] == 0 {
+		t.Fatalf("scheduled callbacks: worlds=%v plugins=%v callbacks=%v",
+			host.scheduledWorlds, host.scheduledPlugins, host.scheduledCallbacks)
+	}
+	if err := pluginRuntime.HandleWorldScheduled(host.scheduledPlugins[0], host.scheduledCallbacks[0], 777, true); err != nil {
+		t.Fatalf("execute scheduled C# callback: %v", err)
+	}
+	if err := pluginRuntime.HandleWorldScheduled(host.scheduledPlugins[0], host.scheduledCallbacks[0], 777, true); err == nil {
+		t.Fatal("scheduled C# callback executed twice")
+	}
+	status, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &source,
+		Overload: 0, OnlinePlayers: []CommandPlayer{{Player: source, Name: "Danick"}},
+	})
+	if err != nil || status.Failed || status.Message != "jumps=0, punches=0, sprints=0, sneaks=0, quits=0, scheduled=1" {
+		t.Fatalf("scheduled status=%#v error=%v", status, err)
 	}
 	if !slices.Equal(host.openInvocations, []InvocationID{42}) ||
 		!slices.Equal(host.nextInvocations, []InvocationID{42, 42, 42}) ||

@@ -64,6 +64,9 @@ type worldRuntimeStub struct {
 }
 
 func (r *worldRuntimeStub) Subscriptions() uint64 { return r.subscriptions }
+func (r *worldRuntimeStub) HandleWorldScheduled(uint64, uint64, native.InvocationID, bool) error {
+	return nil
+}
 func (r *worldRuntimeStub) called(name string, invocation native.InvocationID) {
 	r.calls[name]++
 	if _, ok := r.players.InvocationTx(invocation); !ok {

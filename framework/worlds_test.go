@@ -93,6 +93,9 @@ type closeWorldRuntime struct {
 }
 
 func (*closeWorldRuntime) Subscriptions() uint64 { return native.WorldCloseSubscription }
+func (*closeWorldRuntime) HandleWorldScheduled(uint64, uint64, native.InvocationID, bool) error {
+	return nil
+}
 
 func (r *closeWorldRuntime) HandleWorldClose(invocation native.InvocationID) error {
 	r.called = true

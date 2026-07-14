@@ -476,6 +476,7 @@ type Host interface {
 	ServerPlayerByXUID(string) (EntityHandleID, bool, bool)
 	PlayerXUID(InvocationID, PlayerID) (string, bool)
 	ServerWorld(WorldDimension) (WorldID, bool)
+	ScheduleWorld(WorldID, uint64, uint64) bool
 	EntityHandle(InvocationID, EntityID) (EntityHandleID, bool)
 	EntityHandleEntity(InvocationID, EntityHandleID) (EntityID, bool, bool)
 	EntityHandleUUID(EntityHandleID) ([16]byte, bool)
@@ -642,6 +643,7 @@ func (noopHost) ServerPlayerByXUID(string) (EntityHandleID, bool, bool) {
 }
 func (noopHost) PlayerXUID(InvocationID, PlayerID) (string, bool) { return "", false }
 func (noopHost) ServerWorld(WorldDimension) (WorldID, bool)       { return 0, false }
+func (noopHost) ScheduleWorld(WorldID, uint64, uint64) bool       { return false }
 func (noopHost) EntityHandle(InvocationID, EntityID) (EntityHandleID, bool) {
 	return EntityHandleID{}, false
 }

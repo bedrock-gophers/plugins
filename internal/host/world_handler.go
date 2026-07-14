@@ -13,6 +13,7 @@ import (
 // WorldRuntime is the native event surface consumed by WorldHandler.
 type WorldRuntime interface {
 	Subscriptions() uint64
+	HandleWorldScheduled(uint64, uint64, native.InvocationID, bool) error
 	HandleWorldLiquidFlow(native.InvocationID, native.WorldLiquidFlowInput, bool) (bool, error)
 	HandleWorldLiquidDecay(native.InvocationID, native.WorldLiquidDecayInput, bool) (bool, error)
 	HandleWorldLiquidHarden(native.InvocationID, native.WorldLiquidHardenInput, bool) (bool, error)

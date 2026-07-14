@@ -149,6 +149,15 @@ func bg_go_server_world(context C.uint64_t, dimension C.uint32_t, output *C.DfWo
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_world_schedule
+func bg_go_world_schedule(context C.uint64_t, world C.DfWorldId, plugin C.uint64_t, callback C.uint64_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || world.value == 0 || plugin == 0 || callback == 0 || !host.ScheduleWorld(WorldID(world.value), uint64(plugin), uint64(callback)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
 func writeServerPlayerLookup(id EntityHandleID, hasValue, valid bool, output *C.DfEntityHandleId, found *C.uint8_t) C.DfStatus {
 	*output = C.DfEntityHandleId{}
 	*found = 0

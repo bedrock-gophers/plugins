@@ -16,6 +16,7 @@ public sealed class KitchenSink : Plugin
     private long _transfers;
     private long _commandExecutions;
     private long _diagnostics;
+    private long _scheduled;
 
     public override void OnEnable()
     {
@@ -314,12 +315,13 @@ public sealed class KitchenSink : Plugin
     internal sealed class KitchenStatus(KitchenSink plugin) : Cmd.Runnable
     {
         public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx) => output.Printf(
-            "jumps={0}, punches={1}, sprints={2}, sneaks={3}, quits={4}",
+            "jumps={0}, punches={1}, sprints={2}, sneaks={3}, quits={4}, scheduled={5}",
             plugin._jumps,
             plugin._punches,
             plugin._sprints,
             plugin._sneaks,
-            plugin._quits);
+            plugin._quits,
+            plugin._scheduled);
     }
 
     internal sealed class KitchenEcho : Cmd.Runnable
@@ -717,7 +719,9 @@ public sealed class KitchenSink : Plugin
         public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
         {
             var server = plugin.Server();
-            _ = (server.World(), server.Nether(), server.End());
+            var overworld = server.World();
+            _ = (overworld, server.Nether(), server.End());
+            overworld.Schedule(_ => Increment(ref plugin._scheduled));
             var count = 0;
             World.EntityHandle? first = null;
             foreach (var connected in server.Players(tx))

@@ -12,11 +12,13 @@ type runCleanup struct {
 	log            *slog.Logger
 	started        bool
 	closeStarted   func() error
+	stopScheduling func()
 	beginPlugins   func()
 	closeCustom    func() error
 	drainDetached  func()
 	finishPlugins  func()
 	closeUnstarted func()
+	drainScheduled func()
 	closeRuntime   func()
 }
 
@@ -26,6 +28,7 @@ func (cleanup *runCleanup) close() {
 			cleanup.log.Error("close Dragonfly server", "error", err)
 		}
 	}
+	cleanup.stopScheduling()
 	cleanup.beginPlugins()
 	if err := cleanup.closeCustom(); err != nil {
 		cleanup.log.Error("close custom worlds", "error", err)
@@ -34,6 +37,7 @@ func (cleanup *runCleanup) close() {
 	if !cleanup.started {
 		cleanup.closeUnstarted()
 	}
+	cleanup.drainScheduled()
 	cleanup.finishPlugins()
 	cleanup.closeRuntime()
 }

@@ -4,8 +4,8 @@ namespace Dragonfly.Native;
 
 public static class Abi
 {
-    public const uint PluginVersion = 7;
-    public const uint HostVersion = 39;
+    public const uint PluginVersion = 8;
+    public const uint HostVersion = 40;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint WorldDimensionOverworld = 0;
@@ -376,6 +376,7 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, StringView, EntityHandleId*, byte*, int> ServerPlayerByXuid;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, StringBuffer*, int> PlayerXuid;
     public delegate* unmanaged[Cdecl]<ulong, uint, WorldId*, int> ServerWorld;
+    public delegate* unmanaged[Cdecl]<ulong, WorldId, ulong, ulong, int> WorldSchedule;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -395,6 +396,7 @@ public unsafe struct PluginApi
     public delegate* unmanaged[Cdecl]<void*, void*, int> SetHost;
     public delegate* unmanaged[Cdecl]<void*, void> Destroy;
     public delegate* unmanaged[Cdecl]<void*, uint, void*, void*, int> HandleEvent;
+    public delegate* unmanaged[Cdecl]<void*, ulong, ulong, byte, int> HandleScheduled;
 }
 
 [StructLayout(LayoutKind.Sequential)]

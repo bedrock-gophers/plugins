@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Collections.Concurrent;
 using Dragonfly.Native;
 
 namespace Dragonfly;
@@ -9,6 +10,8 @@ internal static unsafe class PluginBridge
 {
     private static Func<Plugin>? Factory;
     private static PluginApi* Descriptor;
+    private static readonly ConcurrentDictionary<ulong, Action<World.Tx>> Scheduled = new();
+    private static long NextScheduled;
 
     internal static class Host
     {
@@ -1926,6 +1929,23 @@ internal static unsafe class PluginBridge
             return new World(0, world);
         }
 
+        internal static void ScheduleWorld(World world, Action<World.Tx> callback)
+        {
+            ArgumentNullException.ThrowIfNull(world);
+            ArgumentNullException.ThrowIfNull(callback);
+            var api = Api;
+            if (api is null || api->WorldSchedule == null || Descriptor is null)
+                throw new InvalidOperationException("world scheduling is unavailable");
+            var next = Interlocked.Increment(ref NextScheduled);
+            if (next <= 0) throw new InvalidOperationException("world callback IDs exhausted");
+            var id = (ulong)next;
+            if (!Scheduled.TryAdd(id, callback))
+                throw new InvalidOperationException("world callback ID collision");
+            if (api->WorldSchedule(api->Context, world.Id, (ulong)(nuint)Descriptor, id) == Abi.Ok) return;
+            Scheduled.TryRemove(id, out _);
+            throw new InvalidOperationException("world is unavailable");
+        }
+
         internal static (World.EntityHandle? Player, bool Ok) ServerPlayer(Guid uuid)
         {
             var api = Api;
@@ -2352,6 +2372,7 @@ internal static unsafe class PluginBridge
             SetHost = &SetHost,
             Destroy = &Destroy,
             HandleEvent = &HandleEvent,
+            HandleScheduled = &HandleScheduled,
         };
         return Descriptor;
     }
@@ -2372,7 +2393,7 @@ internal static unsafe class PluginBridge
     {
         if (host is null) return Abi.Error;
         var header = (HostHeader*)host;
-        if (header->Version != Abi.HostVersion || header->Size < 824) return Abi.Error;
+        if (header->Version != Abi.HostVersion || header->Size < 832) return Abi.Error;
         Host.Api = (HostApi*)host;
         return Abi.Ok;
     }
@@ -2406,6 +2427,7 @@ internal static unsafe class PluginBridge
         if (instance is not null) GCHandle.FromIntPtr((nint)instance).Free();
         Host.Api = null;
         CommandRegistry.Clear();
+        Scheduled.Clear();
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -2444,6 +2466,20 @@ internal static unsafe class PluginBridge
             return instance is null
                 ? Abi.Error
                 : CommandRegistry.EnumOptions(index, overload, parameter, context, output);
+        }
+        catch { return Abi.Error; }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int HandleScheduled(void* instance, ulong callback, ulong invocation, byte execute)
+    {
+        try
+        {
+            if (instance is null || execute > 1) return Abi.Error;
+            if (!Scheduled.TryRemove(callback, out var action))
+                return execute == 0 ? Abi.Ok : Abi.Error;
+            if (execute != 0) action(new World.Tx(invocation));
+            return Abi.Ok;
         }
         catch { return Abi.Error; }
     }

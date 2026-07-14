@@ -207,7 +207,18 @@ if (found && byName is not null)
     var (byUuid, foundUuid) = server.Player(byName.UUID());
 }
 var (byXuid, foundXuid) = server.PlayerByXUID("2533274790000000");
+
+overworld.Schedule(tx =>
+{
+    // Runs on the overworld owner with a fresh Dragonfly transaction.
+    tx.SetBlock(new Cube.Pos(0, 64, 0), new Block.Stone());
+});
 ```
+
+`World.Schedule(Action<World.Tx>)` is the fire-and-forget C# adaptation of Dragonfly's `World.Do`.
+The callback runs once on that world's owner. Its `World.Tx` is borrowed and expires when the
+callback returns; do not retain it or values borrowed through it. Scheduling is rejected once
+server shutdown starts, and accepted callbacks are drained or dropped before plugin unload.
 
 Pass the current `World.Tx` when iterating from a callback or command, and pass `null` outside a
 transaction. Iteration is deliberately lazy: a yielded `Player` is valid only inside its current
@@ -226,7 +237,7 @@ Dragonfly field and cause.
 
 Public block, liquid, biome, particle, colour, instrument, sound, and item types come from Dragonfly's Go AST.
 Live registries feed internal generated codecs, so Minecraft identifiers, state NBT, numeric biome
-IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 39 preserves the
+IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 40 preserves the
 separate “no liquid” result, nullable liquid removal, signed nanosecond scheduling delays,
 biome/weather queries, particle payloads, registered/custom game-mode capabilities, and full
 callback-scoped player snapshots for form responses. Structurally valid form contexts receive

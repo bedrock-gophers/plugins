@@ -113,7 +113,7 @@ _Static_assert(sizeof(DfCommandPlayer) == 72, "DfCommandPlayer ABI layout change
 _Static_assert(sizeof(DfCommandEnumContext) == 88, "DfCommandEnumContext ABI layout changed");
 _Static_assert(sizeof(DfCommandInput) == 120, "DfCommandInput ABI layout changed");
 _Static_assert(sizeof(DfCommandState) == 32, "DfCommandState ABI layout changed");
-_Static_assert(sizeof(DfPluginApiV7) == 128, "DfPluginApiV7 ABI layout changed");
+_Static_assert(sizeof(DfPluginApiV8) == 136, "DfPluginApiV8 ABI layout changed");
 _Static_assert(sizeof(DfInventoryId) == 32, "DfInventoryId ABI layout changed");
 _Static_assert(sizeof(DfItemStackInfo) == 80, "DfItemStackInfo ABI layout changed");
 _Static_assert(sizeof(DfItemStackSnapshot) == 88, "DfItemStackSnapshot ABI layout changed");
@@ -156,11 +156,12 @@ _Static_assert(sizeof(DfEntityTypeDescriptorV2) == 144, "DfEntityTypeDescriptorV
 _Static_assert(offsetof(DfEntityTypeDescriptorV2, type_key) == 80, "DfEntityTypeDescriptorV2.type_key ABI offset changed");
 _Static_assert(sizeof(DfEntitySpawnViewV3) == 200, "DfEntitySpawnViewV3 ABI layout changed");
 _Static_assert(offsetof(DfEntitySpawnViewV3, custom_instance) == 176, "DfEntitySpawnViewV3.custom_instance ABI offset changed");
-_Static_assert(sizeof(DfPluginApiV7) == 128, "DfPluginApiV7 ABI layout changed");
-_Static_assert(offsetof(DfPluginApiV7, entity_type_count) == 64, "DfPluginApiV7.entity_type_count ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV7, handle_entity) == 80, "DfPluginApiV7.handle_entity ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV7, handle_event) == 120, "DfPluginApiV7.handle_event ABI offset changed");
-_Static_assert(DF_ABI_VERSION == 7u, "plugin ABI version changed without bridge review");
+_Static_assert(sizeof(DfPluginApiV8) == 136, "DfPluginApiV8 ABI layout changed");
+_Static_assert(offsetof(DfPluginApiV8, entity_type_count) == 64, "DfPluginApiV8.entity_type_count ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV8, handle_entity) == 80, "DfPluginApiV8.handle_entity ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV8, handle_event) == 120, "DfPluginApiV8.handle_event ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV8, handle_scheduled) == 128, "DfPluginApiV8.handle_scheduled ABI offset changed");
+_Static_assert(DF_ABI_VERSION == 8u, "plugin ABI version changed without bridge review");
 _Static_assert(sizeof(DfEntityState) == 128, "DfEntityState ABI layout changed");
 _Static_assert(offsetof(DfEntityState, world) == 72, "DfEntityState.world ABI offset changed");
 _Static_assert(sizeof(DfPlayerKinematics) == 64, "DfPlayerKinematics ABI layout changed");
@@ -210,8 +211,8 @@ _Static_assert(offsetof(DfWorldOpenSpecV1, read_only) == 76, "DfWorldOpenSpecV1.
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
 _Static_assert(sizeof(DfEntityHandleId) == 16, "DfEntityHandleId ABI layout changed");
 _Static_assert(sizeof(DfUuid) == 16, "DfUuid ABI layout changed");
-_Static_assert(sizeof(DfHostApiV27) == 824, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 39u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 832, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 40u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -223,6 +224,7 @@ _Static_assert(offsetof(DfHostApiV27, server_player_by_name) == 776, "DfHostApiV
 _Static_assert(offsetof(DfHostApiV27, server_max_player_count) == 784, "DfHostApiV27.server_max_player_count ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_xuid) == 808, "DfHostApiV27.player_xuid ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, server_world) == 816, "DfHostApiV27.server_world ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, world_schedule) == 824, "DfHostApiV27.world_schedule ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_hurt) == 408, "DfHostApiV27.player_hurt ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, skin_snapshot_info) == 416, "DfHostApiV27.skin_snapshot_info ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, skin_snapshot_set) == 424, "DfHostApiV27.skin_snapshot_set ABI offset changed");
@@ -370,6 +372,7 @@ extern DfStatus bg_go_server_player_count(uint64_t context, int64_t *count);
 extern DfStatus bg_go_server_player_by_xuid(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found);
 extern DfStatus bg_go_player_xuid(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid);
 extern DfStatus bg_go_server_world(uint64_t context, uint32_t dimension, DfWorldId *world);
+extern DfStatus bg_go_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback);
 
 static DfStatus host_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message) {
     return bg_go_player_text(context, invocation, player, kind, message);
@@ -537,6 +540,7 @@ static DfStatus host_server_player_count(uint64_t context, int64_t *count) { ret
 static DfStatus host_server_player_by_xuid(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found) { return bg_go_server_player_by_xuid(context, xuid, player, found); }
 static DfStatus host_player_xuid(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid) { return bg_go_player_xuid(context, invocation, player, xuid); }
 static DfStatus host_server_world(uint64_t context, uint32_t dimension, DfWorldId *world) { return bg_go_server_world(context, dimension, world); }
+static DfStatus host_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback) { return bg_go_world_schedule(context, world, plugin, callback); }
 
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
 typedef void (*RuntimeDestroyFn)(DfRuntime *);
@@ -556,6 +560,7 @@ typedef DfStatus (*RuntimeCommandAtFn)(const DfRuntime *, uint64_t, DfCommandDes
 typedef DfStatus (*RuntimeCommandFn)(DfRuntime *, uint64_t, const DfCommandInput *, DfCommandState *);
 typedef DfStatus (*RuntimeCommandEnumFn)(DfRuntime *, uint64_t, uint64_t, uint64_t, const DfCommandEnumContext *, DfStringBuffer *);
 typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *);
+typedef DfStatus (*RuntimeScheduledFn)(DfRuntime *, uint64_t, uint64_t, DfInvocationId, uint8_t);
 
 struct BgRuntimeLibrary {
     DfRuntime *runtime;
@@ -582,6 +587,7 @@ struct BgRuntimeLibrary {
     RuntimeCommandFn handle_command;
     RuntimeCommandEnumFn command_enum_options;
     RuntimeEventFn handle_event;
+    RuntimeScheduledFn handle_scheduled;
 };
 
 static void write_error(uint8_t *error, uint64_t capacity, const char *message) {
@@ -647,7 +653,8 @@ DfStatus bg_runtime_open(
     RuntimeCommandFn handle_command = (RuntimeCommandFn) load_symbol(handle, "df_runtime_handle_command", error, error_capacity);
     RuntimeCommandEnumFn command_enum_options = (RuntimeCommandEnumFn) load_symbol(handle, "df_runtime_command_enum_options", error, error_capacity);
     RuntimeEventFn handle_event = (RuntimeEventFn) load_symbol(handle, "df_runtime_handle_event", error, error_capacity);
-    if (create == NULL || destroy == NULL || enable == NULL || begin_disable == NULL || finish_disable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || entity_type_count == NULL || entity_type_at == NULL || entity_adopt == NULL || entity_load == NULL || entity_save == NULL || entity_tick == NULL || entity_hurt == NULL || entity_heal == NULL || entity_death == NULL || entity_destroy == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_event == NULL) {
+    RuntimeScheduledFn handle_scheduled = (RuntimeScheduledFn) load_symbol(handle, "df_runtime_handle_scheduled", error, error_capacity);
+    if (create == NULL || destroy == NULL || enable == NULL || begin_disable == NULL || finish_disable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || entity_type_count == NULL || entity_type_at == NULL || entity_adopt == NULL || entity_load == NULL || entity_save == NULL || entity_tick == NULL || entity_hurt == NULL || entity_heal == NULL || entity_death == NULL || entity_destroy == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_event == NULL || handle_scheduled == NULL) {
         return DF_STATUS_ERROR;
     }
 
@@ -762,6 +769,7 @@ DfStatus bg_runtime_open(
         .server_player_by_xuid = host_server_player_by_xuid,
         .player_xuid = host_player_xuid,
         .server_world = host_server_world,
+        .world_schedule = host_world_schedule,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {
@@ -797,6 +805,7 @@ DfStatus bg_runtime_open(
     library->handle_command = handle_command;
     library->command_enum_options = command_enum_options;
     library->handle_event = handle_event;
+    library->handle_scheduled = handle_scheduled;
     *out = library;
     return DF_STATUS_OK;
 }
@@ -936,6 +945,19 @@ DfStatus bg_runtime_handle_event(BgRuntimeLibrary *library, DfEventId event_id, 
         return DF_STATUS_ERROR;
     }
     return library->handle_event(library->runtime, event_id, input, state);
+}
+
+DfStatus bg_runtime_handle_scheduled(
+    BgRuntimeLibrary *library,
+    uint64_t plugin,
+    uint64_t callback,
+    DfInvocationId invocation,
+    uint8_t execute
+) {
+    if (library == NULL || plugin == 0 || callback == 0 || execute > 1) {
+        return DF_STATUS_ERROR;
+    }
+    return library->handle_scheduled(library->runtime, plugin, callback, invocation, execute);
 }
 
 DfStatus bg_runtime_handle_player_move(

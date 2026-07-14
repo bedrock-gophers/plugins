@@ -94,10 +94,11 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		closeStarted: func() error {
 			return srv.Close()
 		},
-		beginPlugins:  pluginRuntime.BeginDisable,
-		closeCustom:   worlds.CloseCustom,
-		drainDetached: worlds.DrainDetachedEntities,
-		finishPlugins: pluginRuntime.FinishDisable,
+		stopScheduling: worlds.StopScheduling,
+		beginPlugins:   pluginRuntime.BeginDisable,
+		closeCustom:    worlds.CloseCustom,
+		drainDetached:  worlds.DrainDetachedEntities,
+		finishPlugins:  pluginRuntime.FinishDisable,
 		closeUnstarted: func() {
 			if err := listenerGate.closeAll(); err != nil {
 				log.Error("close unstarted Dragonfly listeners", "error", err)
@@ -116,6 +117,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 				}
 			}
 		},
+		drainScheduled: worlds.DrainScheduled,
 		closeRuntime: func() {
 			serverHost.Close()
 			pluginRuntime.Close()

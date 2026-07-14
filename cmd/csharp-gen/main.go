@@ -572,6 +572,9 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	if err := inspectWorldSchedule(filepath.Join(directory, "server", "world", "task.go")); err != nil {
+		fatal(err)
+	}
 	effects, err := inspectEffects(filepath.Join(directory, "server", "entity", "effect"))
 	if err != nil {
 		fatal(err)
@@ -680,6 +683,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Lifecycle.g.cs"),
 			Content: generateWorldLifecycleMethods(worldLifecycleMethods),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Schedule.g.cs"),
+			Content: generateWorldSchedule(),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Effect.Types.g.cs"),

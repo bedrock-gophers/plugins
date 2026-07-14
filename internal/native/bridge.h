@@ -64,6 +64,13 @@ DfStatus bg_runtime_handle_event(
     const void *input,
     void *state
 );
+DfStatus bg_runtime_handle_scheduled(
+    BgRuntimeLibrary *library,
+    uint64_t plugin,
+    uint64_t callback,
+    DfInvocationId invocation,
+    uint8_t execute
+);
 DfStatus bg_runtime_handle_player_move(
     BgRuntimeLibrary *library,
     const DfPlayerMoveInput *input,
