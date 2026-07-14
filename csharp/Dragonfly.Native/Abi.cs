@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 7;
-    public const uint HostVersion = 37;
+    public const uint HostVersion = 38;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerMoveEvent = 1;
@@ -368,6 +368,10 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, void> ServerPlayersClose;
     public delegate* unmanaged[Cdecl]<ulong, NativeUuid, EntityHandleId*, byte*, int> ServerPlayer;
     public delegate* unmanaged[Cdecl]<ulong, StringView, EntityHandleId*, byte*, int> ServerPlayerByName;
+    public delegate* unmanaged[Cdecl]<ulong, long*, int> ServerMaxPlayerCount;
+    public delegate* unmanaged[Cdecl]<ulong, long*, int> ServerPlayerCount;
+    public delegate* unmanaged[Cdecl]<ulong, StringView, EntityHandleId*, byte*, int> ServerPlayerByXuid;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, StringBuffer*, int> PlayerXuid;
 }
 
 [StructLayout(LayoutKind.Sequential)]

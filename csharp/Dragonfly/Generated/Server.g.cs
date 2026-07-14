@@ -9,6 +9,10 @@ public sealed partial class Server
 {
     internal Server() { }
 
+    public int MaxPlayerCount() => PluginBridge.Host.ServerMaxPlayerCount();
+
+    public int PlayerCount() => PluginBridge.Host.ServerPlayerCount();
+
     public IEnumerable<Player> Players(World.Tx? tx = null) =>
         PluginBridge.Host.ServerPlayers(tx?.Invocation ?? 0);
 
@@ -17,6 +21,9 @@ public sealed partial class Server
 
     public (World.EntityHandle? Player, bool Ok) PlayerByName(string name) =>
         PluginBridge.Host.ServerPlayerByName(name);
+
+    public (World.EntityHandle? Player, bool Ok) PlayerByXUID(string xuid) =>
+        PluginBridge.Host.ServerPlayerByXUID(xuid);
 }
 
 public abstract partial class Plugin

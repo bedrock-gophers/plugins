@@ -544,6 +544,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	playerIdentityMethods, err := inspectPlayerIdentityMethods(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		fatal(err)
+	}
 	playerMethods, err := playerTextMethods(filepath.Join(directory, "server", "player", "player.go"))
 	if err != nil {
 		fatal(err)
@@ -636,6 +640,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Server.g.cs"),
 			Content: generateServer(serverMethods),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Identity.g.cs"),
+			Content: generatePlayerIdentityMethods(playerIdentityMethods),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Entity.g.cs"),

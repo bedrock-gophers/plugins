@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 7u
-// Version 37 adds exact Dragonfly server player iteration and lookup.
-#define DF_HOST_ABI_VERSION 37u
+// Version 38 adds Dragonfly server counts, XUID lookup, and Player.XUID.
+#define DF_HOST_ABI_VERSION 38u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -438,6 +438,9 @@ typedef DfStatus (*DfHostServerPlayersNextFn)(uint64_t context, DfInvocationId i
 typedef void (*DfHostServerPlayersCloseFn)(uint64_t context, DfInvocationId invocation, DfPlayerIteratorId iterator);
 typedef DfStatus (*DfHostServerPlayerFn)(uint64_t context, DfUuid uuid, DfEntityHandleId *player, uint8_t *found);
 typedef DfStatus (*DfHostServerPlayerByNameFn)(uint64_t context, DfStringView name, DfEntityHandleId *player, uint8_t *found);
+typedef DfStatus (*DfHostServerCountFn)(uint64_t context, int64_t *count);
+typedef DfStatus (*DfHostServerPlayerByXuidFn)(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found);
+typedef DfStatus (*DfHostPlayerXuidFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid);
 typedef DfStatus (*DfHostEntityHandleFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityHandleId *handle);
 typedef DfStatus (*DfHostEntityHandleEntityFn)(uint64_t context, DfInvocationId invocation, DfEntityHandleId handle, DfEntityId *entity, uint8_t *found);
 typedef DfStatus (*DfHostEntityHandleUuidFn)(uint64_t context, DfEntityHandleId handle, DfUuid *uuid);
@@ -545,6 +548,10 @@ typedef struct {
     DfHostServerPlayersCloseFn server_players_close;
     DfHostServerPlayerFn server_player;
     DfHostServerPlayerByNameFn server_player_by_name;
+    DfHostServerCountFn server_max_player_count;
+    DfHostServerCountFn server_player_count;
+    DfHostServerPlayerByXuidFn server_player_by_xuid;
+    DfHostPlayerXuidFn player_xuid;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u

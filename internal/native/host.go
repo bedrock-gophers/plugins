@@ -469,8 +469,12 @@ type Host interface {
 	OpenServerPlayerIterator(InvocationID) (PlayerIteratorID, bool)
 	NextServerPlayer(InvocationID, PlayerIteratorID) (InvocationID, PlayerSnapshot, bool, bool)
 	CloseServerPlayers(InvocationID, PlayerIteratorID)
+	ServerMaxPlayerCount() (int64, bool)
+	ServerPlayerCount() (int64, bool)
 	ServerPlayer([16]byte) (EntityHandleID, bool, bool)
 	ServerPlayerByName(string) (EntityHandleID, bool, bool)
+	ServerPlayerByXUID(string) (EntityHandleID, bool, bool)
+	PlayerXUID(InvocationID, PlayerID) (string, bool)
 	EntityHandle(InvocationID, EntityID) (EntityHandleID, bool)
 	EntityHandleEntity(InvocationID, EntityHandleID) (EntityID, bool, bool)
 	EntityHandleUUID(EntityHandleID) ([16]byte, bool)
@@ -624,12 +628,18 @@ func (noopHost) NextServerPlayer(InvocationID, PlayerIteratorID) (InvocationID, 
 	return 0, PlayerSnapshot{}, false, false
 }
 func (noopHost) CloseServerPlayers(InvocationID, PlayerIteratorID) {}
+func (noopHost) ServerMaxPlayerCount() (int64, bool)               { return 0, false }
+func (noopHost) ServerPlayerCount() (int64, bool)                  { return 0, false }
 func (noopHost) ServerPlayer([16]byte) (EntityHandleID, bool, bool) {
 	return EntityHandleID{}, false, false
 }
 func (noopHost) ServerPlayerByName(string) (EntityHandleID, bool, bool) {
 	return EntityHandleID{}, false, false
 }
+func (noopHost) ServerPlayerByXUID(string) (EntityHandleID, bool, bool) {
+	return EntityHandleID{}, false, false
+}
+func (noopHost) PlayerXUID(InvocationID, PlayerID) (string, bool) { return "", false }
 func (noopHost) EntityHandle(InvocationID, EntityID) (EntityHandleID, bool) {
 	return EntityHandleID{}, false
 }

@@ -8,7 +8,14 @@ import (
 	"go/token"
 )
 
-var selectedServerMethods = []string{"Players", "Player", "PlayerByName"}
+var selectedServerMethods = []string{
+	"MaxPlayerCount",
+	"PlayerCount",
+	"Players",
+	"Player",
+	"PlayerByName",
+	"PlayerByXUID",
+}
 
 func inspectServerMethods(path string) ([]commandMethod, error) {
 	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
@@ -50,6 +57,11 @@ func selectedServerMethod(name string) bool {
 func translateServerMethod(function *ast.FuncDecl) (commandMethod, error) {
 	method := commandMethod{Name: function.Name.Name}
 	switch function.Name.Name {
+	case "MaxPlayerCount", "PlayerCount":
+		if !noParameters(function.Type.Params) || !singleFieldType(function.Type.Results, "int") {
+			return method, fmt.Errorf("signature changed")
+		}
+		method.ReturnType = "int"
 	case "Players":
 		if !serverPlayersParameter(function.Type.Params) || !serverPlayersResult(function.Type.Results) {
 			return method, fmt.Errorf("signature changed")
@@ -63,17 +75,30 @@ func translateServerMethod(function *ast.FuncDecl) (commandMethod, error) {
 		}
 		method.Parameters = []parameter{{Name: "uuid", Type: "Guid"}}
 		method.ReturnType = "(World.EntityHandle? Player, bool Ok)"
-	case "PlayerByName":
-		if !singleIdentifierParameter(function.Type.Params, "name", "string") ||
+	case "PlayerByName", "PlayerByXUID":
+		parameterName := "name"
+		if function.Name.Name == "PlayerByXUID" {
+			parameterName = "xuid"
+		}
+		if !singleIdentifierParameter(function.Type.Params, parameterName, "string") ||
 			!serverPlayerLookupResults(function.Type.Results) {
 			return method, fmt.Errorf("signature changed")
 		}
-		method.Parameters = []parameter{{Name: "name", Type: "string"}}
+		method.Parameters = []parameter{{Name: parameterName, Type: "string"}}
 		method.ReturnType = "(World.EntityHandle? Player, bool Ok)"
 	default:
 		return method, fmt.Errorf("unsupported method")
 	}
 	return method, nil
+}
+
+func noParameters(fields *ast.FieldList) bool {
+	return fields == nil || len(fields.List) == 0
+}
+
+func singleFieldType(fields *ast.FieldList, typeName string) bool {
+	return fields != nil && len(fields.List) == 1 && len(fields.List[0].Names) == 0 &&
+		singleResultType(fields.List[0].Type, typeName)
 }
 
 func serverPlayersParameter(fields *ast.FieldList) bool {
@@ -160,12 +185,18 @@ func generateServer(methods []commandMethod) []byte {
 	output.WriteString("public sealed partial class Server\n{\n    internal Server() { }\n\n")
 	for index, method := range methods {
 		switch method.Name {
+		case "MaxPlayerCount":
+			output.WriteString("    public int MaxPlayerCount() => PluginBridge.Host.ServerMaxPlayerCount();\n")
+		case "PlayerCount":
+			output.WriteString("    public int PlayerCount() => PluginBridge.Host.ServerPlayerCount();\n")
 		case "Players":
 			output.WriteString("    public IEnumerable<Player> Players(World.Tx? tx = null) =>\n        PluginBridge.Host.ServerPlayers(tx?.Invocation ?? 0);\n")
 		case "Player":
 			output.WriteString("    public (World.EntityHandle? Player, bool Ok) Player(Guid uuid) =>\n        PluginBridge.Host.ServerPlayer(uuid);\n")
 		case "PlayerByName":
 			output.WriteString("    public (World.EntityHandle? Player, bool Ok) PlayerByName(string name) =>\n        PluginBridge.Host.ServerPlayerByName(name);\n")
+		case "PlayerByXUID":
+			output.WriteString("    public (World.EntityHandle? Player, bool Ok) PlayerByXUID(string xuid) =>\n        PluginBridge.Host.ServerPlayerByXUID(xuid);\n")
 		default:
 			panic("unsupported server method: " + method.Name)
 		}

@@ -72,7 +72,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    plugins never handle identifiers, NBT, numeric biome IDs, world handles, iterator handles, or
    host errors. `Liquid` preserves Dragonfly's `(Liquid, bool)` result, and passing `null` to
    `SetLiquid` removes the liquid. Host
-   ABI 37 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
+   ABI 38 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
    particles, registered/custom game-mode capabilities, and the transaction owner's current tick
    without exposing them publicly. Form response callbacks additionally receive a borrowed full
    player snapshot, and ownership transfer guarantees exactly one response or drop callback.
@@ -129,7 +129,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `SetHeldItems`, and `SetHeldSlot`; `Inventory.Value` exposes `Size`, `Item`, `SetItem`, and
    `AddItem`. C# setters return `void` as the chosen language adaptation, and invalid slots
    throw `ArgumentOutOfRangeException`; host statuses never enter the public API. The existing
-   ABI 37 includes one atomic held-item pair snapshot, so `HeldItems` observes the same player state
+   ABI 38 includes one atomic held-item pair snapshot, so `HeldItems` observes the same player state
    with one host read. Main and ender-chest inventory sizes are read from the live Dragonfly
    inventory, preserving custom `player.Config` sizes. Bounded open/read/close item snapshots preserve damage, unbreakable state, anvil cost, custom
    names, lore, item NBT, plugin values, and enchantments internally. `Stack.WithValue`, `Value`,
@@ -144,7 +144,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    value methods, and player method signatures from Dragonfly's Go AST, then validates all 28
    built-ins against the live registry. C# exposes `Effect.Value`, registered `Type`/`LastingType`
    values, all five constructors, `ResultingColour`, `ByID`/`ID`, and the four player effect methods.
-   ABI 37 transports signed nanosecond duration, level, potency, ambient/particle/infinite flags, and
+   ABI 38 transports signed nanosecond duration, level, potency, ambient/particle/infinite flags, and
    tick. C# `TimeSpan` has 100 ns precision and rejects snapshots outside that precision instead of
    truncating them. Re-adding a snapshot is bounded to one million elapsed ticks because Dragonfly
    exposes `Tick` but no constructor or setter for it. Pending initial instant-effect potency is
@@ -161,7 +161,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    host status codes remain private. AST-generated `Tx.World`, `Tx.Entities`, and `Tx.Players`
    preserve Dragonfly's exact signatures; entity/player iteration is lazy, reads the live world,
    and is closed on exhaustion, early disposal, or invocation end. The replaced eager private
-   entity/player snapshots have been removed. ABI 37 adds stable private handle identities and the
+   entity/player snapshots have been removed. ABI 38 adds stable private handle identities and the
    AST-generated `EntityHandle.Entity`, `UUID`, `Closed`, and `Close` methods plus exact public
    `Tx.AddEntity`, `AddEntityAt`, and `RemoveEntity` signatures. Removing an entity expires its
    world-bound identity; adding the same handle creates a fresh identity while preserving handle
@@ -169,8 +169,11 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    Generic player removal is intentionally rejected for now because Dragonfly's connected session
    must complete its coordinated world transfer; `Player.ChangeWorld` is the safe current path.
    The AST-generated public `Server` surface adds direct `Plugin.Server()`, lazy
-   `Server.Players(World.Tx?)`, and stable-handle `Server.Player(Guid)`/`PlayerByName(string)`
-   lookups. A non-null current transaction must be passed when iteration begins in a callback or
+   `Server.MaxPlayerCount()`, `Server.PlayerCount()`, `Server.Players(World.Tx?)`, and stable-handle
+   `Server.Player(Guid)`/`PlayerByName(string)`/`PlayerByXUID(string)` lookups. AST-generated
+   `Player.Name()`, `Player.UUID()`, and `Player.XUID()` preserve Dragonfly's identity surface while
+   UUIDs, XUID buffers, and lookup handles remain private transport details. A non-null current
+   transaction must be passed when iteration begins in a callback or
    command; `null` remains valid outside a transaction and is never replaced with an inferred one.
    Every `foreach` body runs synchronously on the yielded player's world owner. Advancing or
    disposing the enumerator expires the prior borrowed `Player`, so players must not be collected

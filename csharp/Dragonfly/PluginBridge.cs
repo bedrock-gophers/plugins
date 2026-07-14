@@ -1893,6 +1893,28 @@ internal static unsafe class PluginBridge
         internal static IEnumerable<Player> ServerPlayers(ulong invocation) =>
             new ServerPlayerEnumerable(invocation);
 
+        internal static int ServerMaxPlayerCount()
+        {
+            var api = Api;
+            if (api is null || api->ServerMaxPlayerCount == null)
+                throw new InvalidOperationException("server is unavailable");
+            long count;
+            if (api->ServerMaxPlayerCount(api->Context, &count) != Abi.Ok || count < 0)
+                throw new InvalidOperationException("server maximum player count failed");
+            return checked((int)count);
+        }
+
+        internal static int ServerPlayerCount()
+        {
+            var api = Api;
+            if (api is null || api->ServerPlayerCount == null)
+                throw new InvalidOperationException("server is unavailable");
+            long count;
+            if (api->ServerPlayerCount(api->Context, &count) != Abi.Ok || count < 0)
+                throw new InvalidOperationException("server player count failed");
+            return checked((int)count);
+        }
+
         internal static (World.EntityHandle? Player, bool Ok) ServerPlayer(Guid uuid)
         {
             var api = Api;
@@ -1935,6 +1957,53 @@ internal static unsafe class PluginBridge
                     throw new InvalidOperationException("server returned an invalid player handle");
                 return (new World.EntityHandle(player), true);
             }
+        }
+
+        internal static (World.EntityHandle? Player, bool Ok) ServerPlayerByXUID(string xuid)
+        {
+            ArgumentNullException.ThrowIfNull(xuid);
+            var api = Api;
+            if (api is null || api->ServerPlayerByXuid == null)
+                throw new InvalidOperationException("server is unavailable");
+            var bytes = Encoding.UTF8.GetBytes(xuid);
+            if (bytes.Length > 64)
+                return (null, false);
+            fixed (byte* data = bytes)
+            {
+                EntityHandleId player;
+                byte found;
+                if (api->ServerPlayerByXuid(
+                        api->Context,
+                        new StringView { Data = data, Length = (ulong)bytes.Length },
+                        &player,
+                        &found) != Abi.Ok || found > 1)
+                    throw new InvalidOperationException("server player lookup failed");
+                if (found == 0) return (null, false);
+                if (player.Value == 0 || player.Generation == 0)
+                    throw new InvalidOperationException("server returned an invalid player handle");
+                return (new World.EntityHandle(player), true);
+            }
+        }
+
+        internal static Guid PlayerUUID(PlayerId player)
+        {
+            Span<byte> bytes = stackalloc byte[16];
+            for (var index = 0; index < bytes.Length; index++) bytes[index] = player.Bytes[index];
+            return new Guid(bytes, bigEndian: true);
+        }
+
+        internal static string PlayerXUID(ulong invocation, PlayerId player)
+        {
+            var api = Api;
+            if (api is null || api->PlayerXuid == null)
+                throw new InvalidOperationException("player is unavailable");
+            const int capacity = 64;
+            byte* data = stackalloc byte[capacity];
+            var output = new StringBuffer { Data = data, Capacity = capacity };
+            if (api->PlayerXuid(api->Context, invocation, player, &output) != Abi.Ok ||
+                output.Data != data || output.Capacity != capacity || output.Length > capacity)
+                throw new InvalidOperationException("player is no longer valid");
+            return Utf8(output);
         }
 
         private sealed class ServerPlayerEnumerable(ulong invocation) : IEnumerable<Player>
@@ -2292,7 +2361,7 @@ internal static unsafe class PluginBridge
     {
         if (host is null) return Abi.Error;
         var header = (HostHeader*)host;
-        if (header->Version != Abi.HostVersion || header->Size < 784) return Abi.Error;
+        if (header->Version != Abi.HostVersion || header->Size < 816) return Abi.Error;
         Host.Api = (HostApi*)host;
         return Abi.Ok;
     }

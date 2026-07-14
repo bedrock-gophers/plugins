@@ -210,8 +210,8 @@ _Static_assert(offsetof(DfWorldOpenSpecV1, read_only) == 76, "DfWorldOpenSpecV1.
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
 _Static_assert(sizeof(DfEntityHandleId) == 16, "DfEntityHandleId ABI layout changed");
 _Static_assert(sizeof(DfUuid) == 16, "DfUuid ABI layout changed");
-_Static_assert(sizeof(DfHostApiV27) == 784, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 37u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 816, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 38u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -220,6 +220,8 @@ _Static_assert(offsetof(DfHostApiV27, player_scoreboard) == 208, "DfHostApiV27.p
 _Static_assert(offsetof(DfHostApiV27, player_heal) == 400, "DfHostApiV27.player_heal ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, server_players_open) == 744, "DfHostApiV27.server_players_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, server_player_by_name) == 776, "DfHostApiV27.server_player_by_name ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, server_max_player_count) == 784, "DfHostApiV27.server_max_player_count ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, player_xuid) == 808, "DfHostApiV27.player_xuid ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_hurt) == 408, "DfHostApiV27.player_hurt ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, skin_snapshot_info) == 416, "DfHostApiV27.skin_snapshot_info ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, skin_snapshot_set) == 424, "DfHostApiV27.skin_snapshot_set ABI offset changed");
@@ -362,6 +364,10 @@ extern DfStatus bg_go_server_players_next(uint64_t context, DfInvocationId invoc
 extern void bg_go_server_players_close(uint64_t context, DfInvocationId invocation, DfPlayerIteratorId iterator);
 extern DfStatus bg_go_server_player(uint64_t context, DfUuid uuid, DfEntityHandleId *player, uint8_t *found);
 extern DfStatus bg_go_server_player_by_name(uint64_t context, DfStringView name, DfEntityHandleId *player, uint8_t *found);
+extern DfStatus bg_go_server_max_player_count(uint64_t context, int64_t *count);
+extern DfStatus bg_go_server_player_count(uint64_t context, int64_t *count);
+extern DfStatus bg_go_server_player_by_xuid(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found);
+extern DfStatus bg_go_player_xuid(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid);
 
 static DfStatus host_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message) {
     return bg_go_player_text(context, invocation, player, kind, message);
@@ -524,6 +530,10 @@ static DfStatus host_server_players_next(uint64_t context, DfInvocationId invoca
 static void host_server_players_close(uint64_t context, DfInvocationId invocation, DfPlayerIteratorId iterator) { bg_go_server_players_close(context, invocation, iterator); }
 static DfStatus host_server_player(uint64_t context, DfUuid uuid, DfEntityHandleId *player, uint8_t *found) { return bg_go_server_player(context, uuid, player, found); }
 static DfStatus host_server_player_by_name(uint64_t context, DfStringView name, DfEntityHandleId *player, uint8_t *found) { return bg_go_server_player_by_name(context, name, player, found); }
+static DfStatus host_server_max_player_count(uint64_t context, int64_t *count) { return bg_go_server_max_player_count(context, count); }
+static DfStatus host_server_player_count(uint64_t context, int64_t *count) { return bg_go_server_player_count(context, count); }
+static DfStatus host_server_player_by_xuid(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found) { return bg_go_server_player_by_xuid(context, xuid, player, found); }
+static DfStatus host_player_xuid(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid) { return bg_go_player_xuid(context, invocation, player, xuid); }
 
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
 typedef void (*RuntimeDestroyFn)(DfRuntime *);
@@ -744,6 +754,10 @@ DfStatus bg_runtime_open(
         .server_players_close = host_server_players_close,
         .server_player = host_server_player,
         .server_player_by_name = host_server_player_by_name,
+        .server_max_player_count = host_server_max_player_count,
+        .server_player_count = host_server_player_count,
+        .server_player_by_xuid = host_server_player_by_xuid,
+        .player_xuid = host_player_xuid,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

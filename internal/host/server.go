@@ -12,6 +12,8 @@ import (
 )
 
 type serverPlayerSource interface {
+	MaxPlayerCount() int
+	PlayerCount() int
 	Players(*world.Tx) iter.Seq[*player.Player]
 	Player(uuid.UUID) (*world.EntityHandle, bool)
 }
@@ -136,6 +138,22 @@ func (s *Server) Close() {
 	}
 }
 
+func (s *Server) ServerMaxPlayerCount() (int64, bool) {
+	source, ok := s.server()
+	if !ok {
+		return 0, false
+	}
+	return int64(source.MaxPlayerCount()), true
+}
+
+func (s *Server) ServerPlayerCount() (int64, bool) {
+	source, ok := s.server()
+	if !ok {
+		return 0, false
+	}
+	return int64(source.PlayerCount()), true
+}
+
 func (i *serverPlayerIterator) advance(players *Players) (nested native.InvocationID, snapshot native.PlayerSnapshot, found bool, valid bool) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -231,6 +249,23 @@ func (s *Server) ServerPlayerByName(name string) (native.EntityHandleID, bool, b
 	return result, ok, ok
 }
 
+func (s *Server) ServerPlayerByXUID(xuid string) (native.EntityHandleID, bool, bool) {
+	source, ok := s.server()
+	if !ok {
+		return native.EntityHandleID{}, false, false
+	}
+	id, found := s.playerUUIDByExactXUID(xuid)
+	if !found {
+		return native.EntityHandleID{}, false, true
+	}
+	handle, found := source.Player(id)
+	if !found {
+		return native.EntityHandleID{}, false, true
+	}
+	result, ok := s.playerHandleID(handle)
+	return result, ok, ok
+}
+
 // playerUUIDByExactName preserves Dragonfly's case-sensitive lookup semantics
 // without calling Server.PlayerByName, whose current implementation reads the
 // online-player map without its mutex. The subsequent UUID lookup confirms the
@@ -240,6 +275,17 @@ func (s *Server) playerUUIDByExactName(name string) (uuid.UUID, bool) {
 	defer s.players.mu.RUnlock()
 	for _, entry := range s.players.entries {
 		if entry.name == name && entry.handle != nil && !entry.handle.Closed() {
+			return uuid.UUID(entry.id.UUID), true
+		}
+	}
+	return uuid.Nil, false
+}
+
+func (s *Server) playerUUIDByExactXUID(xuid string) (uuid.UUID, bool) {
+	s.players.mu.RLock()
+	defer s.players.mu.RUnlock()
+	for _, entry := range s.players.entries {
+		if entry.xuid == xuid && entry.handle != nil && !entry.handle.Closed() {
 			return uuid.UUID(entry.id.UUID), true
 		}
 	}

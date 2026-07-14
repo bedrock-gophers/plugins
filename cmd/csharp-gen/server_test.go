@@ -10,9 +10,12 @@ import (
 )
 
 const serverSource = `package server
+func (srv *Server) MaxPlayerCount() int { return 0 }
+func (srv *Server) PlayerCount() int { return 0 }
 func (srv *Server) Players(tx *world.Tx) iter.Seq[*player.Player] { return nil }
 func (srv *Server) Player(uuid uuid.UUID) (*world.EntityHandle, bool) { return nil, false }
 func (srv *Server) PlayerByName(name string) (*world.EntityHandle, bool) { return nil, false }
+func (srv *Server) PlayerByXUID(xuid string) (*world.EntityHandle, bool) { return nil, false }
 `
 
 func TestServerUsesGoAST(t *testing.T) {
@@ -26,12 +29,16 @@ func TestServerUsesGoAST(t *testing.T) {
 	}
 	generated := string(generateServer(methods))
 	for _, expected := range []string{
+		"public int MaxPlayerCount() => PluginBridge.Host.ServerMaxPlayerCount()",
+		"public int PlayerCount() => PluginBridge.Host.ServerPlayerCount()",
 		"public IEnumerable<Player> Players(World.Tx? tx = null)",
 		"PluginBridge.Host.ServerPlayers(tx?.Invocation ?? 0)",
 		"public (World.EntityHandle? Player, bool Ok) Player(Guid uuid)",
 		"PluginBridge.Host.ServerPlayer(uuid)",
 		"public (World.EntityHandle? Player, bool Ok) PlayerByName(string name)",
 		"PluginBridge.Host.ServerPlayerByName(name)",
+		"public (World.EntityHandle? Player, bool Ok) PlayerByXUID(string xuid)",
+		"PluginBridge.Host.ServerPlayerByXUID(xuid)",
 		"public Server Server() => new();",
 	} {
 		if !strings.Contains(generated, expected) {
@@ -41,12 +48,25 @@ func TestServerUsesGoAST(t *testing.T) {
 }
 
 func TestServerRejectsSignatureDrift(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "server.go")
-	if err := os.WriteFile(path, []byte(strings.Replace(serverSource, "PlayerByName(name string)", "PlayerByName(name []byte)", 1)), 0o600); err != nil {
-		t.Fatal(err)
+	tests := map[string][2]string{
+		"MaxPlayerCount": {"MaxPlayerCount() int", "MaxPlayerCount() int64"},
+		"PlayerCount":    {"PlayerCount() int", "PlayerCount(extra int) int"},
+		"Players":        {"Players(tx *world.Tx)", "Players(tx world.Tx)"},
+		"Player":         {"Player(uuid uuid.UUID)", "Player(uuid string)"},
+		"PlayerByName":   {"PlayerByName(name string)", "PlayerByName(name []byte)"},
+		"PlayerByXUID":   {"PlayerByXUID(xuid string)", "PlayerByXUID(xuid []byte)"},
 	}
-	if _, err := inspectServerMethods(path); err == nil || !strings.Contains(err.Error(), "signature changed") {
-		t.Fatalf("expected signature drift error, got %v", err)
+	for name, replacement := range tests {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "server.go")
+			source := strings.Replace(serverSource, replacement[0], replacement[1], 1)
+			if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := inspectServerMethods(path); err == nil || !strings.Contains(err.Error(), "signature changed") {
+				t.Fatalf("expected signature drift error, got %v", err)
+			}
+		})
 	}
 }
 
@@ -61,9 +81,12 @@ func TestPinnedDragonflyServerHasExactSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []commandMethod{
+		{Name: "MaxPlayerCount", ReturnType: "int"},
+		{Name: "PlayerCount", ReturnType: "int"},
 		{Name: "Players", Parameters: []parameter{{Name: "tx", Type: "World.Tx?"}}, ReturnType: "IEnumerable<Player>"},
 		{Name: "Player", Parameters: []parameter{{Name: "uuid", Type: "Guid"}}, ReturnType: "(World.EntityHandle? Player, bool Ok)"},
 		{Name: "PlayerByName", Parameters: []parameter{{Name: "name", Type: "string"}}, ReturnType: "(World.EntityHandle? Player, bool Ok)"},
+		{Name: "PlayerByXUID", Parameters: []parameter{{Name: "xuid", Type: "string"}}, ReturnType: "(World.EntityHandle? Player, bool Ok)"},
 	}
 	if len(methods) != len(want) {
 		t.Fatalf("server methods = %d, want %d", len(methods), len(want))

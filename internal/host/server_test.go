@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"iter"
+	"strings"
 	"testing"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
@@ -15,7 +16,11 @@ import (
 type serverPlayerSourceStub struct {
 	handles []*world.EntityHandle
 	byUUID  map[uuid.UUID]*world.EntityHandle
+	maximum int
 }
+
+func (s *serverPlayerSourceStub) MaxPlayerCount() int { return s.maximum }
+func (s *serverPlayerSourceStub) PlayerCount() int    { return len(s.handles) }
 
 func (s *serverPlayerSourceStub) Players(tx *world.Tx) iter.Seq[*player.Player] {
 	return func(yield func(*player.Player) bool) {
@@ -60,6 +65,9 @@ func TestServerPlayersRotateBorrowedTransactions(t *testing.T) {
 	if _, ok := players.ResolveID(first.Player, firstInvocation); !ok {
 		t.Fatal("first player is not valid inside its iteration body")
 	}
+	if xuid, ok := players.PlayerXUID(firstInvocation, first.Player); !ok || xuid != "xuid-alpha" {
+		t.Fatalf("first XUID = %q, %v", xuid, ok)
+	}
 
 	secondInvocation, second, found, valid := host.NextServerPlayer(0, iterator)
 	if !valid || !found || secondInvocation == 0 || second.Name != "Bravo" {
@@ -67,6 +75,9 @@ func TestServerPlayersRotateBorrowedTransactions(t *testing.T) {
 	}
 	if _, ok := players.InvocationTx(firstInvocation); ok {
 		t.Fatal("first player remained valid after iterator advanced")
+	}
+	if _, ok := players.PlayerXUID(firstInvocation, first.Player); ok {
+		t.Fatal("first XUID remained readable after iterator advanced")
 	}
 	if _, ok := players.ResolveID(second.Player, secondInvocation); !ok {
 		t.Fatal("second player is not valid inside its iteration body")
@@ -138,6 +149,29 @@ func TestServerPlayerLookupsUseExactDragonflyHandles(t *testing.T) {
 	if _, found, valid := host.ServerPlayer([16]byte(uuid.New())); !valid || found {
 		t.Fatalf("missing UUID lookup = found %v, valid %v", found, valid)
 	}
+	byXUID, found, valid := host.ServerPlayerByXUID("xuid-alpha")
+	if !valid || !found || byXUID != byUUID {
+		t.Fatalf("XUID lookup = %#v, %v, %v; want %#v", byXUID, found, valid, byUUID)
+	}
+	if _, found, valid := host.ServerPlayerByXUID("XUID-ALPHA"); !valid || found {
+		t.Fatalf("case-changed XUID lookup = found %v, valid %v", found, valid)
+	}
+}
+
+func TestServerPlayerCounts(t *testing.T) {
+	players, source, closeWorlds := serverPlayersFixture(t)
+	defer closeWorlds()
+	host := NewServer(players)
+	host.source = source
+
+	maximum, ok := host.ServerMaxPlayerCount()
+	if !ok || maximum != 20 {
+		t.Fatalf("maximum = %d, %v", maximum, ok)
+	}
+	count, ok := host.ServerPlayerCount()
+	if !ok || count != 2 {
+		t.Fatalf("count = %d, %v", count, ok)
+	}
 }
 
 func serverPlayersFixture(t *testing.T) (*Players, *serverPlayerSourceStub, func()) {
@@ -148,13 +182,14 @@ func serverPlayersFixture(t *testing.T) (*Players, *serverPlayerSourceStub, func
 		world.Config{Synchronous: true}.New(),
 	}
 	source := &serverPlayerSourceStub{
-		byUUID: map[uuid.UUID]*world.EntityHandle{},
+		byUUID:  map[uuid.UUID]*world.EntityHandle{},
+		maximum: 20,
 	}
 	for index, name := range []string{"Alpha", "Bravo"} {
 		id := uuid.New()
 		handle := world.EntitySpawnOpts{ID: id, Position: mgl64.Vec3{float64(index), 64, 0}}.New(
 			player.Type,
-			player.Config{UUID: id, Name: name, Position: mgl64.Vec3{float64(index), 64, 0}},
+			player.Config{UUID: id, XUID: "xuid-" + strings.ToLower(name), Name: name, Position: mgl64.Vec3{float64(index), 64, 0}},
 		)
 		if err := worlds[index].Do(func(tx *world.Tx) {
 			players.Register(tx.AddEntity(handle).(*player.Player), uint64(index+1))

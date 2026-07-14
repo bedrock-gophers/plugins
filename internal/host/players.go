@@ -39,6 +39,7 @@ type playerEntry struct {
 	id       native.PlayerID
 	handle   *world.EntityHandle
 	name     string
+	xuid     string
 	latency  uint64
 	position mgl64.Vec3
 }
@@ -58,7 +59,7 @@ func (p *Players) Register(player *player.Player, generation uint64) native.Play
 	entityID := p.entities.registerHandle(player.H(), generation)
 	id := native.PlayerID{UUID: entityID.UUID, Generation: entityID.Generation}
 	entry := &playerEntry{
-		id: id, handle: player.H(), name: player.Name(),
+		id: id, handle: player.H(), name: player.Name(), xuid: player.XUID(),
 		latency:  uint64(max(player.Latency().Milliseconds(), 0)),
 		position: player.Position(),
 	}
@@ -82,7 +83,7 @@ func (p *Players) registerTemporary(connected *player.Player, id native.EntityID
 	}
 	playerID := native.PlayerID{UUID: id.UUID, Generation: id.Generation}
 	entry := &playerEntry{
-		id: playerID, handle: connected.H(), name: connected.Name(),
+		id: playerID, handle: connected.H(), name: connected.Name(), xuid: connected.XUID(),
 		latency: uint64(max(connected.Latency().Milliseconds(), 0)), position: connected.Position(),
 	}
 	p.mu.Lock()
@@ -260,6 +261,19 @@ func (p *Players) ResolveUUID(uuid [16]byte) (native.PlayerID, bool) {
 		}
 	}
 	return native.PlayerID{}, false
+}
+
+// PlayerXUID returns the exact Dragonfly XUID for a player borrowed by a live
+// invocation. XUID is immutable for the registered player lifetime.
+func (p *Players) PlayerXUID(invocation native.InvocationID, id native.PlayerID) (string, bool) {
+	p.mu.RLock()
+	entry, registered := p.byID[id]
+	_, invoked := p.invocations[invocation]
+	p.mu.RUnlock()
+	if invocation == 0 || !registered || !invoked {
+		return "", false
+	}
+	return entry.xuid, true
 }
 
 // Handle returns the exact live Dragonfly handle registered for id. The full

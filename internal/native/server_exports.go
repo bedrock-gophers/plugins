@@ -10,6 +10,8 @@ import (
 	"unsafe"
 )
 
+const maxPlayerXUIDBytes = 64
+
 //export bg_go_server_players_open
 func bg_go_server_players_open(context C.uint64_t, invocation C.DfInvocationId, output *C.DfPlayerIteratorId) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
@@ -81,6 +83,58 @@ func bg_go_server_player_by_name(context C.uint64_t, value C.DfStringView, outpu
 	return writeServerPlayerLookup(player, hasValue, lookupValid, output, found)
 }
 
+//export bg_go_server_max_player_count
+func bg_go_server_max_player_count(context C.uint64_t, output *C.int64_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	count, ok := host.ServerMaxPlayerCount()
+	if !ok || count < 0 {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.int64_t(count)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_server_player_count
+func bg_go_server_player_count(context C.uint64_t, output *C.int64_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	count, ok := host.ServerPlayerCount()
+	if !ok || count < 0 {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.int64_t(count)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_server_player_by_xuid
+func bg_go_server_player_by_xuid(context C.uint64_t, value C.DfStringView, output *C.DfEntityHandleId, found *C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	xuid, valid := copyBoundedServerString(value, maxPlayerXUIDBytes)
+	if !ok || !valid || output == nil || found == nil {
+		return C.DF_STATUS_ERROR
+	}
+	player, hasValue, lookupValid := host.ServerPlayerByXUID(xuid)
+	return writeServerPlayerLookup(player, hasValue, lookupValid, output, found)
+}
+
+//export bg_go_player_xuid
+func bg_go_player_xuid(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, output *C.DfStringBuffer) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	xuid, ok := host.PlayerXUID(InvocationID(invocation), playerID(player))
+	if !ok || len(xuid) > maxPlayerXUIDBytes || !utf8.ValidString(xuid) || !writeSkinBuffer(output, []byte(xuid)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
 func writeServerPlayerLookup(id EntityHandleID, hasValue, valid bool, output *C.DfEntityHandleId, found *C.uint8_t) C.DfStatus {
 	*output = C.DfEntityHandleId{}
 	*found = 0
@@ -95,7 +149,11 @@ func writeServerPlayerLookup(id EntityHandleID, hasValue, valid bool, output *C.
 }
 
 func copyServerPlayerName(view C.DfStringView) (string, bool) {
-	if view.len > maxPlayerNameBytes || view.len != 0 && view.data == nil {
+	return copyBoundedServerString(view, maxPlayerNameBytes)
+}
+
+func copyBoundedServerString(view C.DfStringView, maximum uint64) (string, bool) {
+	if uint64(view.len) > maximum || view.len != 0 && view.data == nil {
 		return "", false
 	}
 	value := C.GoBytes(unsafe.Pointer(view.data), C.int(view.len))

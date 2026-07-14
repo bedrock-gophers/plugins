@@ -726,13 +726,29 @@ public sealed class KitchenSink : Plugin
                 count++;
             }
 
+            if (server.PlayerCount() != count || server.MaxPlayerCount() < count)
+            {
+                output.Error("Server player counts are inconsistent.");
+                return;
+            }
+
             if (source is Player player)
             {
-                var uuid = player.H().UUID();
+                var uuid = player.UUID();
+                if (uuid != player.H().UUID())
+                {
+                    output.Error("Player identity is inconsistent.");
+                    return;
+                }
                 var (byUuid, foundUuid) = server.Player(uuid);
                 var (byName, foundName) = server.PlayerByName(player.Name());
+                var xuid = player.XUID();
+                World.EntityHandle? byXuid = null;
+                var foundXuid = true;
+                if (!string.IsNullOrEmpty(xuid)) (byXuid, foundXuid) = server.PlayerByXUID(xuid);
                 if (!foundUuid || !foundName || byUuid is null || byName is null ||
-                    !byUuid.Equals(byName))
+                    !byUuid.Equals(byName) || !foundXuid ||
+                    byXuid is not null && !byUuid.Equals(byXuid))
                 {
                     output.Error("Server player lookup failed.");
                     return;

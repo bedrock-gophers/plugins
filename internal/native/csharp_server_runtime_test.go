@@ -17,7 +17,13 @@ type csharpServerHost struct {
 	closedIterators        []PlayerIteratorID
 	lookupUUID             [16]byte
 	lookupName             string
+	lookupXUID             string
 	lookupHandle           EntityHandleID
+	maximumPlayers         int64
+	playerXUIDs            map[PlayerID]string
+	maximumCountCalls      int
+	playerCountCalls       int
+	playerXUIDInvocations  []InvocationID
 	entityHandleUUIDs      map[EntityHandleID][16]byte
 	entityHandleCalls      []EntityID
 	entityHandleInvocation []InvocationID
@@ -49,6 +55,16 @@ func (h *csharpServerHost) CloseServerPlayers(invocation InvocationID, iterator 
 	h.closedIterators = append(h.closedIterators, iterator)
 }
 
+func (h *csharpServerHost) ServerMaxPlayerCount() (int64, bool) {
+	h.maximumCountCalls++
+	return h.maximumPlayers, h.maximumPlayers >= 0
+}
+
+func (h *csharpServerHost) ServerPlayerCount() (int64, bool) {
+	h.playerCountCalls++
+	return int64(len(h.snapshots)), true
+}
+
 func (h *csharpServerHost) ServerPlayer(uuid [16]byte) (EntityHandleID, bool, bool) {
 	h.lookupUUID = uuid
 	return h.lookupHandle, true, h.lookupHandle.Valid()
@@ -57,6 +73,17 @@ func (h *csharpServerHost) ServerPlayer(uuid [16]byte) (EntityHandleID, bool, bo
 func (h *csharpServerHost) ServerPlayerByName(name string) (EntityHandleID, bool, bool) {
 	h.lookupName = name
 	return h.lookupHandle, true, h.lookupHandle.Valid()
+}
+
+func (h *csharpServerHost) ServerPlayerByXUID(xuid string) (EntityHandleID, bool, bool) {
+	h.lookupXUID = xuid
+	return h.lookupHandle, true, h.lookupHandle.Valid()
+}
+
+func (h *csharpServerHost) PlayerXUID(invocation InvocationID, player PlayerID) (string, bool) {
+	h.playerXUIDInvocations = append(h.playerXUIDInvocations, invocation)
+	xuid, ok := h.playerXUIDs[player]
+	return xuid, ok
 }
 
 func (h *csharpServerHost) EntityHandle(invocation InvocationID, entity EntityID) (EntityHandleID, bool) {
@@ -92,7 +119,11 @@ func TestCSharpServerPlayersAndLookup(t *testing.T) {
 			{Player: first, Name: "Alpha", LatencyMilliseconds: 12, Position: Vec3{X: 1, Y: 64, Z: 2}},
 			{Player: second, Name: "Bravo", LatencyMilliseconds: 34, Position: Vec3{X: 3, Y: 65, Z: 4}},
 		},
-		lookupHandle: EntityHandleID{Value: 2, Generation: source.Generation},
+		lookupHandle:   EntityHandleID{Value: 2, Generation: source.Generation},
+		maximumPlayers: 20,
+		playerXUIDs: map[PlayerID]string{
+			source: "xuid-danick",
+		},
 	}
 	host.entityHandleUUIDs = map[EntityHandleID][16]byte{host.lookupHandle: source.UUID}
 
@@ -139,6 +170,8 @@ func TestCSharpServerPlayersAndLookup(t *testing.T) {
 			host.textInvocations, host.textPlayers, host.texts)
 	}
 	if host.lookupUUID != source.UUID || host.lookupName != "Danick" ||
+		host.lookupXUID != "xuid-danick" || host.maximumCountCalls != 1 || host.playerCountCalls != 1 ||
+		!slices.Equal(host.playerXUIDInvocations, []InvocationID{42}) ||
 		!slices.Equal(host.entityHandleInvocation, []InvocationID{101, 42}) ||
 		!slices.Equal(host.entityHandleCalls, []EntityID{
 			{UUID: first.UUID, Generation: first.Generation},

@@ -29,7 +29,6 @@ public sealed partial class Player : Cmd.Source, Cmd.NamedTarget, World.Entity
     internal PlayerId Id { get; }
     internal string PlayerName { get; }
 
-    public string Name() => PlayerName;
     public TimeSpan Latency() => _latency;
     public World.EntityHandle H() => PluginBridge.Host.EntityHandle(_invocation, EntityId());
     public void Close() => PluginBridge.Host.CloseEntity(_invocation, EntityId());
