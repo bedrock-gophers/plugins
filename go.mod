@@ -2,13 +2,13 @@ module example.com/bedrock-gophers-minimal
 
 go 1.26.0
 
-require github.com/bedrock-gophers/plugins v0.0.0-20260714194811-333d13f90294
+require github.com/bedrock-gophers/plugins v0.0.0-20260714201222-58a3493f2788
 
 require (
 	github.com/brentp/intintmap v0.0.0-20251106190759-56907b1f8479 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
-	github.com/df-mc/dragonfly v0.11.0 // indirect
+	github.com/df-mc/dragonfly v0.11.1-0.20260714151819-dbbd8b787946 // indirect
 	github.com/df-mc/go-playfab v1.0.0 // indirect
 	github.com/df-mc/go-xsapi v1.0.1 // indirect
 	github.com/df-mc/goleveldb v1.1.9 // indirect
