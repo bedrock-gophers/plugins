@@ -16,6 +16,9 @@ public sealed class KitchenSink : Plugin
     private long _transfers;
     private long _commandExecutions;
     private long _diagnostics;
+    private long _scheduled;
+    private World? _memoryWorld;
+    private World? _persistentWorld;
 
     public override void OnEnable()
     {
@@ -43,7 +46,7 @@ public sealed class KitchenSink : Plugin
             new KitchenCrop(),
             new KitchenKinematics(),
             new KitchenHeal(),
-            new KitchenWorld(),
+            new KitchenWorld(this),
             new KitchenEntities(),
             new KitchenServer(this),
             new KitchenHandle()));
@@ -314,12 +317,13 @@ public sealed class KitchenSink : Plugin
     internal sealed class KitchenStatus(KitchenSink plugin) : Cmd.Runnable
     {
         public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx) => output.Printf(
-            "jumps={0}, punches={1}, sprints={2}, sneaks={3}, quits={4}",
+            "jumps={0}, punches={1}, sprints={2}, sneaks={3}, quits={4}, scheduled={5}",
             plugin._jumps,
             plugin._punches,
             plugin._sprints,
             plugin._sneaks,
-            plugin._quits);
+            plugin._quits,
+            plugin._scheduled);
     }
 
     internal sealed class KitchenEcho : Cmd.Runnable
@@ -415,7 +419,7 @@ public sealed class KitchenSink : Plugin
         }
     }
 
-    internal sealed class KitchenWorld : Cmd.Runnable
+    internal sealed class KitchenWorld(KitchenSink plugin) : Cmd.Runnable
     {
         public Cmd.SubCommand World;
 
@@ -426,19 +430,22 @@ public sealed class KitchenSink : Plugin
                 output.Error("This command can only be used by a player.");
                 return;
             }
-            var arena = Dragonfly.World.OpenManaged(
-                "kitchen:arena",
-                new Dragonfly.World.ManagedOpenSpec("kitchen/arena"));
-            if (arena is null)
+            var memory = plugin._memoryWorld ??= Dragonfly.World.New();
+            memory.Schedule(worldTx =>
+                worldTx.SetBlock(new Cube.Pos(0, 0, 0), new Block.Stone()));
+            var arena = plugin._persistentWorld ??= new Dragonfly.World.Config
             {
-                output.Error("Could not open the managed arena world.");
-                return;
-            }
+                Provider = new MCDB.Config().Open("kitchen/arena"),
+                SaveInterval = TimeSpan.FromMinutes(10),
+                RandomTickSpeed = -1,
+            }.New();
             var spawn = arena.Spawn();
             arena.SetSpawn(spawn);
             arena.Save();
             player.ChangeWorld(arena, spawn.Vec3Middle());
-            output.Printf("world={0}, spawn={1},{2},{3}", arena.Name(), spawn.X(), spawn.Y(), spawn.Z());
+            output.Printf(
+                "memory={0}, persistent={1}, spawn={2},{3},{4}",
+                memory.Name(), arena.Name(), spawn.X(), spawn.Y(), spawn.Z());
         }
     }
 
@@ -717,7 +724,9 @@ public sealed class KitchenSink : Plugin
         public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
         {
             var server = plugin.Server();
-            _ = (server.World(), server.Nether(), server.End());
+            var overworld = server.World();
+            _ = (overworld, server.Nether(), server.End());
+            overworld.Schedule(_ => Increment(ref plugin._scheduled));
             var count = 0;
             World.EntityHandle? first = null;
             foreach (var connected in server.Players(tx))
