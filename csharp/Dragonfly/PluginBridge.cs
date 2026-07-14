@@ -363,6 +363,69 @@ internal static unsafe class PluginBridge
             return tick;
         }
 
+        internal static void AddWorldParticle(ulong invocation, Vector3 position, World.Particle particle)
+        {
+            var api = Api;
+            if (api is null || api->WorldParticleAdd == null)
+                throw new InvalidOperationException("world transaction is unavailable");
+            if (!ParticleCodec.TryEncode(particle, out var encoded))
+                throw new ArgumentException("particle type is not registered", nameof(particle));
+
+            var identifierBytes = Array.Empty<byte>();
+            var propertyBytes = Array.Empty<byte>();
+            if (encoded.Block is not null)
+            {
+                if (!BlockCodec.TryEncode(encoded.Block, out var identifier, out propertyBytes))
+                    throw new ArgumentException("particle type is not registered", nameof(particle));
+                identifierBytes = Encoding.UTF8.GetBytes(identifier);
+            }
+
+            fixed (byte* identifierData = identifierBytes)
+            fixed (byte* propertyData = propertyBytes)
+            {
+                var block = new BlockView
+                {
+                    Identifier = new StringView
+                    {
+                        Data = identifierData,
+                        Length = (ulong)identifierBytes.Length,
+                    },
+                    PropertiesNbt = new StringView
+                    {
+                        Data = propertyData,
+                        Length = (ulong)propertyBytes.Length,
+                    },
+                };
+                var view = new ParticleView
+                {
+                    Kind = encoded.Kind,
+                    Data = encoded.Data,
+                    Pitch = encoded.Pitch,
+                    Colour = new Rgba
+                    {
+                        R = encoded.Colour.R,
+                        G = encoded.Colour.G,
+                        B = encoded.Colour.B,
+                        A = encoded.Colour.A,
+                    },
+                    Diff = new BlockPos
+                    {
+                        X = encoded.Diff.X(),
+                        Y = encoded.Diff.Y(),
+                        Z = encoded.Diff.Z(),
+                    },
+                    Block = encoded.Block is null ? null : &block,
+                };
+                if (api->WorldParticleAdd(
+                        api->Context,
+                        invocation,
+                        default,
+                        new Vec3 { X = position.X, Y = position.Y, Z = position.Z },
+                        &view) != Abi.Ok)
+                    throw new InvalidOperationException("world transaction is no longer valid");
+            }
+        }
+
         private static bool WorldWeatherAt(
             HostApi* api,
             ulong invocation,

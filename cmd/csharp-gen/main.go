@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -83,6 +84,65 @@ type encodedBiome struct {
 	ID   int
 }
 
+type particleType struct {
+	Name   string
+	Kind   uint32
+	Fields []parameter
+}
+
+type instrumentSpec struct {
+	Name string
+	ID   uint32
+}
+
+type particleSpec struct {
+	Types       []particleType
+	Instruments []instrumentSpec
+	RGBAFields  []parameter
+}
+
+var particleKindNames = []string{
+	"Flame",
+	"Dust",
+	"BlockBreak",
+	"PunchBlock",
+	"BlockForceField",
+	"BoneMeal",
+	"Note",
+	"DragonEggTeleport",
+	"Evaporate",
+	"WaterDrip",
+	"LavaDrip",
+	"Lava",
+	"DustPlume",
+	"HugeExplosion",
+	"EndermanTeleport",
+	"SnowballPoof",
+	"EggSmash",
+	"Splash",
+	"Effect",
+	"EntityFlame",
+}
+
+var instrumentNames = []string{
+	"Piano",
+	"BassDrum",
+	"Snare",
+	"ClicksAndSticks",
+	"Bass",
+	"Flute",
+	"Bell",
+	"Guitar",
+	"Chimes",
+	"Xylophone",
+	"IronXylophone",
+	"CowBell",
+	"Didgeridoo",
+	"Bit",
+	"Banjo",
+	"Pling",
+}
+
 var supportedPlayerHandlers = map[string]uint64{
 	"HandleChat":         1 << 1,
 	"HandleFoodLoss":     1 << 8,
@@ -135,6 +195,7 @@ var selectedWorldTxMethods = []string{
 	"Raining",
 	"Thundering",
 	"CurrentTick",
+	"AddParticle",
 }
 
 func main() {
@@ -185,6 +246,14 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	particles, err := inspectParticles(
+		filepath.Join(directory, "server", "world", "particle"),
+		filepath.Join(directory, "server", "world", "sound", "instrument.go"),
+		filepath.Join(runtime.GOROOT(), "src", "image", "color", "color.go"),
+	)
+	if err != nil {
+		fatal(err)
+	}
 	files := []generatedFile{
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Handler.g.cs"),
@@ -213,6 +282,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Biome.Types.g.cs"),
 			Content: generateBiomes(biomes),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Particle.Types.g.cs"),
+			Content: generateParticles(particles),
 		},
 	}
 	if err := syncGeneratedFiles(files, *check); err != nil {
@@ -496,6 +569,9 @@ func validateWorldTxMethod(method commandMethod) error {
 		"Raining":     {Name: "Raining", ReturnType: "bool"},
 		"Thundering":  {Name: "Thundering", ReturnType: "bool"},
 		"CurrentTick": {Name: "CurrentTick", ReturnType: "long"},
+		"AddParticle": {Name: "AddParticle", ReturnType: "void", Parameters: []parameter{
+			{Name: "pos", Type: "Vector3"}, {Name: "p", Type: "Particle"},
+		}},
 	}[method.Name]
 	if !reflect.DeepEqual(method, expected) {
 		return fmt.Errorf("signature changed: got %s %s(%s)", method.ReturnType, method.Name, formatParameters(method.Parameters))
@@ -592,15 +668,16 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 		return strings.TrimSuffix(typeName, "?") + "?", true
 	case *ast.Ident:
 		typeName, ok := map[string]string{
-			"Block":   "Block",
-			"Biome":   "Biome",
-			"Liquid":  "Liquid",
-			"SetOpts": "SetOpts",
-			"bool":    "bool",
-			"float64": "double",
-			"int":     "int",
-			"int64":   "long",
-			"uint8":   "byte",
+			"Block":    "Block",
+			"Biome":    "Biome",
+			"Liquid":   "Liquid",
+			"Particle": "Particle",
+			"SetOpts":  "SetOpts",
+			"bool":     "bool",
+			"float64":  "double",
+			"int":      "int",
+			"int64":    "long",
+			"uint8":    "byte",
 		}[value.Name]
 		if !ok {
 			return "", false
@@ -617,6 +694,7 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 		typeName, ok := map[string]string{
 			"cube.Pos":      "Cube.Pos",
 			"cube.Range":    "Cube.Range",
+			"mgl64.Vec3":    "Vector3",
 			"time.Duration": "TimeSpan",
 		}[packageName.Name+"."+value.Sel.Name]
 		return typeName, ok
@@ -843,6 +921,249 @@ func biomeEmptyStruct(spec *ast.TypeSpec) (*ast.StructType, bool) {
 	}
 	structure, ok := spec.Type.(*ast.StructType)
 	return structure, ok
+}
+
+func inspectParticles(directory, instrumentPath, colourPath string) (particleSpec, error) {
+	packages, err := parser.ParseDir(token.NewFileSet(), directory, func(info os.FileInfo) bool {
+		return !strings.HasSuffix(info.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		return particleSpec{}, err
+	}
+	pkg, ok := packages["particle"]
+	if !ok {
+		return particleSpec{}, fmt.Errorf("Dragonfly particle package not found")
+	}
+	declarations := map[string]*ast.TypeSpec{}
+	for _, file := range pkg.Files {
+		for _, declaration := range file.Decls {
+			gen, ok := declaration.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, raw := range gen.Specs {
+				spec, ok := raw.(*ast.TypeSpec)
+				if ok {
+					declarations[spec.Name.Name] = spec
+				}
+			}
+		}
+	}
+	marker, ok := declarations["particle"]
+	markerStruct, markerIsStruct := biomeEmptyStruct(marker)
+	if !ok || !markerIsStruct || len(markerStruct.Fields.List) != 0 {
+		return particleSpec{}, fmt.Errorf("Dragonfly particle marker is not an empty private struct")
+	}
+
+	exported := map[string]*ast.TypeSpec{}
+	for name, declaration := range declarations {
+		if ast.IsExported(name) {
+			exported[name] = declaration
+		}
+	}
+	if len(exported) != len(particleKindNames) {
+		return particleSpec{}, fmt.Errorf("Dragonfly particle package has %d exported types, want exactly %d", len(exported), len(particleKindNames))
+	}
+
+	result := particleSpec{Types: make([]particleType, 0, len(particleKindNames))}
+	for kind, name := range particleKindNames {
+		declaration := exported[name]
+		if declaration == nil {
+			return particleSpec{}, fmt.Errorf("Dragonfly particle.%s declaration not found", name)
+		}
+		structure, ok := declaration.Type.(*ast.StructType)
+		if !ok {
+			return particleSpec{}, fmt.Errorf("Dragonfly particle.%s is not a concrete struct", name)
+		}
+		fields, err := inspectParticleFields(name, structure)
+		if err != nil {
+			return particleSpec{}, err
+		}
+		result.Types = append(result.Types, particleType{Name: name, Kind: uint32(kind), Fields: fields})
+	}
+
+	result.Instruments, err = inspectInstruments(instrumentPath)
+	if err != nil {
+		return particleSpec{}, err
+	}
+	result.RGBAFields, err = inspectRGBA(colourPath)
+	if err != nil {
+		return particleSpec{}, err
+	}
+	return result, nil
+}
+
+func inspectParticleFields(name string, structure *ast.StructType) ([]parameter, error) {
+	marker := false
+	var fields []parameter
+	usedSlots := map[string]string{}
+	for _, field := range structure.Fields.List {
+		if len(field.Names) == 0 {
+			identifier, ok := field.Type.(*ast.Ident)
+			if !ok || identifier.Name != "particle" || marker {
+				return nil, fmt.Errorf("Dragonfly particle.%s does not embed exactly one private particle marker", name)
+			}
+			marker = true
+			continue
+		}
+		typeName, slot, ok := particleCSharpType(field.Type)
+		if !ok {
+			return nil, fmt.Errorf("Dragonfly particle.%s has unsupported field type %s", name, formatGoExpression(field.Type))
+		}
+		for _, fieldName := range field.Names {
+			if !fieldName.IsExported() {
+				return nil, fmt.Errorf("Dragonfly particle.%s field %s is not exported", name, fieldName.Name)
+			}
+			if previous, exists := usedSlots[slot]; exists {
+				return nil, fmt.Errorf("Dragonfly particle.%s fields %s and %s share encoded slot %s", name, previous, fieldName.Name, slot)
+			}
+			usedSlots[slot] = fieldName.Name
+			fields = append(fields, parameter{Name: fieldName.Name, Type: typeName})
+		}
+	}
+	if !marker {
+		return nil, fmt.Errorf("Dragonfly particle.%s does not embed the private particle marker", name)
+	}
+	return fields, nil
+}
+
+func particleCSharpType(expression ast.Expr) (typeName, slot string, ok bool) {
+	switch value := expression.(type) {
+	case *ast.Ident:
+		mapped, exists := map[string]struct{ typeName, slot string }{
+			"bool": {"bool", "data"},
+			"int":  {"int", "pitch"},
+		}[value.Name]
+		return mapped.typeName, mapped.slot, exists
+	case *ast.SelectorExpr:
+		packageName, ok := value.X.(*ast.Ident)
+		if !ok {
+			return "", "", false
+		}
+		mapped, exists := map[string]struct{ typeName, slot string }{
+			"color.RGBA":       {"Color.RGBA", "colour"},
+			"cube.Face":        {"Cube.Face", "data"},
+			"cube.Pos":         {"Cube.Pos", "diff"},
+			"sound.Instrument": {"Sound.Instrument", "data"},
+			"world.Block":      {"World.Block", "block"},
+		}[packageName.Name+"."+value.Sel.Name]
+		return mapped.typeName, mapped.slot, exists
+	default:
+		return "", "", false
+	}
+}
+
+func inspectInstruments(path string) ([]instrumentSpec, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	types := map[string]*ast.TypeSpec{}
+	functions := map[string]*ast.FuncDecl{}
+	for _, declaration := range file.Decls {
+		switch value := declaration.(type) {
+		case *ast.GenDecl:
+			for _, raw := range value.Specs {
+				if spec, ok := raw.(*ast.TypeSpec); ok {
+					types[spec.Name.Name] = spec
+				}
+			}
+		case *ast.FuncDecl:
+			if value.Recv == nil && value.Name.IsExported() {
+				functions[value.Name.Name] = value
+			}
+		}
+	}
+	if !validInstrumentTypes(types["Instrument"], types["instrument"]) {
+		return nil, fmt.Errorf("Dragonfly sound.Instrument is no longer an opaque int32-backed value")
+	}
+	if len(functions) != len(instrumentNames) {
+		return nil, fmt.Errorf("Dragonfly instrument package has %d exported functions, want exactly %d", len(functions), len(instrumentNames))
+	}
+	result := make([]instrumentSpec, 0, len(instrumentNames))
+	for id, name := range instrumentNames {
+		function := functions[name]
+		value, ok := instrumentFunctionID(function)
+		if !ok || value != uint64(id) {
+			return nil, fmt.Errorf("Dragonfly sound.%s is not Instrument{%d}", name, id)
+		}
+		result = append(result, instrumentSpec{Name: name, ID: uint32(id)})
+	}
+	return result, nil
+}
+
+func validInstrumentTypes(exported, private *ast.TypeSpec) bool {
+	if exported == nil || private == nil {
+		return false
+	}
+	structure, ok := biomeEmptyStruct(exported)
+	if !ok || len(structure.Fields.List) != 1 {
+		return false
+	}
+	field := structure.Fields.List[0]
+	marker, ok := field.Type.(*ast.Ident)
+	backing, backingOK := private.Type.(*ast.Ident)
+	return len(field.Names) == 0 && ok && marker.Name == "instrument" && backingOK && backing.Name == "int32"
+}
+
+func instrumentFunctionID(function *ast.FuncDecl) (uint64, bool) {
+	if function == nil || function.Type.Params == nil || function.Type.Params.NumFields() != 0 || function.Type.Results == nil || len(function.Type.Results.List) != 1 || function.Body == nil || len(function.Body.List) != 1 {
+		return 0, false
+	}
+	result, ok := function.Type.Results.List[0].Type.(*ast.Ident)
+	if !ok || result.Name != "Instrument" {
+		return 0, false
+	}
+	returnStatement, ok := function.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(returnStatement.Results) != 1 {
+		return 0, false
+	}
+	composite, ok := returnStatement.Results[0].(*ast.CompositeLit)
+	if !ok || len(composite.Elts) != 1 {
+		return 0, false
+	}
+	typeName, ok := composite.Type.(*ast.Ident)
+	literal, literalOK := composite.Elts[0].(*ast.BasicLit)
+	if !ok || typeName.Name != "Instrument" || !literalOK || literal.Kind != token.INT {
+		return 0, false
+	}
+	value, err := strconv.ParseUint(literal.Value, 0, 32)
+	return value, err == nil
+}
+
+func inspectRGBA(path string) ([]parameter, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	var declaration *ast.TypeSpec
+	ast.Inspect(file, func(node ast.Node) bool {
+		spec, ok := node.(*ast.TypeSpec)
+		if ok && spec.Name.Name == "RGBA" {
+			declaration = spec
+			return false
+		}
+		return true
+	})
+	structure, ok := biomeEmptyStruct(declaration)
+	if !ok {
+		return nil, fmt.Errorf("image/color.RGBA is not a struct")
+	}
+	var fields []parameter
+	for _, field := range structure.Fields.List {
+		identifier, ok := field.Type.(*ast.Ident)
+		if !ok || identifier.Name != "uint8" {
+			return nil, fmt.Errorf("image/color.RGBA contains non-uint8 fields")
+		}
+		for _, name := range field.Names {
+			fields = append(fields, parameter{Name: name.Name, Type: "byte"})
+		}
+	}
+	want := []parameter{{Name: "R", Type: "byte"}, {Name: "G", Type: "byte"}, {Name: "B", Type: "byte"}, {Name: "A", Type: "byte"}}
+	if !reflect.DeepEqual(fields, want) {
+		return nil, fmt.Errorf("image/color.RGBA fields changed: got %v", fields)
+	}
+	return fields, nil
 }
 
 func validateLiquidFields(spec *ast.TypeSpec, name string) error {
@@ -1395,6 +1716,7 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 	output.WriteString("public sealed partial class World\n{\n")
 	output.WriteString("    public interface Block { }\n\n")
 	output.WriteString("    public interface Biome { }\n\n")
+	output.WriteString("    public interface Particle { }\n\n")
 	output.WriteString("    public interface Liquid : Block { }\n\n")
 	output.WriteString("    public sealed class SetOpts\n    {\n")
 	for _, field := range setOpts {
@@ -1462,6 +1784,9 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 			output.WriteString("            PluginBridge.Host.WorldThundering(Invocation);\n")
 		case "CurrentTick":
 			output.WriteString("            PluginBridge.Host.WorldCurrentTick(Invocation);\n")
+		case "AddParticle":
+			fmt.Fprintf(&output, "            PluginBridge.Host.AddWorldParticle(Invocation, %s, %s);\n",
+				method.Parameters[0].Name, method.Parameters[1].Name)
 		default:
 			panic("unsupported world.Tx method: " + method.Name)
 		}
@@ -1572,6 +1897,84 @@ func generateBiomes(biomes []encodedBiome) []byte {
 	output.WriteString("        private sealed record EncodedBiome(int Id) : World.Biome;\n")
 	output.WriteString("    }\n}\n")
 	return output.Bytes()
+}
+
+func generateParticles(spec particleSpec) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly particle, sound/instrument, and image/color Go AST. DO NOT EDIT.\n")
+	output.WriteString("#nullable enable\n\n")
+	output.WriteString("namespace Dragonfly\n{\n")
+	output.WriteString("    public static partial class Color\n    {\n")
+	fmt.Fprintf(&output, "        public readonly record struct RGBA(%s);\n", formatParameters(spec.RGBAFields))
+	output.WriteString("    }\n\n")
+	output.WriteString("    public static partial class Sound\n    {\n")
+	output.WriteString("        public readonly struct Instrument\n        {\n")
+	output.WriteString("            private readonly uint _id;\n")
+	output.WriteString("            internal Instrument(uint id) => _id = id;\n")
+	output.WriteString("            internal uint Id => _id;\n")
+	output.WriteString("        }\n\n")
+	for _, instrument := range spec.Instruments {
+		fmt.Fprintf(&output, "        public static Instrument %s() => new(%du);\n", instrument.Name, instrument.ID)
+	}
+	output.WriteString("    }\n\n")
+	output.WriteString("    public static partial class Particle\n    {\n")
+	for _, particle := range spec.Types {
+		if len(particle.Fields) == 0 {
+			fmt.Fprintf(&output, "        public readonly record struct %s : World.Particle;\n", particle.Name)
+			continue
+		}
+		fmt.Fprintf(&output, "        public readonly record struct %s(%s) : World.Particle;\n",
+			particle.Name, formatParameters(particle.Fields))
+	}
+	output.WriteString("    }\n\n")
+	output.WriteString("    internal readonly record struct EncodedParticle(\n")
+	output.WriteString("        uint Kind, uint Data, int Pitch, Color.RGBA Colour, Cube.Pos Diff, World.Block? Block);\n\n")
+	output.WriteString("    internal static class ParticleCodec\n    {\n")
+	output.WriteString("        internal static bool TryEncode(World.Particle particle, out EncodedParticle encoded)\n        {\n")
+	output.WriteString("            switch (particle)\n            {\n")
+	for _, particle := range spec.Types {
+		binding := "_"
+		if len(particle.Fields) != 0 {
+			binding = "value"
+		}
+		fmt.Fprintf(&output, "                case Particle.%s %s:\n", particle.Name, binding)
+		fmt.Fprintf(&output, "                    encoded = new(%du, %s); return true;\n", particle.Kind, particleEncodedArguments(particle))
+	}
+	output.WriteString("                default:\n                    encoded = default; return false;\n")
+	output.WriteString("            }\n        }\n    }\n}\n")
+	return output.Bytes()
+}
+
+func particleEncodedArguments(particle particleType) string {
+	values := map[string]string{
+		"data":   "0u",
+		"pitch":  "0",
+		"colour": "default",
+		"diff":   "default",
+		"block":  "null",
+	}
+	for _, field := range particle.Fields {
+		expression := "value." + field.Name
+		switch field.Type {
+		case "bool":
+			values["data"] = expression + " ? 1u : 0u"
+		case "int":
+			values["pitch"] = expression
+		case "Color.RGBA":
+			values["colour"] = expression
+		case "Cube.Face":
+			values["data"] = "(uint)" + expression
+		case "Cube.Pos":
+			values["diff"] = expression
+		case "Sound.Instrument":
+			values["data"] = expression + ".Id"
+		case "World.Block":
+			values["block"] = expression
+		default:
+			panic("unsupported particle field type: " + field.Type)
+		}
+	}
+	return strings.Join([]string{values["data"], values["pitch"], values["colour"], values["diff"], values["block"]}, ", ")
 }
 
 func csharpBytes(value []byte) string {

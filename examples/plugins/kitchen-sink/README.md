@@ -14,6 +14,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - all 88 generated vanilla biome types plus biome, temperature, and weather queries in
   `/kitchen biome`;
 - transaction-owned `CurrentTick` in `/kitchen tick`;
+- all 20 generated particle types and all 16 typed note instruments in `/kitchen particle`;
 - plugin lifecycle.
 
 New APIs belong here only when the example can do something real with them. This plugin is not a

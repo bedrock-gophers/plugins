@@ -11,7 +11,7 @@ import (
 )
 
 func (m *WorldManager) AddWorldParticle(invocation native.InvocationID, id native.WorldID, position native.Vec3, value native.WorldParticle) bool {
-	entry, ok := m.entryByHandle(id)
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok || !finiteVec3(position) || !validParticle(value) {
 		return false
 	}
@@ -20,10 +20,12 @@ func (m *WorldManager) AddWorldParticle(invocation native.InvocationID, id nativ
 	if entry.closed {
 		return false
 	}
+	decoded, ok := decodeParticle(entry.world.BlockRegistry(), value)
+	if !ok {
+		return false
+	}
 	return m.writeTx(invocation, entry, func(tx *world.Tx) {
-		if decoded, ok := decodeParticle(tx, value); ok {
-			tx.AddParticle(vec3(position), decoded)
-		}
+		tx.AddParticle(vec3(position), decoded)
 	})
 }
 
@@ -54,7 +56,7 @@ func validParticleBlock(value *native.WorldBlock) bool {
 	return ok
 }
 
-func decodeParticle(tx *world.Tx, value native.WorldParticle) (world.Particle, bool) {
+func decodeParticle(registry world.BlockRegistry, value native.WorldParticle) (world.Particle, bool) {
 	colour := color.RGBA{R: value.Colour.R, G: value.Colour.G, B: value.Colour.B, A: value.Colour.A}
 	switch value.Kind {
 	case native.ParticleFlame:
@@ -62,10 +64,10 @@ func decodeParticle(tx *world.Tx, value native.WorldParticle) (world.Particle, b
 	case native.ParticleDust:
 		return particle.Dust{Colour: colour}, true
 	case native.ParticleBlockBreak:
-		block, ok := particleBlock(tx, value.Block)
+		block, ok := particleBlock(registry, value.Block)
 		return particle.BlockBreak{Block: block}, ok
 	case native.ParticlePunchBlock:
-		block, ok := particleBlock(tx, value.Block)
+		block, ok := particleBlock(registry, value.Block)
 		if !ok || value.Data > uint32(cube.FaceEast) {
 			return nil, false
 		}
@@ -114,7 +116,7 @@ func decodeParticle(tx *world.Tx, value native.WorldParticle) (world.Particle, b
 	}
 }
 
-func particleBlock(tx *world.Tx, value *native.WorldBlock) (world.Block, bool) {
+func particleBlock(registry world.BlockRegistry, value *native.WorldBlock) (world.Block, bool) {
 	if value == nil {
 		return nil, false
 	}
@@ -122,7 +124,7 @@ func particleBlock(tx *world.Tx, value *native.WorldBlock) (world.Block, bool) {
 	if !ok {
 		return nil, false
 	}
-	return tx.World().BlockRegistry().BlockByName(value.Identifier, properties)
+	return registry.BlockByName(value.Identifier, properties)
 }
 
 func particleInstrument(value uint32) (sound.Instrument, bool) {

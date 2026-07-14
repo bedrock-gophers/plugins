@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -174,7 +177,8 @@ func (tx *Tx) SnowingAt(pos cube.Pos) bool { return false }
 func (tx *Tx) ThunderingAt(pos cube.Pos) bool { return false }
 func (tx *Tx) Raining() bool { return false }
 func (tx *Tx) Thundering() bool { return false }
-func (tx *Tx) CurrentTick() int64 { return 0 }`
+func (tx *Tx) CurrentTick() int64 { return 0 }
+func (tx *Tx) AddParticle(pos mgl64.Vec3, p Particle) {}`
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -212,6 +216,9 @@ func (tx *Tx) CurrentTick() int64 { return 0 }`
 		"public bool Thundering()",
 		"public long CurrentTick()",
 		"PluginBridge.Host.WorldCurrentTick(Invocation)",
+		"public interface Particle { }",
+		"public void AddParticle(Vector3 pos, Particle p)",
+		"PluginBridge.Host.AddWorldParticle(Invocation, pos, p)",
 		"public bool DisableRedstoneUpdates;",
 	} {
 		if !strings.Contains(worldOutput, expected) {
@@ -277,6 +284,42 @@ func (tx *Tx) CurrentTick() int64 { return 0 }`
 		if !strings.Contains(biomeOutput, expected) {
 			t.Fatalf("generated biome output missing %q:\n%s", expected, biomeOutput)
 		}
+	}
+
+	particleOutput := string(generateParticles(particleSpec{
+		Types: []particleType{
+			{Name: "Flame", Kind: 0, Fields: []parameter{{Name: "Colour", Type: "Color.RGBA"}}},
+			{Name: "PunchBlock", Kind: 3, Fields: []parameter{{Name: "Block", Type: "World.Block"}, {Name: "Face", Type: "Cube.Face"}}},
+			{Name: "Note", Kind: 6, Fields: []parameter{{Name: "Instrument", Type: "Sound.Instrument"}, {Name: "Pitch", Type: "int"}}},
+			{Name: "DragonEggTeleport", Kind: 7, Fields: []parameter{{Name: "Diff", Type: "Cube.Pos"}}},
+			{Name: "EntityFlame", Kind: 19},
+		},
+		Instruments: []instrumentSpec{{Name: "Piano", ID: 0}, {Name: "Pling", ID: 15}},
+		RGBAFields:  []parameter{{Name: "R", Type: "byte"}, {Name: "G", Type: "byte"}, {Name: "B", Type: "byte"}, {Name: "A", Type: "byte"}},
+	}))
+	for _, expected := range []string{
+		"public readonly record struct RGBA(byte R, byte G, byte B, byte A);",
+		"public readonly struct Instrument",
+		"private readonly uint _id;",
+		"public static Instrument Piano() => new(0u);",
+		"public static Instrument Pling() => new(15u);",
+		"public readonly record struct Flame(Color.RGBA Colour) : World.Particle;",
+		"public readonly record struct PunchBlock(World.Block Block, Cube.Face Face) : World.Particle;",
+		"public readonly record struct Note(Sound.Instrument Instrument, int Pitch) : World.Particle;",
+		"public readonly record struct DragonEggTeleport(Cube.Pos Diff) : World.Particle;",
+		"public readonly record struct EntityFlame : World.Particle;",
+		"internal readonly record struct EncodedParticle(",
+		"case Particle.PunchBlock value:",
+		"encoded = new(3u, (uint)value.Face, 0, default, default, value.Block); return true;",
+		"encoded = new(6u, value.Instrument.Id, value.Pitch, default, default, null); return true;",
+		"internal static class ParticleCodec",
+	} {
+		if !strings.Contains(particleOutput, expected) {
+			t.Fatalf("generated particle output missing %q:\n%s", expected, particleOutput)
+		}
+	}
+	if strings.Contains(particleOutput, "public uint Kind") || strings.Contains(particleOutput, "public uint Id") || strings.Contains(particleOutput, "minecraft:") {
+		t.Fatalf("particle transport leaks into public API:\n%s", particleOutput)
 	}
 }
 
@@ -407,6 +450,109 @@ func TestInspectBiomesUsesASTAndRegistry(t *testing.T) {
 	}
 	if !foundPlains {
 		t.Fatal("Plains biome was not generated")
+	}
+}
+
+func TestInspectParticlesUsesCompleteASTSurface(t *testing.T) {
+	command := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/df-mc/dragonfly")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := string(bytes.TrimSpace(output))
+	spec, err := inspectParticles(
+		filepath.Join(directory, "server", "world", "particle"),
+		filepath.Join(directory, "server", "world", "sound", "instrument.go"),
+		filepath.Join(runtime.GOROOT(), "src", "image", "color", "color.go"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Types) != 20 || len(spec.Types) != len(particleKindNames) {
+		t.Fatalf("generated %d particle types", len(spec.Types))
+	}
+	for index, particle := range spec.Types {
+		if particle.Name != particleKindNames[index] || particle.Kind != uint32(index) {
+			t.Fatalf("particle %d = %+v", index, particle)
+		}
+	}
+	if len(spec.Instruments) != 16 || len(spec.Instruments) != len(instrumentNames) {
+		t.Fatalf("generated %d instruments", len(spec.Instruments))
+	}
+	for index, instrument := range spec.Instruments {
+		if instrument.Name != instrumentNames[index] || instrument.ID != uint32(index) {
+			t.Fatalf("instrument %d = %+v", index, instrument)
+		}
+	}
+	if !reflect.DeepEqual(spec.RGBAFields, []parameter{{Name: "R", Type: "byte"}, {Name: "G", Type: "byte"}, {Name: "B", Type: "byte"}, {Name: "A", Type: "byte"}}) {
+		t.Fatalf("RGBA fields = %+v", spec.RGBAFields)
+	}
+	generated := string(generateParticles(spec))
+	if got := strings.Count(generated, ": World.Particle;"); got != 20 {
+		t.Fatalf("generated output contains %d particle records", got)
+	}
+	for _, name := range particleKindNames {
+		if !strings.Contains(generated, "record struct "+name) {
+			t.Fatalf("generated output missing particle.%s", name)
+		}
+	}
+}
+
+func TestInspectParticlesRejectsFieldDrift(t *testing.T) {
+	directory := t.TempDir()
+	var source strings.Builder
+	source.WriteString("package particle\ntype particle struct{}\n")
+	for _, name := range particleKindNames {
+		if name == "Flame" {
+			source.WriteString("type Flame struct { particle; colour color.RGBA }\n")
+		} else {
+			fmt.Fprintf(&source, "type %s struct { particle }\n", name)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(directory, "particle.go"), []byte(source.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := inspectParticles(directory, "unused", "unused")
+	if err == nil || !strings.Contains(err.Error(), "field colour is not exported") {
+		t.Fatalf("expected particle field drift error, got %v", err)
+	}
+}
+
+func TestInspectInstrumentsRejectsASTDrift(t *testing.T) {
+	var source strings.Builder
+	source.WriteString("package sound\ntype Instrument struct { instrument }\ntype instrument int32\n")
+	for id, name := range instrumentNames {
+		if name == "Pling" {
+			id++
+		}
+		fmt.Fprintf(&source, "func %s() Instrument { return Instrument{%d} }\n", name, id)
+	}
+	path := filepath.Join(t.TempDir(), "instrument.go")
+	if err := os.WriteFile(path, []byte(source.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := inspectInstruments(path)
+	if err == nil || !strings.Contains(err.Error(), "sound.Pling is not Instrument{15}") {
+		t.Fatalf("expected instrument ID drift error, got %v", err)
+	}
+}
+
+func TestInspectWorldTxRejectsAddParticleDrift(t *testing.T) {
+	for name, declaration := range map[string]string{
+		"position name": "func (tx *Tx) AddParticle(position mgl64.Vec3, p Particle) {}",
+		"position type": "func (tx *Tx) AddParticle(pos cube.Pos, p Particle) {}",
+		"particle type": "func (tx *Tx) AddParticle(pos mgl64.Vec3, p Block) {}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "tx.go")
+			if err := os.WriteFile(path, []byte("package world\n"+declaration), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := inspectWorldTx(path)
+			if err == nil || !strings.Contains(err.Error(), "world.Tx.AddParticle: signature changed") {
+				t.Fatalf("expected AddParticle signature drift error, got %v", err)
+			}
+		})
 	}
 }
 

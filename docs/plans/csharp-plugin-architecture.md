@@ -33,6 +33,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    block types, `Block.Sand`, `Block.Water`, and `Block.Lava`. The biome slice adds
    `World.Biome`, all 88 registered vanilla biome types, `SetBiome`, `Biome`, `Temperature`,
    `RainingAt`, `SnowingAt`, `ThunderingAt`, `Raining`, `Thundering`, and `CurrentTick`.
+   The particle slice adds `World.Particle`, `World.Tx.AddParticle`, all 20 concrete Dragonfly
+   particle types, `Color.RGBA`, and all 16 `Sound.Instrument` constructors. Their exported shapes
+   and instrument values are AST-validated; particle kinds and payload layout remain private.
    Transaction method signatures and parameter names come from Dragonfly's `world.Tx` Go AST;
    `BlockLoaded` preserves Dragonfly's non-loading query through a C# tuple. `BlocksWithin` maps
    `iter.Seq[cube.Pos]` to lazy `IEnumerable<Cube.Pos>` backed by a transaction-scoped native
@@ -42,14 +45,15 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    plugins never handle identifiers, NBT, numeric biome IDs, world handles, iterator handles, or
    host errors. `Liquid` preserves Dragonfly's `(Liquid, bool)` result, and passing `null` to
    `SetLiquid` removes the liquid. Host
-   ABI 27 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs, and
-   the transaction owner's current tick without exposing them publicly. `ScheduleBlockUpdate`
+   ABI 27 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
+   particles, and the transaction owner's current tick without exposing them publicly.
+   `ScheduleBlockUpdate`
    maps Go `time.Duration` to C# `TimeSpan`
    and preserves the transaction-owned call. `BuildStructure` remains absent until its synchronous `At` and
    `blockAt` callbacks can be implemented without materialising or changing Dragonfly semantics.
    Remaining stateful blocks, structures, world methods, custom blocks, and block models land
    incrementally.
-5. Items, forms, entities, particles, sounds, and remaining world/block methods.
+5. Items, forms, entities, remaining sounds, and remaining world/block methods.
 6. Convert practice-core and expand parity tests against Dragonfly.
 
 Each slice removes the replaced legacy implementation. Unsupported API remains absent rather than gaining a parallel abstraction.
@@ -67,6 +71,8 @@ It also leaves typed water present and schedules its update with an exact 250 ms
 Its separate `/kitchen biome` overload changes and restores a typed biome while exercising every
 temperature and weather query in this slice.
 `/kitchen tick` reads Dragonfly's transaction-owned current tick; it does not alias world day-time.
+`/kitchen particle` emits all 20 particle types and exercises every one of Dragonfly's 16 note
+instruments through the transaction-owned `AddParticle` call.
 NativeAOT and host-call tests verify the public shape, lazy iterator cleanup, and transaction-safe
 transport.
 

@@ -49,8 +49,9 @@ World callbacks now carry Dragonfly-shaped transactions. `Player.Context` inheri
 `World.Block`, `World.Liquid`, `World.Biome`, `World.SetOpts`, and the current `World.Tx` block and
 biome surface are generated from Dragonfly source. This includes `Range`, `Block`, `BlockLoaded`,
 `Liquid`, `SetLiquid`, `ScheduleBlockUpdate`, `HighestLightBlocker`, `HighestBlock`, `Light`, and
-`SkyLight`, `CurrentTick`, plus 79 stateless concrete block types, `Block.Sand`, `Block.Water`,
-`Block.Lava`, and all 88 registered vanilla biome types:
+`SkyLight`, `CurrentTick`, `AddParticle`, plus 79 stateless concrete block types, `Block.Sand`,
+`Block.Water`, `Block.Lava`, all 88 registered vanilla biome types, and all 20 Dragonfly particle
+types with typed colours, blocks, faces, positions, and note instruments:
 
 ```csharp
 var pos = Cube.PosFromVec3(source.Position()).Side(Cube.Face.Down);
@@ -71,13 +72,16 @@ var temperature = tx.Temperature(pos);
 var rainingHere = tx.RainingAt(pos);
 tx.SetBiome(pos, previousBiome);
 var tick = tx.CurrentTick();
+tx.AddParticle(source.Position(), new Particle.Flame(new Color.RGBA(255, 96, 32, 255)));
+tx.AddParticle(source.Position(), new Particle.Note(Sound.Piano(), 12));
 ```
 
 `BlocksWithin` stays lazy across the private ABI: each C# enumerator owns a transaction-scoped
 Dragonfly iterator and closes it on exhaustion, early exit, or callback completion.
 
-Public block, liquid, and biome types come from Dragonfly's Go AST. Their live registries feed
-internal generated codecs, so Minecraft identifiers, state NBT, and numeric biome IDs never enter
-plugin code. Private host ABI 27 preserves the separate “no liquid” result, nullable liquid
-removal, signed nanosecond scheduling delays, and biome/weather transaction queries. World handles
-and ABI errors also remain private transport details.
+Public block, liquid, biome, particle, colour, and instrument types come from Dragonfly's Go AST.
+Live registries feed internal generated codecs, so Minecraft identifiers, state NBT, numeric biome
+IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 27 preserves the
+separate “no liquid” result, nullable liquid removal, signed nanosecond scheduling delays,
+biome/weather queries, and particle payloads. World handles and ABI errors also remain private
+transport details.

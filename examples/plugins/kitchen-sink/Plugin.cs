@@ -27,7 +27,8 @@ public sealed class KitchenSink : Plugin
             new KitchenText(),
             new KitchenBlock(),
             new KitchenBiome(),
-            new KitchenTick()));
+            new KitchenTick(),
+            new KitchenParticle()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -326,6 +327,61 @@ public sealed class KitchenSink : Plugin
                 return;
             }
             output.Printf("tick={0}", tx.CurrentTick());
+        }
+    }
+
+    internal sealed class KitchenParticle : Cmd.Runnable
+    {
+        public Cmd.SubCommand Particle;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (tx is null)
+            {
+                output.Error("A world transaction is required.");
+                return;
+            }
+            World.Particle[] particles =
+            [
+                new Particle.Flame(new Color.RGBA(1, 2, 3, 4)),
+                new Particle.Dust(new Color.RGBA(5, 6, 7, 8)),
+                new Particle.BlockBreak(new Block.Sand()),
+                new Particle.PunchBlock(new Block.Sand(), Cube.Face.East),
+                new Particle.BlockForceField(),
+                new Particle.BoneMeal(true),
+                new Particle.Note(Sound.Piano(), 24),
+                new Particle.Note(Sound.BassDrum(), 24),
+                new Particle.Note(Sound.Snare(), 24),
+                new Particle.Note(Sound.ClicksAndSticks(), 24),
+                new Particle.Note(Sound.Bass(), 24),
+                new Particle.Note(Sound.Flute(), 24),
+                new Particle.Note(Sound.Bell(), 24),
+                new Particle.Note(Sound.Guitar(), 24),
+                new Particle.Note(Sound.Chimes(), 24),
+                new Particle.Note(Sound.Xylophone(), 24),
+                new Particle.Note(Sound.IronXylophone(), 24),
+                new Particle.Note(Sound.CowBell(), 24),
+                new Particle.Note(Sound.Didgeridoo(), 24),
+                new Particle.Note(Sound.Bit(), 24),
+                new Particle.Note(Sound.Banjo(), 24),
+                new Particle.Note(Sound.Pling(), 24),
+                new Particle.DragonEggTeleport(new Cube.Pos(-3, 4, 5)),
+                new Particle.Evaporate(),
+                new Particle.WaterDrip(),
+                new Particle.LavaDrip(),
+                new Particle.Lava(),
+                new Particle.DustPlume(),
+                new Particle.HugeExplosion(),
+                new Particle.EndermanTeleport(),
+                new Particle.SnowballPoof(),
+                new Particle.EggSmash(),
+                new Particle.Splash(new Color.RGBA(9, 10, 11, 12)),
+                new Particle.Effect(new Color.RGBA(13, 14, 15, 16)),
+                new Particle.EntityFlame(),
+            ];
+            foreach (var particle in particles)
+                tx.AddParticle(source.Position(), particle);
+            output.Printf("particles={0}", particles.Length);
         }
     }
 }

@@ -3,6 +3,7 @@ package native
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"sync"
@@ -141,6 +142,7 @@ type csharpWorldHost struct {
 	worldCurrentTickInvocation InvocationID
 	worldCurrentTickWorld      WorldID
 	worldCurrentTickCalls      int
+	worldParticles             []csharpWorldParticleCall
 }
 
 type csharpWorldQueryCall struct {
@@ -169,6 +171,13 @@ type csharpWorldBlockUpdateCall struct {
 type csharpWorldBiomeSetCall struct {
 	csharpWorldQueryCall
 	biome int32
+}
+
+type csharpWorldParticleCall struct {
+	invocation InvocationID
+	world      WorldID
+	position   Vec3
+	particle   WorldParticle
 }
 
 func (h *csharpWorldHost) WorldRange(invocation InvocationID, world WorldID) (BlockRange, bool) {
@@ -332,6 +341,21 @@ func (h *csharpWorldHost) WorldCurrentTick(invocation InvocationID, world WorldI
 	return h.worldCurrentTick, true
 }
 
+func (h *csharpWorldHost) AddWorldParticle(invocation InvocationID, world WorldID, position Vec3, particle WorldParticle) bool {
+	if particle.Block != nil {
+		block := *particle.Block
+		block.PropertiesNBT = append([]byte(nil), block.PropertiesNBT...)
+		particle.Block = &block
+	}
+	h.worldParticles = append(h.worldParticles, csharpWorldParticleCall{
+		invocation: invocation,
+		world:      world,
+		position:   position,
+		particle:   particle,
+	})
+	return true
+}
+
 func TestCSharpReflectedCommands(t *testing.T) {
 	host := &csharpWorldHost{
 		recordingHost:      &recordingHost{},
@@ -362,7 +386,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 10 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 11 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -580,6 +604,51 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	if host.worldCurrentTickCalls != 1 || host.worldCurrentTickInvocation != 42 || host.worldCurrentTickWorld != 0 {
 		t.Fatalf("current tick host calls: calls=%d invocation=%d world=%d",
 			host.worldCurrentTickCalls, host.worldCurrentTickInvocation, host.worldCurrentTickWorld)
+	}
+
+	input = base
+	input.Overload = 10
+	input.Arguments = []string{"particle"}
+	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
+	if err != nil || output.Failed || output.Message != "particles=35" {
+		t.Fatalf("particle output=%#v error=%v", output, err)
+	}
+	if len(host.worldParticles) != 35 {
+		t.Fatalf("particle host calls=%d, want 35", len(host.worldParticles))
+	}
+	sand := WorldBlock{Identifier: "minecraft:sand", PropertiesNBT: properties}
+	wantParticles := []WorldParticle{
+		{Kind: ParticleFlame, Colour: RGBA{R: 1, G: 2, B: 3, A: 4}},
+		{Kind: ParticleDust, Colour: RGBA{R: 5, G: 6, B: 7, A: 8}},
+		{Kind: ParticleBlockBreak, Block: &sand},
+		{Kind: ParticlePunchBlock, Data: 5, Block: &sand},
+		{Kind: ParticleBlockForceField},
+		{Kind: ParticleBoneMeal, Data: 1},
+	}
+	for instrument := range 16 {
+		wantParticles = append(wantParticles, WorldParticle{Kind: ParticleNote, Data: uint32(instrument), Pitch: 24})
+	}
+	wantParticles = append(wantParticles,
+		WorldParticle{Kind: ParticleDragonEggTeleport, Diff: BlockPos{X: -3, Y: 4, Z: 5}},
+		WorldParticle{Kind: ParticleEvaporate},
+		WorldParticle{Kind: ParticleWaterDrip},
+		WorldParticle{Kind: ParticleLavaDrip},
+		WorldParticle{Kind: ParticleLava},
+		WorldParticle{Kind: ParticleDustPlume},
+		WorldParticle{Kind: ParticleHugeExplosion},
+		WorldParticle{Kind: ParticleEndermanTeleport},
+		WorldParticle{Kind: ParticleSnowballPoof},
+		WorldParticle{Kind: ParticleEggSmash},
+		WorldParticle{Kind: ParticleSplash, Colour: RGBA{R: 9, G: 10, B: 11, A: 12}},
+		WorldParticle{Kind: ParticleEffect, Colour: RGBA{R: 13, G: 14, B: 15, A: 16}},
+		WorldParticle{Kind: ParticleEntityFlame},
+	)
+	for index, call := range host.worldParticles {
+		if call.invocation != 42 || call.world != 0 || call.position != base.SourcePosition ||
+			!reflect.DeepEqual(call.particle, wantParticles[index]) {
+			t.Fatalf("particle call %d=%+v, want invocation=42 world=0 position=%+v particle=%+v",
+				index, call, base.SourcePosition, wantParticles[index])
+		}
 	}
 
 	options, err := pluginRuntime.CommandEnumOptions(kitchen.Index, 5, 1, CommandEnumContext{

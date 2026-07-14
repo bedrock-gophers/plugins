@@ -148,7 +148,7 @@ public unsafe struct HostApi
     public void* EntityVelocitySet;
     public void* EntityNameTagSet;
     public void* EntityDespawn;
-    public void* WorldParticleAdd;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, Vec3, ParticleView*, int> WorldParticleAdd;
     public void* WorldSoundPlay;
     public void* PlayerSoundPlay;
     public void* PlayerHeal;
@@ -250,6 +250,26 @@ public unsafe struct BlockView
 {
     public StringView Identifier;
     public StringView PropertiesNbt;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct Rgba
+{
+    public byte R;
+    public byte G;
+    public byte B;
+    public byte A;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct ParticleView
+{
+    public uint Kind;
+    public uint Data;
+    public int Pitch;
+    public Rgba Colour;
+    public BlockPos Diff;
+    public BlockView* Block;
 }
 
 [StructLayout(LayoutKind.Sequential)]

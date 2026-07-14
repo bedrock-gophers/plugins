@@ -10,6 +10,8 @@ public sealed partial class World
 
     public interface Biome { }
 
+    public interface Particle { }
+
     public interface Liquid : Block { }
 
     public sealed class SetOpts
@@ -83,5 +85,8 @@ public sealed partial class World
 
         public long CurrentTick() =>
             PluginBridge.Host.WorldCurrentTick(Invocation);
+
+        public void AddParticle(Vector3 pos, Particle p) =>
+            PluginBridge.Host.AddWorldParticle(Invocation, pos, p);
     }
 }
