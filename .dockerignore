@@ -1,0 +1,8 @@
+.cache
+.build
+.data
+.git
+lib
+**/bin
+**/obj
+plugins/*.so

@@ -1,5 +1,8 @@
 /.cache/
+/.build/
 /.data/
+**/bin/
+**/obj/
 /lib/
 /plugins/*.so
 /plugins/*.dylib

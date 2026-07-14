@@ -1,0 +1,12 @@
+services:
+  server:
+    build: .
+    init: true
+    ports:
+      - "19132:19132/udp"
+    restart: unless-stopped
+    volumes:
+      - data:/app/.data
+
+volumes:
+  data:

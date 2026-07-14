@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DragonflyFrameworkRoot Condition="'$(DragonflyFrameworkRoot)' == ''">$(MSBuildThisFileDirectory)../.cache/bedrock-gophers</DragonflyFrameworkRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(DragonflyFrameworkRoot)/csharp/Dragonfly/Dragonfly.csproj" />
+    <ProjectReference Include="$(DragonflyFrameworkRoot)/csharp/Dragonfly.Generator/Dragonfly.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

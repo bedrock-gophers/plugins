@@ -7,7 +7,7 @@
 [dragonfly]
 
   [dragonfly.Network]
-    Address = "127.0.0.1:19132"
+    Address = ":19132"
 
   [dragonfly.Server]
     Name = "Minimal Bedrock Gophers"
