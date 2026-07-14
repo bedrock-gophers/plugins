@@ -14,9 +14,11 @@ Every C# project under `plugins/*/` is discovered automatically. Adding another 
 requires a `.csproj` and its C# source.
 
 The kitchen-sink plugin includes `/kitchen block`, demonstrating generated `World.Tx` range,
-loaded-block, lazy block-search, height/light, and typed block APIs. Compatible precompiled `.so`
-plugins remain supported by the loader; because the source build clears `plugins/*.so`, stage
-binary-only plugins after `make build` and start `.build/bin/server` directly.
+loaded-block, lazy block-search, height/light, typed block, and typed liquid APIs. It probes an
+empty liquid result, places/reads `Block.Water`, then removes it with `SetLiquid(pos, null)`.
+Compatible precompiled `.so` plugins remain supported by the loader; because the source build
+clears `plugins/*.so`, stage binary-only plugins after `make build` and start `.build/bin/server`
+directly.
 
 ## Docker
 
