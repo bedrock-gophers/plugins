@@ -12,7 +12,24 @@ public sealed partial class Player
         void HandleToggleSneak(Player.Context ctx, bool after);
         void HandleChat(Player.Context ctx, ref string message);
         void HandleFoodLoss(Player.Context ctx, int from, ref int to);
+        void HandleFireExtinguish(Player.Context ctx, Cube.Pos pos);
+        void HandleStartBreak(Player.Context ctx, Cube.Pos pos);
+        void HandleBlockBreak(Player.Context ctx, Cube.Pos pos, ref Item.Stack[] drops, ref int xp);
+        void HandleBlockPlace(Player.Context ctx, Cube.Pos pos, World.Block b);
+        void HandleBlockPick(Player.Context ctx, Cube.Pos pos, World.Block b);
+        void HandleItemUse(Player.Context ctx);
+        void HandleItemUseOnBlock(Player.Context ctx, Cube.Pos pos, Cube.Face face, Vector3 clickPos);
+        void HandleItemRelease(Player.Context ctx, Item.Stack item, TimeSpan dur);
+        void HandleItemConsume(Player.Context ctx, Item.Stack item);
+        void HandleExperienceGain(Player.Context ctx, ref int amount);
         void HandlePunchAir(Player.Context ctx);
+        void HandleSignEdit(Player.Context ctx, Cube.Pos pos, bool frontSide, string oldText, string newText);
+        void HandleSleep(Player.Context ctx, ref bool sendReminder);
+        void HandleLecternPageTurn(Player.Context ctx, Cube.Pos pos, int oldPage, ref int newPage);
+        void HandleItemDamage(Player.Context ctx, Item.Stack i, ref int damage);
+        void HandleItemPickup(Player.Context ctx, ref Item.Stack i);
+        void HandleHeldSlotChange(Player.Context ctx, int from, int to);
+        void HandleItemDrop(Player.Context ctx, Item.Stack s);
         void HandleQuit(Player p);
     }
 }
@@ -33,8 +50,42 @@ public abstract partial class Plugin
     public virtual void HandleChat(Player.Context ctx, ref string message) { }
     [HandlerSubscription(256UL)]
     public virtual void HandleFoodLoss(Player.Context ctx, int from, ref int to) { }
+    [HandlerSubscription(2048UL)]
+    public virtual void HandleFireExtinguish(Player.Context ctx, Cube.Pos pos) { }
+    [HandlerSubscription(1024UL)]
+    public virtual void HandleStartBreak(Player.Context ctx, Cube.Pos pos) { }
+    [HandlerSubscription(64UL)]
+    public virtual void HandleBlockBreak(Player.Context ctx, Cube.Pos pos, ref Item.Stack[] drops, ref int xp) { }
+    [HandlerSubscription(128UL)]
+    public virtual void HandleBlockPlace(Player.Context ctx, Cube.Pos pos, World.Block b) { }
+    [HandlerSubscription(1048576UL)]
+    public virtual void HandleBlockPick(Player.Context ctx, Cube.Pos pos, World.Block b) { }
+    [HandlerSubscription(8388608UL)]
+    public virtual void HandleItemUse(Player.Context ctx) { }
+    [HandlerSubscription(16777216UL)]
+    public virtual void HandleItemUseOnBlock(Player.Context ctx, Cube.Pos pos, Cube.Face face, Vector3 clickPos) { }
+    [HandlerSubscription(67108864UL)]
+    public virtual void HandleItemRelease(Player.Context ctx, Item.Stack item, TimeSpan dur) { }
+    [HandlerSubscription(33554432UL)]
+    public virtual void HandleItemConsume(Player.Context ctx, Item.Stack item) { }
+    [HandlerSubscription(65536UL)]
+    public virtual void HandleExperienceGain(Player.Context ctx, ref int amount) { }
     [HandlerSubscription(131072UL)]
     public virtual void HandlePunchAir(Player.Context ctx) { }
+    [HandlerSubscription(4194304UL)]
+    public virtual void HandleSignEdit(Player.Context ctx, Cube.Pos pos, bool frontSide, string oldText, string newText) { }
+    [HandlerSubscription(524288UL)]
+    public virtual void HandleSleep(Player.Context ctx, ref bool sendReminder) { }
+    [HandlerSubscription(2097152UL)]
+    public virtual void HandleLecternPageTurn(Player.Context ctx, Cube.Pos pos, int oldPage, ref int newPage) { }
+    [HandlerSubscription(134217728UL)]
+    public virtual void HandleItemDamage(Player.Context ctx, Item.Stack i, ref int damage) { }
+    [HandlerSubscription(137438953472UL)]
+    public virtual void HandleItemPickup(Player.Context ctx, ref Item.Stack i) { }
+    [HandlerSubscription(262144UL)]
+    public virtual void HandleHeldSlotChange(Player.Context ctx, int from, int to) { }
+    [HandlerSubscription(268435456UL)]
+    public virtual void HandleItemDrop(Player.Context ctx, Item.Stack s) { }
     [HandlerSubscription(8UL)]
     public virtual void HandleQuit(Player p) { }
 }

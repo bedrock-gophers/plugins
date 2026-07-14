@@ -229,6 +229,60 @@ internal static unsafe class PluginBridge
             }
         }
 
+        internal static Item.Stack EventItem(ItemStackViewV3 item)
+        {
+            const ulong maxData = 16UL << 20;
+            if (item.Identifier.Length > 256 || item.CustomName.Length > 4096 ||
+                item.LoreCount > 256 || item.EnchantmentCount > 256 || item.Count > int.MaxValue ||
+                item.Nbt.Length > maxData || item.ValuesNbt.Length > maxData ||
+                item.Identifier.Length + item.CustomName.Length + item.Nbt.Length + item.ValuesNbt.Length > maxData ||
+                item.LoreCount != 0 && item.Lore is null ||
+                item.EnchantmentCount != 0 && item.Enchantments is null)
+                throw new InvalidOperationException("invalid item stack returned by server");
+            if (item.Count == 0) return default;
+
+            var identifier = Copy(item.Identifier);
+            var customName = Copy(item.CustomName);
+            var itemNbt = Copy(item.Nbt);
+            var valuesNbt = Copy(item.ValuesNbt);
+            var lore = new string[checked((int)item.LoreCount)];
+            ulong total = item.Identifier.Length + item.CustomName.Length + item.Nbt.Length + item.ValuesNbt.Length;
+            for (var index = 0; index < lore.Length; index++)
+            {
+                var line = item.Lore[index];
+                if (line.Length > 4096 || total > maxData - line.Length)
+                    throw new InvalidOperationException("invalid item stack returned by server");
+                total += line.Length;
+                lore[index] = Encoding.UTF8.GetString(Copy(line));
+            }
+            var enchantments = item.EnchantmentCount == 0
+                ? Array.Empty<ItemEnchantment>()
+                : new ReadOnlySpan<ItemEnchantment>(
+                    item.Enchantments,
+                    checked((int)item.EnchantmentCount)).ToArray();
+            var decoded = ItemCodec.Decode(Encoding.UTF8.GetString(identifier), item.Metadata);
+            decoded = ItemNbtCodec.Decode(decoded, itemNbt, out var itemNbtConsumed);
+            return new Item.Stack(
+                decoded,
+                checked((int)item.Count),
+                item.Damage,
+                item.Unbreakable != 0,
+                item.AnvilCost,
+                Encoding.UTF8.GetString(customName),
+                lore,
+                itemNbtConsumed ? null : itemNbt,
+                valuesNbt,
+                enchantments);
+        }
+
+        private static byte[] Copy(StringView value)
+        {
+            if (value.Length == 0) return Array.Empty<byte>();
+            if (value.Data is null || value.Length > int.MaxValue)
+                throw new InvalidOperationException("invalid data returned by server");
+            return new ReadOnlySpan<byte>(value.Data, checked((int)value.Length)).ToArray();
+        }
+
         internal static void SetInventoryItem(ulong invocation, InventoryId inventory, int slot, Item.Stack item)
         {
             var api = Api;
@@ -353,7 +407,7 @@ internal static unsafe class PluginBridge
             Capacity = (ulong)length,
         };
 
-        private sealed class ItemViewLease : IDisposable
+        internal sealed class ItemViewLease : IDisposable
         {
             private readonly List<nint> _allocations = [];
             internal ItemStackViewV3 View;
@@ -1301,6 +1355,7 @@ internal static unsafe class PluginBridge
     {
         try
         {
+            if (instance is null || input is null || state is null) return Abi.Error;
             var plugin = Get(instance);
             switch (eventId)
             {
@@ -1308,7 +1363,9 @@ internal static unsafe class PluginBridge
                 {
                     var value = (PlayerChatInput*)input;
                     var result = (PlayerChatState*)state;
-                    var original = Utf8(value->Message);
+                    var original = result->HasReplacement != 0
+                        ? Utf8(result->Replacement)
+                        : Utf8(value->Message);
                     var message = original;
                     var context = Event(value->Player, result->Cancelled, value->Invocation);
                     plugin.HandleChat(context, ref message);
@@ -1318,6 +1375,69 @@ internal static unsafe class PluginBridge
                         if (!WriteExact(&result->Replacement, message)) return Abi.Error;
                         result->HasReplacement = 1;
                     }
+                    return Abi.Ok;
+                }
+                case Abi.PlayerBlockBreakEvent:
+                {
+                    var value = (PlayerBlockBreakInput*)input;
+                    var result = (PlayerBlockBreakState*)state;
+                    var previousContext = result->ReplacementContext;
+                    var previousDrop = result->ReplacementDrop;
+                    var current = result->ReplacementDrop == null
+                        ? value->Drops
+                        : result->ReplacementDrops;
+                    var count = result->ReplacementDrop == null
+                        ? value->DropCount
+                        : result->ReplacementDropCount;
+                    if (count > int.MaxValue || count != 0 && current is null) return Abi.Error;
+                    var drops = new Item.Stack[checked((int)count)];
+                    for (var index = 0; index < drops.Length; index++)
+                        drops[index] = Host.EventItem(current[index]);
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    var experience = result->Experience;
+                    plugin.HandleBlockBreak(
+                        context,
+                        EventPos(value->Position),
+                        ref drops,
+                        ref experience);
+                    ArgumentNullException.ThrowIfNull(drops);
+                    var replacement = TransferEventItems(drops);
+                    result->Experience = experience;
+                    result->ReplacementDrops = replacement.Views;
+                    result->ReplacementDropCount = replacement.Count;
+                    result->ReplacementContext = replacement.Context;
+                    result->ReplacementDrop = replacement.Drop;
+                    ApplyCancellation(context, &result->Cancelled);
+                    if (previousDrop != null) previousDrop(previousContext);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerBlockPlaceEvent:
+                case Abi.PlayerBlockPickEvent:
+                {
+                    var value = (PlayerBlockInput*)input;
+                    var result = (CancellableState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    var position = EventPos(value->Position);
+                    var block = EventBlock(value->Block);
+                    if (eventId == Abi.PlayerBlockPlaceEvent)
+                        plugin.HandleBlockPlace(context, position, block);
+                    else
+                        plugin.HandleBlockPick(context, position, block);
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerStartBreakEvent:
+                case Abi.PlayerFireExtinguishEvent:
+                {
+                    var value = (PlayerBlockPositionInput*)input;
+                    var result = (CancellableState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    var position = EventPos(value->Position);
+                    if (eventId == Abi.PlayerStartBreakEvent)
+                        plugin.HandleStartBreak(context, position);
+                    else
+                        plugin.HandleFireExtinguish(context, position);
+                    ApplyCancellation(context, &result->Cancelled);
                     return Abi.Ok;
                 }
                 case Abi.PlayerFoodLossEvent:
@@ -1331,10 +1451,153 @@ internal static unsafe class PluginBridge
                     ApplyCancellation(context, &result->Cancelled);
                     return Abi.Ok;
                 }
+                case Abi.PlayerExperienceGainEvent:
+                {
+                    var value = (PlayerEventInput*)input;
+                    var result = (PlayerIntegerState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    var amount = result->Value;
+                    plugin.HandleExperienceGain(context, ref amount);
+                    result->Value = amount;
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerHeldSlotChangeEvent:
+                {
+                    var value = (PlayerHeldSlotChangeInput*)input;
+                    var result = (CancellableState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    plugin.HandleHeldSlotChange(context, value->From, value->To);
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerSleepEvent:
+                {
+                    var value = (PlayerEventInput*)input;
+                    var result = (PlayerSleepState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    var sendReminder = result->SendReminder != 0;
+                    plugin.HandleSleep(context, ref sendReminder);
+                    result->SendReminder = sendReminder ? (byte)1 : (byte)0;
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerLecternPageTurnEvent:
+                {
+                    var value = (PlayerLecternPageTurnInput*)input;
+                    var result = (PlayerLecternPageTurnState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    var newPage = result->NewPage;
+                    plugin.HandleLecternPageTurn(
+                        context,
+                        EventPos(value->Position),
+                        value->OldPage,
+                        ref newPage);
+                    result->NewPage = newPage;
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerSignEditEvent:
+                {
+                    var value = (PlayerSignEditInput*)input;
+                    var result = (CancellableState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    plugin.HandleSignEdit(
+                        context,
+                        EventPos(value->Position),
+                        value->FrontSide != 0,
+                        Utf8(value->OldText),
+                        Utf8(value->NewText));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerItemUseEvent:
+                {
+                    var value = (PlayerEventInput*)input;
+                    var result = (CancellableState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    plugin.HandleItemUse(context);
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerItemUseOnBlockEvent:
+                {
+                    var value = (PlayerItemUseOnBlockInput*)input;
+                    var result = (CancellableState*)state;
+                    if (value->Face is < 0 or > 5) return Abi.Error;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    plugin.HandleItemUseOnBlock(
+                        context,
+                        EventPos(value->Position),
+                        (Cube.Face)value->Face,
+                        new Vector3(
+                            value->ClickPosition.X,
+                            value->ClickPosition.Y,
+                            value->ClickPosition.Z));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerItemConsumeEvent:
+                case Abi.PlayerItemDropEvent:
+                {
+                    var value = (PlayerItemInput*)input;
+                    var result = (CancellableState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    var item = Host.EventItem(value->Item);
+                    if (eventId == Abi.PlayerItemConsumeEvent)
+                        plugin.HandleItemConsume(context, item);
+                    else
+                        plugin.HandleItemDrop(context, item);
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerItemReleaseEvent:
+                {
+                    var value = (PlayerItemReleaseInput*)input;
+                    var result = (CancellableState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    plugin.HandleItemRelease(
+                        context,
+                        Host.EventItem(value->Item),
+                        TimeSpan.FromTicks(value->DurationNanoseconds / 100));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerItemDamageEvent:
+                {
+                    var value = (PlayerItemInput*)input;
+                    var result = (PlayerIntegerState*)state;
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    var damage = result->Value;
+                    plugin.HandleItemDamage(context, Host.EventItem(value->Item), ref damage);
+                    result->Value = damage;
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.PlayerItemPickupEvent:
+                {
+                    var value = (PlayerItemPickupInput*)input;
+                    var result = (PlayerItemPickupState*)state;
+                    var previousContext = result->ReplacementContext;
+                    var previousDrop = result->ReplacementDrop;
+                    if (previousDrop != null && result->Replacement is null) return Abi.Error;
+                    var item = result->ReplacementDrop == null
+                        ? Host.EventItem(value->Item)
+                        : Host.EventItem(*result->Replacement);
+                    var context = Event(value->Player, result->Cancelled, value->Invocation);
+                    plugin.HandleItemPickup(context, ref item);
+                    var replacement = TransferEventItems([item]);
+                    result->Replacement = replacement.Views;
+                    result->ReplacementContext = replacement.Context;
+                    result->ReplacementDrop = replacement.Drop;
+                    ApplyCancellation(context, &result->Cancelled);
+                    if (previousDrop != null) previousDrop(previousContext);
+                    return Abi.Ok;
+                }
                 case Abi.PlayerJumpEvent:
                 {
                     var value = (PlayerEventInput*)input;
-                    plugin.HandleJump(new Player(value->Player, invocation: value->Invocation));
+                    plugin.HandleJump(SnapshotPlayer(value->Player, value->Invocation));
                     return Abi.Ok;
                 }
                 case Abi.PlayerMoveEvent:
@@ -1361,7 +1624,7 @@ internal static unsafe class PluginBridge
                 case Abi.PlayerQuitEvent:
                 {
                     var value = (PlayerQuitInput*)input;
-                    plugin.HandleQuit(new Player(value->Player, Utf8(value->Name), invocation: value->Invocation));
+                    plugin.HandleQuit(SnapshotPlayer(value->Player, value->Invocation));
                     return Abi.Ok;
                 }
                 case Abi.PlayerTeleportEvent:
@@ -1395,17 +1658,111 @@ internal static unsafe class PluginBridge
 
     private static Plugin Get(void* instance) => (Plugin)GCHandle.FromIntPtr((nint)instance).Target!;
 
-    private static Player.Context Event(PlayerId player, byte cancelled, ulong invocation = 0) =>
-        new(new Player(player, invocation: invocation), cancelled != 0);
+    private static Player SnapshotPlayer(PlayerSnapshot snapshot, ulong invocation) => new(
+        snapshot.Player,
+        Utf8(snapshot.Name),
+        TimeSpan.FromMilliseconds(Math.Min(
+            (double)snapshot.LatencyMilliseconds,
+            TimeSpan.MaxValue.TotalMilliseconds)),
+        new Vector3(snapshot.Position.X, snapshot.Position.Y, snapshot.Position.Z),
+        invocation: invocation);
+
+    private static Player.Context Event(PlayerSnapshot player, byte cancelled, ulong invocation = 0) =>
+        new(SnapshotPlayer(player, invocation), cancelled != 0);
+
+    private static Cube.Pos EventPos(BlockPos position) => new(position.X, position.Y, position.Z);
+
+    private static World.Block EventBlock(BlockView block)
+    {
+        if (block.Identifier.Length > 256 || block.PropertiesNbt.Length > 64 * 1024 ||
+            block.Identifier.Length != 0 && block.Identifier.Data is null ||
+            block.PropertiesNbt.Length != 0 && block.PropertiesNbt.Data is null)
+            throw new InvalidOperationException("invalid block returned by server");
+        var properties = block.PropertiesNbt.Length == 0
+            ? Array.Empty<byte>()
+            : new ReadOnlySpan<byte>(
+                block.PropertiesNbt.Data,
+                checked((int)block.PropertiesNbt.Length)).ToArray();
+        return BlockCodec.Decode(Utf8(block.Identifier), properties);
+    }
+
+    private static PendingEventItems TransferEventItems(IReadOnlyList<Item.Stack> items) => new(items);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void DropEventItems(void* context)
+    {
+        if (context is null) return;
+        var handle = GCHandle.FromIntPtr((nint)context);
+        try { (handle.Target as PendingEventItems)?.Dispose(); }
+        finally { handle.Free(); }
+    }
+
+    private sealed class PendingEventItems : IDisposable
+    {
+        private readonly Host.ItemViewLease[] _leases;
+        private GCHandle _handle;
+
+        internal PendingEventItems(IReadOnlyList<Item.Stack> items)
+        {
+            _leases = new Host.ItemViewLease[items.Count];
+            try
+            {
+                Views = items.Count == 0
+                    ? null
+                    : (ItemStackViewV3*)NativeMemory.Alloc(
+                        (nuint)items.Count,
+                        (nuint)sizeof(ItemStackViewV3));
+                for (var index = 0; index < items.Count; index++)
+                {
+                    var lease = new Host.ItemViewLease(items[index]);
+                    _leases[index] = lease;
+                    Views[index] = lease.View;
+                }
+                Count = (ulong)items.Count;
+                _handle = GCHandle.Alloc(this);
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
+        }
+
+        internal ItemStackViewV3* Views { get; private set; }
+        internal ulong Count { get; }
+        internal void* Context => (void*)GCHandle.ToIntPtr(_handle);
+        internal delegate* unmanaged[Cdecl]<void*, void> Drop => &DropEventItems;
+
+        public void Dispose()
+        {
+            foreach (var lease in _leases) lease?.Dispose();
+            if (Views is not null) NativeMemory.Free(Views);
+            Views = null;
+        }
+    }
 
     private static void ApplyCancellation(Player.Context context, byte* cancelled)
     {
         if (context.Cancelled()) *cancelled = 1;
     }
 
-    private static string Utf8(StringView value) => value.Length == 0
-        ? string.Empty
-        : Encoding.UTF8.GetString(new ReadOnlySpan<byte>(value.Data, checked((int)value.Length)));
+    private static string Utf8(StringView value)
+    {
+        const ulong maxStringBytes = 16UL << 20;
+        if (value.Length == 0) return string.Empty;
+        if (value.Data is null || value.Length > maxStringBytes)
+            throw new InvalidOperationException("invalid string returned by server");
+        return Encoding.UTF8.GetString(new ReadOnlySpan<byte>(value.Data, checked((int)value.Length)));
+    }
+
+    private static string Utf8(StringBuffer value)
+    {
+        const ulong maxStringBytes = 16UL << 20;
+        if (value.Length == 0) return string.Empty;
+        if (value.Data is null || value.Length > value.Capacity || value.Length > maxStringBytes)
+            throw new InvalidOperationException("invalid string returned by server");
+        return Encoding.UTF8.GetString(new ReadOnlySpan<byte>(value.Data, checked((int)value.Length)));
+    }
 
     private static void Write(StringBuffer* output, string message)
     {

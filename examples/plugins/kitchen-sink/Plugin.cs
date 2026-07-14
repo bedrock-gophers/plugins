@@ -72,6 +72,65 @@ public sealed class KitchenSink : Plugin
     public override void HandleFoodLoss(Player.Context ctx, int from, ref int to) =>
         to = Math.Clamp(to, 0, 20);
 
+    public override void HandleFireExtinguish(Player.Context ctx, Cube.Pos pos) => _ = pos;
+    public override void HandleStartBreak(Player.Context ctx, Cube.Pos pos) => _ = pos;
+
+    public override void HandleBlockBreak(
+        Player.Context ctx,
+        Cube.Pos pos,
+        ref Item.Stack[] drops,
+        ref int xp)
+    {
+        drops = [.. drops.Where(drop => !drop.Empty())];
+        xp = Math.Max(0, xp);
+    }
+
+    public override void HandleBlockPlace(Player.Context ctx, Cube.Pos pos, World.Block block) =>
+        _ = (pos, block);
+
+    public override void HandleBlockPick(Player.Context ctx, Cube.Pos pos, World.Block block) =>
+        _ = (pos, block);
+
+    public override void HandleItemUse(Player.Context ctx)
+    {
+        if (!Finite(ctx.Player().Position())) ctx.Cancel();
+    }
+
+    public override void HandleItemUseOnBlock(
+        Player.Context ctx,
+        Cube.Pos pos,
+        Cube.Face face,
+        Vector3 clickPos) => _ = (pos, face, clickPos);
+
+    public override void HandleItemRelease(Player.Context ctx, Item.Stack item, TimeSpan duration) =>
+        _ = (item, duration);
+
+    public override void HandleItemConsume(Player.Context ctx, Item.Stack item) => _ = item;
+    public override void HandleExperienceGain(Player.Context ctx, ref int amount) => amount = Math.Max(0, amount);
+
+    public override void HandleSignEdit(
+        Player.Context ctx,
+        Cube.Pos pos,
+        bool frontSide,
+        string oldText,
+        string newText) => _ = (pos, frontSide, oldText, newText);
+
+    public override void HandleSleep(Player.Context ctx, ref bool sendReminder) { }
+
+    public override void HandleLecternPageTurn(
+        Player.Context ctx,
+        Cube.Pos pos,
+        int oldPage,
+        ref int newPage) => newPage = Math.Max(0, newPage);
+
+    public override void HandleItemDamage(Player.Context ctx, Item.Stack item, ref int damage) =>
+        damage = Math.Max(0, damage);
+
+    public override void HandleItemPickup(Player.Context ctx, ref Item.Stack item) =>
+        item = item.WithCustomName(item.CustomName().Trim());
+    public override void HandleHeldSlotChange(Player.Context ctx, int from, int to) => _ = (from, to);
+    public override void HandleItemDrop(Player.Context ctx, Item.Stack item) => _ = item;
+
     public override void HandlePunchAir(Player.Context ctx) => Increment(ref _punches);
     public override void HandleQuit(Player player) => Increment(ref _quits);
 

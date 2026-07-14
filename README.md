@@ -43,8 +43,9 @@ public sealed class Example : Plugin
 The project name is the plugin ID. A compile-time generator emits the hidden native entry point.
 
 Current C# slice: loading, lifecycle, reflected commands, player text actions, game mode, typed
-effects, forms, items and player inventories, movement, chat, food loss, jump, teleport,
-sprint/sneak toggles, punch-air, and quit handlers. Player handler, command-interface,
+effects, forms, items and player inventories, and 26 Dragonfly player handlers covering movement,
+chat, food loss, block and item interactions, experience, signs, sleep, held slots, jump, teleport,
+sprint/sneak toggles, punch-air, and quit. Player handler, command-interface,
 player-text, game-mode, effect, form, item, and player-inventory surfaces are generated from Dragonfly's
 Go AST.
 `World.GameMode` includes Dragonfly's four registered values and exact `GameModeByID`/`GameModeID`

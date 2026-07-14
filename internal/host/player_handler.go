@@ -35,21 +35,22 @@ type playerRuntime interface {
 	HandlePlayerFireExtinguish(native.InvocationID, native.PlayerPositionInput, bool) (bool, error)
 	HandlePlayerToggleSprint(native.InvocationID, native.PlayerToggleInput, bool) (bool, error)
 	HandlePlayerToggleSneak(native.InvocationID, native.PlayerToggleInput, bool) (bool, error)
-	HandlePlayerJump(native.InvocationID, native.PlayerID) error
+	HandlePlayerJump(native.InvocationID, native.PlayerSnapshot) error
 	HandlePlayerTeleport(native.InvocationID, native.PlayerTeleportInput, bool) (bool, error)
-	HandlePlayerExperienceGain(native.InvocationID, native.PlayerID, int, bool) (native.PlayerExperienceGainOutput, error)
-	HandlePlayerPunchAir(native.InvocationID, native.PlayerID, bool) (bool, error)
+	HandlePlayerExperienceGain(native.InvocationID, native.PlayerSnapshot, int, bool) (native.PlayerExperienceGainOutput, error)
+	HandlePlayerPunchAir(native.InvocationID, native.PlayerSnapshot, bool) (bool, error)
 	HandlePlayerHeldSlotChange(native.InvocationID, native.PlayerHeldSlotChangeInput, bool) (bool, error)
-	HandlePlayerSleep(native.InvocationID, native.PlayerID, bool, bool) (native.PlayerSleepOutput, error)
+	HandlePlayerSleep(native.InvocationID, native.PlayerSnapshot, bool, bool) (native.PlayerSleepOutput, error)
 	HandlePlayerBlockPick(native.InvocationID, native.PlayerBlockPickInput, bool) (bool, error)
 	HandlePlayerLecternPageTurn(native.InvocationID, native.PlayerLecternPageTurnInput, bool) (native.PlayerLecternPageTurnOutput, error)
 	HandlePlayerSignEdit(native.InvocationID, native.PlayerSignEditInput, bool) (bool, error)
-	HandlePlayerItemUse(native.InvocationID, native.PlayerID, bool) (bool, error)
+	HandlePlayerItemUse(native.InvocationID, native.PlayerSnapshot, bool) (bool, error)
 	HandlePlayerItemUseOnBlock(native.InvocationID, native.PlayerItemUseOnBlockInput, bool) (bool, error)
-	HandlePlayerItemConsume(native.InvocationID, native.PlayerID, native.ItemStack, bool) (bool, error)
-	HandlePlayerItemRelease(native.InvocationID, native.PlayerID, native.ItemStack, time.Duration, bool) (bool, error)
-	HandlePlayerItemDamage(native.InvocationID, native.PlayerID, native.ItemStack, int, bool) (native.PlayerItemDamageOutput, error)
-	HandlePlayerItemDrop(native.InvocationID, native.PlayerID, native.ItemStack, bool) (bool, error)
+	HandlePlayerItemConsume(native.InvocationID, native.PlayerSnapshot, native.ItemStack, bool) (bool, error)
+	HandlePlayerItemRelease(native.InvocationID, native.PlayerSnapshot, native.ItemStack, time.Duration, bool) (bool, error)
+	HandlePlayerItemDamage(native.InvocationID, native.PlayerSnapshot, native.ItemStack, int, bool) (native.PlayerItemDamageOutput, error)
+	HandlePlayerItemDrop(native.InvocationID, native.PlayerSnapshot, native.ItemStack, bool) (bool, error)
+	HandlePlayerItemPickup(native.InvocationID, native.PlayerItemPickupInput, bool) (native.PlayerItemPickupOutput, error)
 	HandlePlayerAttackEntity(native.InvocationID, native.PlayerAttackEntityInput, float64, float64, bool, bool) (native.PlayerAttackEntityOutput, error)
 	HandlePlayerItemUseOnEntity(native.InvocationID, native.PlayerItemUseOnEntityInput, bool) (bool, error)
 	HandlePlayerChangeWorld(native.InvocationID, native.PlayerChangeWorldInput) error
@@ -68,7 +69,7 @@ func (h *PlayerHandler) HandleJump(p *player.Player) {
 	}
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	if err := h.runtime.HandlePlayerJump(invocation, h.playerID(p)); err != nil {
+	if err := h.runtime.HandlePlayerJump(invocation, h.playerSnapshot(p)); err != nil {
 		h.log.Error("native plugin jump handler failed", "player", p.Name(), "error", err)
 	}
 }
@@ -80,7 +81,7 @@ func (h *PlayerHandler) HandleTeleport(ctx *player.Context, position mgl64.Vec3)
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	cancelled, err := h.runtime.HandlePlayerTeleport(invocation, native.PlayerTeleportInput{Player: h.playerID(p), Position: native.Vec3{X: position.X(), Y: position.Y(), Z: position.Z()}}, ctx.Cancelled())
+	cancelled, err := h.runtime.HandlePlayerTeleport(invocation, native.PlayerTeleportInput{Player: h.playerSnapshot(p), Position: native.Vec3{X: position.X(), Y: position.Y(), Z: position.Z()}}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin teleport handler failed", "player", p.Name(), "error", err)
 		return
@@ -97,7 +98,7 @@ func (h *PlayerHandler) HandleExperienceGain(ctx *player.Context, amount *int) {
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	output, err := h.runtime.HandlePlayerExperienceGain(invocation, h.playerID(p), *amount, ctx.Cancelled())
+	output, err := h.runtime.HandlePlayerExperienceGain(invocation, h.playerSnapshot(p), *amount, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin experience-gain handler failed", "player", p.Name(), "error", err)
 		return
@@ -115,7 +116,7 @@ func (h *PlayerHandler) HandlePunchAir(ctx *player.Context) {
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	cancelled, err := h.runtime.HandlePlayerPunchAir(invocation, h.playerID(p), ctx.Cancelled())
+	cancelled, err := h.runtime.HandlePlayerPunchAir(invocation, h.playerSnapshot(p), ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin punch-air handler failed", "player", p.Name(), "error", err)
 		return
@@ -132,7 +133,7 @@ func (h *PlayerHandler) HandleHeldSlotChange(ctx *player.Context, from, to int) 
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	cancelled, err := h.runtime.HandlePlayerHeldSlotChange(invocation, native.PlayerHeldSlotChangeInput{Player: h.playerID(p), From: from, To: to}, ctx.Cancelled())
+	cancelled, err := h.runtime.HandlePlayerHeldSlotChange(invocation, native.PlayerHeldSlotChangeInput{Player: h.playerSnapshot(p), From: from, To: to}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin held-slot handler failed", "player", p.Name(), "error", err)
 		return
@@ -149,7 +150,7 @@ func (h *PlayerHandler) HandleSleep(ctx *player.Context, sendReminder *bool) {
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	output, err := h.runtime.HandlePlayerSleep(invocation, h.playerID(p), *sendReminder, ctx.Cancelled())
+	output, err := h.runtime.HandlePlayerSleep(invocation, h.playerSnapshot(p), *sendReminder, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin sleep handler failed", "player", p.Name(), "error", err)
 		return
@@ -187,7 +188,7 @@ func (h *PlayerHandler) HandleChangeWorld(p *player.Player, before, after *world
 	if !ok {
 		return
 	}
-	input := native.PlayerChangeWorldInput{Player: h.playerID(p), After: afterID}
+	input := native.PlayerChangeWorldInput{Player: h.playerSnapshot(p), After: afterID}
 	departedID, departed := h.players.takeWorldDeparture(p)
 	if before != nil {
 		beforeID, ok := h.worlds.WorldHandle(before)
@@ -216,7 +217,7 @@ func (h *PlayerHandler) HandleRespawn(p *player.Player, position *mgl64.Vec3, de
 	}
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	output, err := h.runtime.HandlePlayerRespawn(invocation, native.PlayerRespawnInput{Player: h.playerID(p)}, native.Vec3{
+	output, err := h.runtime.HandlePlayerRespawn(invocation, native.PlayerRespawnInput{Player: h.playerSnapshot(p)}, native.Vec3{
 		X: position.X(), Y: position.Y(), Z: position.Z(),
 	}, destinationID)
 	if err != nil {
@@ -247,7 +248,7 @@ func (h *PlayerHandler) HandleSkinChange(ctx *player.Context, candidate *players
 	}
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	output, err := h.runtime.HandlePlayerSkinChange(invocation, native.PlayerSkinChangeInput{Player: h.playerID(p)}, value, ctx.Cancelled())
+	output, err := h.runtime.HandlePlayerSkinChange(invocation, native.PlayerSkinChangeInput{Player: h.playerSnapshot(p)}, value, ctx.Cancelled())
 	if err != nil {
 		if output.Cancelled {
 			ctx.Cancel()
@@ -278,7 +279,7 @@ func (h *PlayerHandler) HandleAttackEntity(ctx *player.Context, target world.Ent
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	output, err := h.runtime.HandlePlayerAttackEntity(invocation, native.PlayerAttackEntityInput{
-		Player: h.playerID(p), Target: targetID,
+		Player: h.playerSnapshot(p), Target: targetID,
 	}, *force, *height, *critical, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin attack-entity handler failed", "player", p.Name(), "error", err)
@@ -302,7 +303,7 @@ func (h *PlayerHandler) HandleItemUseOnEntity(ctx *player.Context, target world.
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	cancelled, err := h.runtime.HandlePlayerItemUseOnEntity(invocation, native.PlayerItemUseOnEntityInput{
-		Player: h.playerID(p), Target: targetID,
+		Player: h.playerSnapshot(p), Target: targetID,
 	}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin item-use-on-entity handler failed", "player", p.Name(), "error", err)
@@ -322,7 +323,7 @@ func (h *PlayerHandler) HandleMove(ctx *player.Context, newPosition mgl64.Vec3, 
 	defer leave()
 	oldPosition := p.Position()
 	cancelled, err := h.runtime.HandlePlayerMove(invocation, native.PlayerMoveInput{
-		Player:      h.playerID(p),
+		Player:      h.playerSnapshotAt(p, oldPosition),
 		OldPosition: native.Vec3{X: oldPosition.X(), Y: oldPosition.Y(), Z: oldPosition.Z()},
 		NewPosition: native.Vec3{X: newPosition.X(), Y: newPosition.Y(), Z: newPosition.Z()},
 		Rotation:    native.Rotation{Yaw: newRotation.Yaw(), Pitch: newRotation.Pitch()},
@@ -344,7 +345,7 @@ func (h *PlayerHandler) HandleChat(ctx *player.Context, message *string) {
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	output, err := h.runtime.HandlePlayerChat(invocation, native.PlayerChatInput{
-		Player:  h.playerID(p),
+		Player:  h.playerSnapshot(p),
 		Message: *message,
 	}, ctx.Cancelled())
 	if err != nil {
@@ -367,7 +368,7 @@ func (h *PlayerHandler) HandleHurt(ctx *player.Context, damage *float64, immune 
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	output, err := h.runtime.HandlePlayerHurt(invocation, native.PlayerHurtInput{
-		Player:         h.playerID(p),
+		Player:         h.playerSnapshot(p),
 		Damage:         *damage,
 		Immune:         immune,
 		AttackImmunity: *attackImmunity,
@@ -392,7 +393,7 @@ func (h *PlayerHandler) HandleHeal(ctx *player.Context, health *float64, source 
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	output, err := h.runtime.HandlePlayerHeal(invocation, native.PlayerHealInput{
-		Player: h.playerID(p),
+		Player: h.playerSnapshot(p),
 		Health: *health,
 		Source: h.nativeHealingSource(source),
 	}, ctx.Cancelled())
@@ -406,24 +407,48 @@ func (h *PlayerHandler) HandleHeal(ctx *player.Context, health *float64, source 
 	}
 }
 
-func (h *PlayerHandler) HandleBlockBreak(ctx *player.Context, position cube.Pos, _ *[]item.Stack, experience *int) {
+func (h *PlayerHandler) HandleBlockBreak(ctx *player.Context, position cube.Pos, drops *[]item.Stack, experience *int) {
 	if h.runtime.Subscriptions()&native.PlayerBlockBreakSubscription == 0 {
 		return
 	}
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
+	blockValue, ok := nativeEventBlock(p.Tx().Block(position))
+	if !ok {
+		h.log.Error("convert block-break block", "player", p.Name())
+		return
+	}
+	dropValues := make([]native.ItemStack, len(*drops))
+	for index, stack := range *drops {
+		value, valid := itemStackToNative(stack)
+		if !valid {
+			h.log.Error("convert block-break drop", "player", p.Name(), "drop", index)
+			return
+		}
+		dropValues[index] = value
+	}
 	output, err := h.runtime.HandlePlayerBlockBreak(invocation, native.PlayerBlockBreakInput{
-		Player:     h.playerID(p),
+		Player:     h.playerSnapshot(p),
 		Position:   nativeBlockPos(position),
-		Block:      blockName(p.Tx().Block(position)),
+		Block:      blockValue,
+		Drops:      dropValues,
 		Experience: int32(*experience),
 	}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin block-break handler failed", "player", p.Name(), "error", err)
 		return
 	}
-	*experience = int(output.Experience)
+	replacementDrops := make([]item.Stack, len(output.Drops))
+	for index, value := range output.Drops {
+		stack, valid := itemStackFromNative(value)
+		if !valid {
+			h.log.Error("convert native block-break drop", "player", p.Name(), "drop", index)
+			return
+		}
+		replacementDrops[index] = stack
+	}
+	*drops, *experience = replacementDrops, int(output.Experience)
 	if output.Cancelled {
 		ctx.Cancel()
 	}
@@ -436,10 +461,15 @@ func (h *PlayerHandler) HandleBlockPlace(ctx *player.Context, position cube.Pos,
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
+	blockValue, ok := nativeEventBlock(block)
+	if !ok {
+		h.log.Error("convert block-place block", "player", p.Name())
+		return
+	}
 	cancelled, err := h.runtime.HandlePlayerBlockPlace(invocation, native.PlayerBlockPlaceInput{
-		Player:   h.playerID(p),
+		Player:   h.playerSnapshot(p),
 		Position: nativeBlockPos(position),
-		Block:    blockName(block),
+		Block:    blockValue,
 	}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin block-place handler failed", "player", p.Name(), "error", err)
@@ -457,7 +487,12 @@ func (h *PlayerHandler) HandleBlockPick(ctx *player.Context, position cube.Pos, 
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	cancelled, err := h.runtime.HandlePlayerBlockPick(invocation, native.PlayerBlockPickInput{Player: h.playerID(p), Position: nativeBlockPos(position), Block: blockName(block)}, ctx.Cancelled())
+	blockValue, ok := nativeEventBlock(block)
+	if !ok {
+		h.log.Error("convert block-pick block", "player", p.Name())
+		return
+	}
+	cancelled, err := h.runtime.HandlePlayerBlockPick(invocation, native.PlayerBlockPickInput{Player: h.playerSnapshot(p), Position: nativeBlockPos(position), Block: blockValue}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin block-pick handler failed", "player", p.Name(), "error", err)
 		return
@@ -474,7 +509,7 @@ func (h *PlayerHandler) HandleLecternPageTurn(ctx *player.Context, position cube
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	output, err := h.runtime.HandlePlayerLecternPageTurn(invocation, native.PlayerLecternPageTurnInput{Player: h.playerID(p), Position: nativeBlockPos(position), OldPage: oldPage, NewPage: *newPage}, ctx.Cancelled())
+	output, err := h.runtime.HandlePlayerLecternPageTurn(invocation, native.PlayerLecternPageTurnInput{Player: h.playerSnapshot(p), Position: nativeBlockPos(position), OldPage: oldPage, NewPage: *newPage}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin lectern-page handler failed", "player", p.Name(), "error", err)
 		return
@@ -492,7 +527,7 @@ func (h *PlayerHandler) HandleSignEdit(ctx *player.Context, position cube.Pos, f
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	cancelled, err := h.runtime.HandlePlayerSignEdit(invocation, native.PlayerSignEditInput{Player: h.playerID(p), Position: nativeBlockPos(position), FrontSide: frontSide, OldText: oldText, NewText: newText}, ctx.Cancelled())
+	cancelled, err := h.runtime.HandlePlayerSignEdit(invocation, native.PlayerSignEditInput{Player: h.playerSnapshot(p), Position: nativeBlockPos(position), FrontSide: frontSide, OldText: oldText, NewText: newText}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin sign-edit handler failed", "player", p.Name(), "error", err)
 		return
@@ -509,7 +544,7 @@ func (h *PlayerHandler) HandleItemUse(ctx *player.Context) {
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	cancelled, err := h.runtime.HandlePlayerItemUse(invocation, h.playerID(p), ctx.Cancelled())
+	cancelled, err := h.runtime.HandlePlayerItemUse(invocation, h.playerSnapshot(p), ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin item-use handler failed", "player", p.Name(), "error", err)
 		return
@@ -527,7 +562,7 @@ func (h *PlayerHandler) HandleItemUseOnBlock(ctx *player.Context, position cube.
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	cancelled, err := h.runtime.HandlePlayerItemUseOnBlock(invocation, native.PlayerItemUseOnBlockInput{
-		Player: h.playerID(p), Position: nativeBlockPos(position), Face: int(face),
+		Player: h.playerSnapshot(p), Position: nativeBlockPos(position), Face: int(face),
 		ClickPosition: native.Vec3{X: clickPosition.X(), Y: clickPosition.Y(), Z: clickPosition.Z()},
 	}, ctx.Cancelled())
 	if err != nil {
@@ -551,7 +586,7 @@ func (h *PlayerHandler) HandleItemConsume(ctx *player.Context, stack item.Stack)
 		h.log.Error("convert item consume stack", "player", p.Name())
 		return
 	}
-	cancelled, err := h.runtime.HandlePlayerItemConsume(invocation, h.playerID(p), value, ctx.Cancelled())
+	cancelled, err := h.runtime.HandlePlayerItemConsume(invocation, h.playerSnapshot(p), value, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin item-consume handler failed", "player", p.Name(), "error", err)
 		return
@@ -573,7 +608,7 @@ func (h *PlayerHandler) HandleItemRelease(ctx *player.Context, stack item.Stack,
 		h.log.Error("convert item release stack", "player", p.Name())
 		return
 	}
-	cancelled, err := h.runtime.HandlePlayerItemRelease(invocation, h.playerID(p), value, duration, ctx.Cancelled())
+	cancelled, err := h.runtime.HandlePlayerItemRelease(invocation, h.playerSnapshot(p), value, duration, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin item-release handler failed", "player", p.Name(), "error", err)
 		return
@@ -595,7 +630,7 @@ func (h *PlayerHandler) HandleItemDamage(ctx *player.Context, stack item.Stack, 
 		h.log.Error("convert item damage stack", "player", p.Name())
 		return
 	}
-	output, err := h.runtime.HandlePlayerItemDamage(invocation, h.playerID(p), value, *damage, ctx.Cancelled())
+	output, err := h.runtime.HandlePlayerItemDamage(invocation, h.playerSnapshot(p), value, *damage, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin item-damage handler failed", "player", p.Name(), "error", err)
 		return
@@ -618,12 +653,42 @@ func (h *PlayerHandler) HandleItemDrop(ctx *player.Context, stack item.Stack) {
 		h.log.Error("convert item drop stack", "player", p.Name())
 		return
 	}
-	cancelled, err := h.runtime.HandlePlayerItemDrop(invocation, h.playerID(p), value, ctx.Cancelled())
+	cancelled, err := h.runtime.HandlePlayerItemDrop(invocation, h.playerSnapshot(p), value, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin item-drop handler failed", "player", p.Name(), "error", err)
 		return
 	}
 	if cancelled {
+		ctx.Cancel()
+	}
+}
+
+func (h *PlayerHandler) HandleItemPickup(ctx *player.Context, stack *item.Stack) {
+	if h.runtime.Subscriptions()&native.PlayerItemPickupSubscription == 0 {
+		return
+	}
+	p := ctx.Player()
+	invocation, leave := h.players.BeginInvocation(p.Tx())
+	defer leave()
+	value, ok := itemStackToNative(*stack)
+	if !ok {
+		h.log.Error("convert item pickup stack", "player", p.Name())
+		return
+	}
+	output, err := h.runtime.HandlePlayerItemPickup(invocation, native.PlayerItemPickupInput{
+		Player: h.playerSnapshot(p), Item: value,
+	}, ctx.Cancelled())
+	if err != nil {
+		h.log.Error("native plugin item-pickup handler failed", "player", p.Name(), "error", err)
+		return
+	}
+	replacement, ok := itemStackFromNative(output.Item)
+	if !ok {
+		h.log.Error("convert native item pickup stack", "player", p.Name())
+		return
+	}
+	*stack = replacement
+	if output.Cancelled {
 		ctx.Cancel()
 	}
 }
@@ -636,7 +701,7 @@ func (h *PlayerHandler) HandleFoodLoss(ctx *player.Context, from int, to *int) {
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	output, err := h.runtime.HandlePlayerFoodLoss(invocation, native.PlayerFoodLossInput{
-		Player: h.playerID(p),
+		Player: h.playerSnapshot(p),
 		From:   int32(from),
 		To:     int32(*to),
 	}, ctx.Cancelled())
@@ -657,7 +722,7 @@ func (h *PlayerHandler) HandleDeath(p *player.Player, source world.DamageSource,
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	keep, err := h.runtime.HandlePlayerDeath(invocation, native.PlayerDeathInput{
-		Player: h.playerID(p),
+		Player: h.playerSnapshot(p),
 		Source: h.nativeDamageSource(source),
 	}, *keepInventory)
 	if err != nil {
@@ -688,7 +753,7 @@ func (h *PlayerHandler) handleToggleEvent(ctx *player.Context, after bool, subsc
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	cancelled, err := handle(invocation, native.PlayerToggleInput{Player: h.playerID(p), After: after}, ctx.Cancelled())
+	cancelled, err := handle(invocation, native.PlayerToggleInput{Player: h.playerSnapshot(p), After: after}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin toggle handler failed", "event", name, "player", p.Name(), "error", err)
 		return
@@ -705,7 +770,7 @@ func (h *PlayerHandler) handlePositionEvent(ctx *player.Context, position cube.P
 	p := ctx.Player()
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
-	cancelled, err := handle(invocation, native.PlayerPositionInput{Player: h.playerID(p), Position: nativeBlockPos(position)}, ctx.Cancelled())
+	cancelled, err := handle(invocation, native.PlayerPositionInput{Player: h.playerSnapshot(p), Position: nativeBlockPos(position)}, ctx.Cancelled())
 	if err != nil {
 		h.log.Error("native plugin position handler failed", "event", name, "player", p.Name(), "error", err)
 		return
@@ -719,12 +784,14 @@ func nativeBlockPos(position cube.Pos) native.BlockPos {
 	return native.BlockPos{X: int32(position.X()), Y: int32(position.Y()), Z: int32(position.Z())}
 }
 
-func blockName(block world.Block) string {
+func nativeEventBlock(block world.Block) (native.WorldBlock, bool) {
 	if block == nil {
-		return "minecraft:air"
+		properties, ok := EncodeBlockProperties(map[string]any{})
+		return native.WorldBlock{Identifier: "minecraft:air", PropertiesNBT: properties}, ok
 	}
-	name, _ := block.EncodeBlock()
-	return name
+	identifier, properties := block.EncodeBlock()
+	encoded, ok := EncodeBlockProperties(properties)
+	return native.WorldBlock{Identifier: identifier, PropertiesNBT: encoded}, ok
 }
 
 func (h *PlayerHandler) nativeDamageSource(source world.DamageSource) native.DamageSource {
@@ -941,9 +1008,19 @@ func concreteHealingSource(source world.HealingSource) world.HealingSource {
 	return nil
 }
 
-func (h *PlayerHandler) playerID(p *player.Player) native.PlayerID {
+func (h *PlayerHandler) playerSnapshot(p *player.Player) native.PlayerSnapshot {
+	position := p.Position()
+	return h.playerSnapshotAt(p, position)
+}
+
+func (h *PlayerHandler) playerSnapshotAt(p *player.Player, position mgl64.Vec3) native.PlayerSnapshot {
 	id, _ := h.players.ID(p)
-	return id
+	return native.PlayerSnapshot{
+		Player:              id,
+		Name:                p.Name(),
+		LatencyMilliseconds: uint64(max(p.Latency().Milliseconds(), 0)),
+		Position:            native.Vec3{X: position.X(), Y: position.Y(), Z: position.Z()},
+	}
 }
 
 func (h *PlayerHandler) Join(p *player.Player) bool {
@@ -953,7 +1030,7 @@ func (h *PlayerHandler) Join(p *player.Player) bool {
 	invocation, leave := h.players.BeginInvocation(p.Tx())
 	defer leave()
 	cancelled, err := h.runtime.HandlePlayerJoin(invocation, native.PlayerJoinInput{
-		Player: h.playerID(p),
+		Player: h.playerSnapshot(p),
 		Name:   p.Name(),
 	}, false)
 	if err != nil {
@@ -968,7 +1045,7 @@ func (h *PlayerHandler) HandleQuit(p *player.Player) {
 		invocation, leave := h.players.BeginInvocation(p.Tx())
 		defer leave()
 		if err := h.runtime.HandlePlayerQuit(invocation, native.PlayerQuitInput{
-			Player: h.playerID(p),
+			Player: h.playerSnapshot(p),
 			Name:   p.Name(),
 		}); err != nil {
 			h.log.Error("native plugin quit handler failed", "player", p.Name(), "error", err)

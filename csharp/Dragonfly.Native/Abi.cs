@@ -4,7 +4,7 @@ namespace Dragonfly.Native;
 
 public static class Abi
 {
-    public const uint PluginVersion = 5;
+    public const uint PluginVersion = 6;
     public const uint HostVersion = 31;
     public const int Ok = 0;
     public const int Error = 1;
@@ -14,8 +14,16 @@ public static class Abi
     public const ulong PlayerChatSubscription = 1UL << 1;
     public const uint PlayerQuitEvent = 4;
     public const ulong PlayerQuitSubscription = 1UL << 3;
+    public const uint PlayerBlockBreakEvent = 7;
+    public const ulong PlayerBlockBreakSubscription = 1UL << 6;
+    public const uint PlayerBlockPlaceEvent = 8;
+    public const ulong PlayerBlockPlaceSubscription = 1UL << 7;
     public const uint PlayerFoodLossEvent = 9;
     public const ulong PlayerFoodLossSubscription = 1UL << 8;
+    public const uint PlayerStartBreakEvent = 11;
+    public const ulong PlayerStartBreakSubscription = 1UL << 10;
+    public const uint PlayerFireExtinguishEvent = 12;
+    public const ulong PlayerFireExtinguishSubscription = 1UL << 11;
     public const uint PlayerToggleSprintEvent = 13;
     public const ulong PlayerToggleSprintSubscription = 1UL << 12;
     public const uint PlayerToggleSneakEvent = 14;
@@ -24,8 +32,34 @@ public static class Abi
     public const ulong PlayerJumpSubscription = 1UL << 14;
     public const uint PlayerTeleportEvent = 16;
     public const ulong PlayerTeleportSubscription = 1UL << 15;
+    public const uint PlayerExperienceGainEvent = 17;
+    public const ulong PlayerExperienceGainSubscription = 1UL << 16;
     public const uint PlayerPunchAirEvent = 18;
     public const ulong PlayerPunchAirSubscription = 1UL << 17;
+    public const uint PlayerHeldSlotChangeEvent = 19;
+    public const ulong PlayerHeldSlotChangeSubscription = 1UL << 18;
+    public const uint PlayerSleepEvent = 20;
+    public const ulong PlayerSleepSubscription = 1UL << 19;
+    public const uint PlayerBlockPickEvent = 21;
+    public const ulong PlayerBlockPickSubscription = 1UL << 20;
+    public const uint PlayerLecternPageTurnEvent = 22;
+    public const ulong PlayerLecternPageTurnSubscription = 1UL << 21;
+    public const uint PlayerSignEditEvent = 23;
+    public const ulong PlayerSignEditSubscription = 1UL << 22;
+    public const uint PlayerItemUseEvent = 24;
+    public const ulong PlayerItemUseSubscription = 1UL << 23;
+    public const uint PlayerItemUseOnBlockEvent = 25;
+    public const ulong PlayerItemUseOnBlockSubscription = 1UL << 24;
+    public const uint PlayerItemConsumeEvent = 26;
+    public const ulong PlayerItemConsumeSubscription = 1UL << 25;
+    public const uint PlayerItemReleaseEvent = 27;
+    public const ulong PlayerItemReleaseSubscription = 1UL << 26;
+    public const uint PlayerItemDamageEvent = 28;
+    public const ulong PlayerItemDamageSubscription = 1UL << 27;
+    public const uint PlayerItemDropEvent = 29;
+    public const ulong PlayerItemDropSubscription = 1UL << 28;
+    public const uint PlayerItemPickupEvent = 38;
+    public const ulong PlayerItemPickupSubscription = 1UL << 37;
     public const uint CommandParameterSubcommand = 1;
     public const uint CommandParameterEnum = 2;
     public const uint CommandParameterString = 3;
@@ -405,7 +439,7 @@ public struct NativeRotation
 public struct PlayerMoveInput
 {
     public ulong Invocation;
-    public PlayerId Player;
+    public PlayerSnapshot Player;
     public Vec3 OldPosition;
     public Vec3 NewPosition;
     public NativeRotation Rotation;
@@ -421,7 +455,7 @@ public struct PlayerMoveState
 public unsafe struct PlayerChatInput
 {
     public ulong Invocation;
-    public PlayerId Player;
+    public PlayerSnapshot Player;
     public StringView Message;
 }
 
@@ -437,7 +471,7 @@ public unsafe struct PlayerChatState
 public unsafe struct PlayerQuitInput
 {
     public ulong Invocation;
-    public PlayerId Player;
+    public PlayerSnapshot Player;
     public StringView Name;
 }
 
@@ -451,7 +485,7 @@ public struct PlayerQuitState
 public struct PlayerFoodLossInput
 {
     public ulong Invocation;
-    public PlayerId Player;
+    public PlayerSnapshot Player;
     public int From;
 }
 
@@ -466,7 +500,7 @@ public struct PlayerFoodLossState
 public struct PlayerToggleInput
 {
     public ulong Invocation;
-    public PlayerId Player;
+    public PlayerSnapshot Player;
     public byte After;
 }
 
@@ -474,7 +508,7 @@ public struct PlayerToggleInput
 public struct PlayerEventInput
 {
     public ulong Invocation;
-    public PlayerId Player;
+    public PlayerSnapshot Player;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -487,8 +521,141 @@ public struct CancellableState
 public struct PlayerTeleportInput
 {
     public ulong Invocation;
-    public PlayerId Player;
+    public PlayerSnapshot Player;
     public Vec3 Position;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct PlayerBlockBreakInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public BlockPos Position;
+    public BlockView Block;
+    public ItemStackViewV3* Drops;
+    public ulong DropCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct PlayerBlockBreakState
+{
+    public byte Cancelled;
+    public int Experience;
+    public ItemStackViewV3* ReplacementDrops;
+    public ulong ReplacementDropCount;
+    public void* ReplacementContext;
+    public delegate* unmanaged[Cdecl]<void*, void> ReplacementDrop;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerBlockInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public BlockPos Position;
+    public BlockView Block;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerBlockPositionInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public BlockPos Position;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerHeldSlotChangeInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public int From;
+    public int To;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerSleepState
+{
+    public byte Cancelled;
+    public byte SendReminder;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerLecternPageTurnInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public BlockPos Position;
+    public int OldPage;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerLecternPageTurnState
+{
+    public byte Cancelled;
+    public int NewPage;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct PlayerSignEditInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public BlockPos Position;
+    public byte FrontSide;
+    public StringView OldText;
+    public StringView NewText;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerItemUseOnBlockInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public BlockPos Position;
+    public int Face;
+    public Vec3 ClickPosition;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerItemInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public ItemStackViewV3 Item;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerItemReleaseInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public ItemStackViewV3 Item;
+    public long DurationNanoseconds;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerIntegerState
+{
+    public byte Cancelled;
+    public int Value;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct PlayerItemPickupInput
+{
+    public ulong Invocation;
+    public PlayerSnapshot Player;
+    public ItemStackViewV3 Item;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct PlayerItemPickupState
+{
+    public byte Cancelled;
+    public ItemStackViewV3* Replacement;
+    public void* ReplacementContext;
+    public delegate* unmanaged[Cdecl]<void*, void> ReplacementDrop;
 }
 
 [StructLayout(LayoutKind.Sequential)]

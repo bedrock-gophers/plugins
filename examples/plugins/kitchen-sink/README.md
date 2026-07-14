@@ -4,6 +4,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
 
 - movement validation and cancellation;
 - chat and food-state mutation;
+- all 26 exposed player handlers, including typed block/item payloads, mutable break drops,
+  item-pickup replacement, signed release durations, and full player snapshots;
 - player-action telemetry;
 - reflected command arguments and overloads;
 - direct `Player.Message` output;

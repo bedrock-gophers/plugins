@@ -510,7 +510,7 @@ func TestPluginCanMessagePlayer(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := PlayerID{Generation: 42}
-	if _, err := runtime.HandlePlayerJoin(0, PlayerJoinInput{Player: id, Name: "TestPlayer"}, false); err != nil {
+	if _, err := runtime.HandlePlayerJoin(0, PlayerJoinInput{Player: PlayerSnapshot{Player: id, Name: "TestPlayer"}, Name: "TestPlayer"}, false); err != nil {
 		t.Fatal(err)
 	}
 	wantTexts := []string{"Welcome from a Rust plugin.", "Rust tip", "Rust popup", "Rust jukebox popup"}
@@ -527,7 +527,7 @@ func TestPluginCanMessagePlayer(t *testing.T) {
 	if !reflect.DeepEqual(host.scoreboard, wantScoreboard) {
 		t.Fatalf("scoreboard = %+v, want %+v", host.scoreboard, wantScoreboard)
 	}
-	if err := runtime.HandlePlayerQuit(0, PlayerQuitInput{Player: id, Name: "TestPlayer"}); err != nil {
+	if err := runtime.HandlePlayerQuit(0, PlayerQuitInput{Player: PlayerSnapshot{Player: id, Name: "TestPlayer"}, Name: "TestPlayer"}); err != nil {
 		t.Fatal(err)
 	}
 	if !host.scoreboardRemoved {
@@ -547,7 +547,7 @@ func TestFormResponseRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := PlayerID{Generation: 77}
-	if _, err := runtime.HandlePlayerJoin(0, PlayerJoinInput{Player: id, Name: "FormPlayer"}, false); err != nil {
+	if _, err := runtime.HandlePlayerJoin(0, PlayerJoinInput{Player: PlayerSnapshot{Player: id, Name: "FormPlayer"}, Name: "FormPlayer"}, false); err != nil {
 		t.Fatal(err)
 	}
 	if len(host.forms) == 0 || !bytes.Contains(host.forms[len(host.forms)-1].RequestJSON, []byte(`"type":"form"`)) {
@@ -1686,14 +1686,14 @@ func TestPlayerJoinAndQuit(t *testing.T) {
 		t.Fatal("join or quit subscription missing")
 	}
 	id := PlayerID{Generation: 12}
-	cancelled, err := runtime.HandlePlayerJoin(0, PlayerJoinInput{Player: id, Name: "Danick"}, false)
+	cancelled, err := runtime.HandlePlayerJoin(0, PlayerJoinInput{Player: PlayerSnapshot{Player: id, Name: "Danick"}, Name: "Danick"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cancelled {
 		t.Fatal("lifecycle logger cancelled join")
 	}
-	if err := runtime.HandlePlayerQuit(0, PlayerQuitInput{Player: id, Name: "Danick"}); err != nil {
+	if err := runtime.HandlePlayerQuit(0, PlayerQuitInput{Player: PlayerSnapshot{Player: id, Name: "Danick"}, Name: "Danick"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1730,7 +1730,7 @@ func TestPlayerBlockBreakAndPlace(t *testing.T) {
 	}
 	broken, err := runtime.HandlePlayerBlockBreak(0, PlayerBlockBreakInput{
 		Position:   BlockPos{X: 1, Y: 2, Z: 3},
-		Block:      "minecraft:stone",
+		Block:      WorldBlock{Identifier: "minecraft:stone"},
 		Experience: 4,
 	}, false)
 	if err != nil {
@@ -1741,7 +1741,7 @@ func TestPlayerBlockBreakAndPlace(t *testing.T) {
 	}
 	cancelled, err := runtime.HandlePlayerBlockPlace(0, PlayerBlockPlaceInput{
 		Position: BlockPos{X: 4, Y: 5, Z: 6},
-		Block:    "minecraft:dirt",
+		Block:    WorldBlock{Identifier: "minecraft:dirt"},
 	}, false)
 	if err != nil {
 		t.Fatal(err)
@@ -1796,7 +1796,7 @@ func TestPlayerJumpAndTeleport(t *testing.T) {
 	if runtime.Subscriptions()&PlayerJumpSubscription == 0 || runtime.Subscriptions()&PlayerTeleportSubscription == 0 {
 		t.Fatal("jump or teleport subscription missing")
 	}
-	if err := runtime.HandlePlayerJump(0, PlayerID{}); err != nil {
+	if err := runtime.HandlePlayerJump(0, PlayerSnapshot{}); err != nil {
 		t.Fatal(err)
 	}
 	cancelled, err := runtime.HandlePlayerTeleport(0, PlayerTeleportInput{Position: Vec3{X: 1, Y: 64, Z: 2}}, false)
@@ -1813,14 +1813,14 @@ func TestPlayerExperienceGainAndPunchAir(t *testing.T) {
 	if runtime.Subscriptions()&PlayerExperienceGainSubscription == 0 || runtime.Subscriptions()&PlayerPunchAirSubscription == 0 {
 		t.Fatal("experience-gain or punch-air subscription missing")
 	}
-	output, err := runtime.HandlePlayerExperienceGain(0, PlayerID{}, 5, false)
+	output, err := runtime.HandlePlayerExperienceGain(0, PlayerSnapshot{}, 5, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if output.Cancelled || output.Amount != 5 {
 		t.Fatalf("experience gain = %+v", output)
 	}
-	cancelled, err := runtime.HandlePlayerPunchAir(0, PlayerID{}, false)
+	cancelled, err := runtime.HandlePlayerPunchAir(0, PlayerSnapshot{}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1841,7 +1841,7 @@ func TestPlayerHeldSlotChangeAndSleep(t *testing.T) {
 	if cancelled {
 		t.Fatal("held-slot change cancelled")
 	}
-	output, err := runtime.HandlePlayerSleep(0, PlayerID{}, true, false)
+	output, err := runtime.HandlePlayerSleep(0, PlayerSnapshot{}, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1855,7 +1855,7 @@ func TestPlayerBlockPickAndLecternPageTurn(t *testing.T) {
 	if runtime.Subscriptions()&PlayerBlockPickSubscription == 0 || runtime.Subscriptions()&PlayerLecternPageTurnSubscription == 0 {
 		t.Fatal("block-pick or lectern-page subscription missing")
 	}
-	cancelled, err := runtime.HandlePlayerBlockPick(0, PlayerBlockPickInput{Block: "minecraft:stone"}, false)
+	cancelled, err := runtime.HandlePlayerBlockPick(0, PlayerBlockPickInput{Block: WorldBlock{Identifier: "minecraft:stone"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1883,7 +1883,7 @@ func TestPlayerSignEditAndItemUse(t *testing.T) {
 	if cancelled {
 		t.Fatal("sign edit cancelled")
 	}
-	cancelled, err = runtime.HandlePlayerItemUse(0, PlayerID{}, false)
+	cancelled, err = runtime.HandlePlayerItemUse(0, PlayerSnapshot{}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1912,14 +1912,14 @@ func TestPlayerItemConsumeAndRelease(t *testing.T) {
 		t.Fatal("item-consume or item-release subscription missing")
 	}
 	stack := ItemStack{Identifier: "minecraft:apple", Count: 1}
-	cancelled, err := runtime.HandlePlayerItemConsume(0, PlayerID{}, stack, false)
+	cancelled, err := runtime.HandlePlayerItemConsume(0, PlayerSnapshot{}, stack, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cancelled {
 		t.Fatal("item consume cancelled")
 	}
-	cancelled, err = runtime.HandlePlayerItemRelease(0, PlayerID{}, stack, time.Second, false)
+	cancelled, err = runtime.HandlePlayerItemRelease(0, PlayerSnapshot{}, stack, time.Second, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1938,7 +1938,7 @@ func TestPlayerItemEventPreservesFullStack(t *testing.T) {
 		Lore: []string{"one", "two"}, NBT: nbtData, ValuesNBT: valuesNBT,
 		Enchantments: []ItemEnchantment{{ID: 9, Level: 5}},
 	}
-	cancelled, err := runtime.HandlePlayerItemConsume(0, PlayerID{}, stack, false)
+	cancelled, err := runtime.HandlePlayerItemConsume(0, PlayerSnapshot{}, stack, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1953,19 +1953,34 @@ func TestPlayerItemDamageAndDrop(t *testing.T) {
 		t.Fatal("item-damage or item-drop subscription missing")
 	}
 	stack := ItemStack{Identifier: "minecraft:diamond_sword", Count: 1}
-	output, err := runtime.HandlePlayerItemDamage(0, PlayerID{}, stack, 1, false)
+	output, err := runtime.HandlePlayerItemDamage(0, PlayerSnapshot{}, stack, 1, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if output.Cancelled || output.Damage != 1 {
 		t.Fatalf("item damage = %+v", output)
 	}
-	cancelled, err := runtime.HandlePlayerItemDrop(0, PlayerID{}, stack, false)
+	cancelled, err := runtime.HandlePlayerItemDrop(0, PlayerSnapshot{}, stack, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cancelled {
 		t.Fatal("item drop cancelled")
+	}
+}
+
+func TestPlayerItemPickup(t *testing.T) {
+	runtime := openTestRuntime(t)
+	if runtime.Subscriptions()&PlayerItemPickupSubscription == 0 {
+		t.Fatal("item-pickup subscription missing")
+	}
+	stack := ItemStack{Identifier: "minecraft:apple", Count: 1}
+	output, err := runtime.HandlePlayerItemPickup(0, PlayerItemPickupInput{Item: stack}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Cancelled || !reflect.DeepEqual(output.Item, stack) {
+		t.Fatalf("item pickup = %#v", output)
 	}
 }
 
@@ -1976,7 +1991,7 @@ func TestPlayerAttackEntityRoundTrip(t *testing.T) {
 	}
 	player := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 41}
 	target := EntityID{UUID: [16]byte{9, 8, 7}, Generation: 52}
-	output, err := runtime.HandlePlayerAttackEntity(73, PlayerAttackEntityInput{Player: player, Target: target}, 0.45, 0.3608, true, false)
+	output, err := runtime.HandlePlayerAttackEntity(73, PlayerAttackEntityInput{Player: PlayerSnapshot{Player: player}, Target: target}, 0.45, 0.3608, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1992,14 +2007,14 @@ func TestPlayerItemUseOnEntityRoundTrip(t *testing.T) {
 	}
 	player := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 41}
 	target := EntityID{UUID: [16]byte{9, 8, 7}, Generation: 52}
-	cancelled, err := runtime.HandlePlayerItemUseOnEntity(73, PlayerItemUseOnEntityInput{Player: player, Target: target}, false)
+	cancelled, err := runtime.HandlePlayerItemUseOnEntity(73, PlayerItemUseOnEntityInput{Player: PlayerSnapshot{Player: player}, Target: target}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cancelled {
 		t.Fatal("item use was unexpectedly cancelled")
 	}
-	cancelled, err = runtime.HandlePlayerItemUseOnEntity(73, PlayerItemUseOnEntityInput{Player: player, Target: target}, true)
+	cancelled, err = runtime.HandlePlayerItemUseOnEntity(73, PlayerItemUseOnEntityInput{Player: PlayerSnapshot{Player: player}, Target: target}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2016,12 +2031,12 @@ func TestPlayerChangeWorldRoundTrip(t *testing.T) {
 	player := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 41}
 	before, after := WorldID(52), WorldID(53)
 	if err := runtime.HandlePlayerChangeWorld(73, PlayerChangeWorldInput{
-		Player: player, Before: &before, After: after,
+		Player: PlayerSnapshot{Player: player}, Before: &before, After: after,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := runtime.HandlePlayerChangeWorld(73, PlayerChangeWorldInput{
-		Player: player, After: after,
+		Player: PlayerSnapshot{Player: player}, After: after,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2043,7 +2058,7 @@ func TestPlayerRespawnRoundTrip(t *testing.T) {
 	}
 	player := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 41}
 	position := Vec3{X: 2, Y: -5, Z: -4}
-	output, err := runtime.HandlePlayerRespawn(73, PlayerRespawnInput{Player: player}, position, 53)
+	output, err := runtime.HandlePlayerRespawn(73, PlayerRespawnInput{Player: PlayerSnapshot{Player: player}}, position, 53)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2064,14 +2079,14 @@ func TestPlayerSkinChangeRoundTrip(t *testing.T) {
 		Width: 64, Height: 64, FullID: "candidate", Pixels: make([]byte, 64*64*4),
 	}
 	player := PlayerID{UUID: [16]byte{1, 2, 3}, Generation: 41}
-	output, err := runtime.HandlePlayerSkinChange(73, PlayerSkinChangeInput{Player: player}, skin, false)
+	output, err := runtime.HandlePlayerSkinChange(73, PlayerSkinChangeInput{Player: PlayerSnapshot{Player: player}}, skin, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if output.Cancelled || !reflect.DeepEqual(output.Skin, skin) {
 		t.Fatalf("skin-change output = %#v", output)
 	}
-	output, err = runtime.HandlePlayerSkinChange(74, PlayerSkinChangeInput{Player: player}, skin, true)
+	output, err = runtime.HandlePlayerSkinChange(74, PlayerSkinChangeInput{Player: PlayerSnapshot{Player: player}}, skin, true)
 	if err != nil {
 		t.Fatal(err)
 	}

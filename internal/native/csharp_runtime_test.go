@@ -2,6 +2,7 @@ package native
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -47,8 +48,15 @@ func openCSharpRuntimeWithHost(t testing.TB, host Host) *Runtime {
 		t.Fatalf("PluginCount() = %d, want 5", got)
 	}
 	wantSubscriptions := PlayerMoveSubscription | PlayerChatSubscription | PlayerQuitSubscription |
+		PlayerBlockBreakSubscription | PlayerBlockPlaceSubscription |
 		PlayerFoodLossSubscription | PlayerToggleSprintSubscription | PlayerToggleSneakSubscription |
-		PlayerJumpSubscription | PlayerTeleportSubscription | PlayerPunchAirSubscription
+		PlayerStartBreakSubscription | PlayerFireExtinguishSubscription |
+		PlayerJumpSubscription | PlayerTeleportSubscription | PlayerExperienceGainSubscription |
+		PlayerPunchAirSubscription | PlayerHeldSlotChangeSubscription | PlayerSleepSubscription |
+		PlayerBlockPickSubscription | PlayerLecternPageTurnSubscription | PlayerSignEditSubscription |
+		PlayerItemUseSubscription | PlayerItemUseOnBlockSubscription | PlayerItemConsumeSubscription |
+		PlayerItemReleaseSubscription | PlayerItemDamageSubscription | PlayerItemPickupSubscription |
+		PlayerItemDropSubscription
 	if got := pluginRuntime.Subscriptions(); got != wantSubscriptions {
 		t.Fatalf("Subscriptions() = %d, want %d", got, wantSubscriptions)
 	}
@@ -1051,12 +1059,12 @@ func TestCSharpRuntimeLifecycleAndQuit(t *testing.T) {
 	if err := pluginRuntime.HandlePlayerQuit(1, PlayerQuitInput{Name: "Gopher"}); err != nil {
 		t.Fatal(err)
 	}
-	cancelled, err := pluginRuntime.HandlePlayerMove(2, PlayerMoveInput{NewPosition: Vec3{Y: -65}}, false)
+	cancelled, err := pluginRuntime.HandlePlayerMove(2, PlayerMoveInput{NewPosition: Vec3{Y: math.NaN()}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !cancelled {
-		t.Fatal("movement below the world was not cancelled")
+		t.Fatal("non-finite movement was not cancelled")
 	}
 	cancelled, err = pluginRuntime.HandlePlayerMove(3, PlayerMoveInput{NewPosition: Vec3{Y: 64}}, false)
 	if err != nil {
@@ -1079,7 +1087,7 @@ func TestCSharpRuntimeLifecycleAndQuit(t *testing.T) {
 	if food.To != 0 {
 		t.Fatalf("food = %d, want 0", food.To)
 	}
-	if err := pluginRuntime.HandlePlayerJump(6, PlayerID{}); err != nil {
+	if err := pluginRuntime.HandlePlayerJump(6, PlayerSnapshot{}); err != nil {
 		t.Fatal(err)
 	}
 	for name, call := range map[string]func() (bool, error){
@@ -1093,7 +1101,7 @@ func TestCSharpRuntimeLifecycleAndQuit(t *testing.T) {
 			return pluginRuntime.HandlePlayerToggleSneak(9, PlayerToggleInput{After: true}, false)
 		},
 		"punch air": func() (bool, error) {
-			return pluginRuntime.HandlePlayerPunchAir(10, PlayerID{}, false)
+			return pluginRuntime.HandlePlayerPunchAir(10, PlayerSnapshot{}, false)
 		},
 	} {
 		cancelled, err := call()
@@ -1103,6 +1111,151 @@ func TestCSharpRuntimeLifecycleAndQuit(t *testing.T) {
 		if cancelled {
 			t.Fatalf("%s unexpectedly cancelled", name)
 		}
+	}
+}
+
+func TestCSharpRuntimeReflectedPlayerHandlers(t *testing.T) {
+	pluginRuntime := openCSharpRuntime(t)
+	properties, err := nbt.MarshalEncoding(map[string]any{}, nbt.LittleEndian)
+	if err != nil {
+		t.Fatal(err)
+	}
+	player := PlayerSnapshot{
+		Player:              PlayerID{UUID: [16]byte{0x31, 0x32}, Generation: 47},
+		Name:                "HandlerPlayer",
+		LatencyMilliseconds: 83,
+		Position:            Vec3{X: 12.25, Y: 70, Z: -8.5},
+	}
+	position := BlockPos{X: 12, Y: 69, Z: -9}
+	sand := WorldBlock{Identifier: "minecraft:sand", PropertiesNBT: properties}
+	stack := ItemStack{
+		Identifier:  "minecraft:diamond_sword",
+		Count:       1,
+		Damage:      17,
+		Unbreakable: true,
+		AnvilCost:   4,
+		CustomName:  "  Handler blade  ",
+		Lore:        []string{"full item view"},
+		Enchantments: []ItemEnchantment{{
+			ID: 9, Level: 3,
+		}},
+	}
+	invocation := InvocationID(200)
+	next := func() InvocationID {
+		current := invocation
+		invocation++
+		return current
+	}
+	allowed := func(name string, call func() (bool, error)) {
+		t.Helper()
+		cancelled, err := call()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if cancelled {
+			t.Fatalf("%s cancelled by default", name)
+		}
+	}
+
+	allowed("fire extinguish", func() (bool, error) {
+		return pluginRuntime.HandlePlayerFireExtinguish(next(), PlayerPositionInput{Player: player, Position: position}, false)
+	})
+	allowed("start break", func() (bool, error) {
+		return pluginRuntime.HandlePlayerStartBreak(next(), PlayerPositionInput{Player: player, Position: position}, false)
+	})
+
+	broken, err := pluginRuntime.HandlePlayerBlockBreak(next(), PlayerBlockBreakInput{
+		Player: player, Position: position, Block: sand,
+		Drops: []ItemStack{{}, stack}, Experience: -7,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if broken.Cancelled || broken.Experience != 0 || len(broken.Drops) != 1 {
+		t.Fatalf("block break output=%+v", broken)
+	}
+	assertCSharpHandlerStack(t, broken.Drops[0], stack, stack.CustomName)
+
+	allowed("block place", func() (bool, error) {
+		return pluginRuntime.HandlePlayerBlockPlace(next(), PlayerBlockPlaceInput{
+			Player: player, Position: position, Block: sand,
+		}, false)
+	})
+	allowed("block pick", func() (bool, error) {
+		return pluginRuntime.HandlePlayerBlockPick(next(), PlayerBlockPickInput{
+			Player: player, Position: position, Block: sand,
+		}, false)
+	})
+
+	allowed("item use", func() (bool, error) {
+		return pluginRuntime.HandlePlayerItemUse(next(), player, false)
+	})
+	nonFinite := player
+	nonFinite.Position.Y = math.NaN()
+	cancelled, err := pluginRuntime.HandlePlayerItemUse(next(), nonFinite, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cancelled {
+		t.Fatal("item use did not decode and reject the non-finite player snapshot position")
+	}
+	allowed("item use on block", func() (bool, error) {
+		return pluginRuntime.HandlePlayerItemUseOnBlock(next(), PlayerItemUseOnBlockInput{
+			Player: player, Position: position, Face: 3,
+			ClickPosition: Vec3{X: 0.125, Y: 0.5, Z: 0.875},
+		}, false)
+	})
+	allowed("item release", func() (bool, error) {
+		return pluginRuntime.HandlePlayerItemRelease(next(), player, stack, -123_456_789*time.Nanosecond, false)
+	})
+	allowed("item consume", func() (bool, error) {
+		return pluginRuntime.HandlePlayerItemConsume(next(), player, stack, false)
+	})
+
+	experience, err := pluginRuntime.HandlePlayerExperienceGain(next(), player, -5, false)
+	if err != nil || experience.Cancelled || experience.Amount != 0 {
+		t.Fatalf("experience output=%+v error=%v", experience, err)
+	}
+	allowed("sign edit", func() (bool, error) {
+		return pluginRuntime.HandlePlayerSignEdit(next(), PlayerSignEditInput{
+			Player: player, Position: position, FrontSide: true,
+			OldText: "before", NewText: "after",
+		}, false)
+	})
+	sleep, err := pluginRuntime.HandlePlayerSleep(next(), player, true, false)
+	if err != nil || sleep.Cancelled || !sleep.SendReminder {
+		t.Fatalf("sleep output=%+v error=%v", sleep, err)
+	}
+	page, err := pluginRuntime.HandlePlayerLecternPageTurn(next(), PlayerLecternPageTurnInput{
+		Player: player, Position: position, OldPage: 3, NewPage: -2,
+	}, false)
+	if err != nil || page.Cancelled || page.NewPage != 0 {
+		t.Fatalf("lectern output=%+v error=%v", page, err)
+	}
+	damage, err := pluginRuntime.HandlePlayerItemDamage(next(), player, stack, -4, false)
+	if err != nil || damage.Cancelled || damage.Damage != 0 {
+		t.Fatalf("item damage output=%+v error=%v", damage, err)
+	}
+	pickup, err := pluginRuntime.HandlePlayerItemPickup(next(), PlayerItemPickupInput{Player: player, Item: stack}, false)
+	if err != nil || pickup.Cancelled {
+		t.Fatalf("item pickup output=%+v error=%v", pickup, err)
+	}
+	assertCSharpHandlerStack(t, pickup.Item, stack, "Handler blade")
+	allowed("held slot change", func() (bool, error) {
+		return pluginRuntime.HandlePlayerHeldSlotChange(next(), PlayerHeldSlotChangeInput{Player: player, From: 2, To: 7}, false)
+	})
+	allowed("item drop", func() (bool, error) {
+		return pluginRuntime.HandlePlayerItemDrop(next(), player, stack, false)
+	})
+}
+
+func assertCSharpHandlerStack(t *testing.T, got, want ItemStack, customName string) {
+	t.Helper()
+	if got.Identifier != want.Identifier || got.Metadata != want.Metadata || got.Count != want.Count ||
+		got.Damage != want.Damage || got.Unbreakable != want.Unbreakable || got.AnvilCost != want.AnvilCost ||
+		got.CustomName != customName || !slices.Equal(got.Lore, want.Lore) ||
+		!slices.Equal(got.Enchantments, want.Enchantments) {
+		t.Fatalf("item stack=%+v, want %+v with custom name %q", got, want, customName)
 	}
 }
 
@@ -1131,7 +1284,10 @@ func TestCSharpRuntimeHandlesMovementConcurrently(t *testing.T) {
 
 func BenchmarkCSharpMovement(b *testing.B) {
 	pluginRuntime := openCSharpRuntime(b)
-	input := PlayerMoveInput{NewPosition: Vec3{Y: 64}}
+	input := PlayerMoveInput{
+		Player:      PlayerSnapshot{Name: "BenchmarkPlayer"},
+		NewPosition: Vec3{Y: 64},
+	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {

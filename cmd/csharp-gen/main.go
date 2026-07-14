@@ -357,15 +357,32 @@ var instrumentNames = []string{
 }
 
 var supportedPlayerHandlers = map[string]uint64{
-	"HandleChat":         1 << 1,
-	"HandleFoodLoss":     1 << 8,
-	"HandleJump":         1 << 14,
-	"HandleMove":         1,
-	"HandlePunchAir":     1 << 17,
-	"HandleQuit":         1 << 3,
-	"HandleTeleport":     1 << 15,
-	"HandleToggleSneak":  1 << 13,
-	"HandleToggleSprint": 1 << 12,
+	"HandleMove":            1,
+	"HandleChat":            1 << 1,
+	"HandleQuit":            1 << 3,
+	"HandleBlockBreak":      1 << 6,
+	"HandleBlockPlace":      1 << 7,
+	"HandleFoodLoss":        1 << 8,
+	"HandleStartBreak":      1 << 10,
+	"HandleFireExtinguish":  1 << 11,
+	"HandleToggleSprint":    1 << 12,
+	"HandleToggleSneak":     1 << 13,
+	"HandleJump":            1 << 14,
+	"HandleTeleport":        1 << 15,
+	"HandleExperienceGain":  1 << 16,
+	"HandlePunchAir":        1 << 17,
+	"HandleHeldSlotChange":  1 << 18,
+	"HandleSleep":           1 << 19,
+	"HandleBlockPick":       1 << 20,
+	"HandleLecternPageTurn": 1 << 21,
+	"HandleSignEdit":        1 << 22,
+	"HandleItemUse":         1 << 23,
+	"HandleItemUseOnBlock":  1 << 24,
+	"HandleItemConsume":     1 << 25,
+	"HandleItemRelease":     1 << 26,
+	"HandleItemDamage":      1 << 27,
+	"HandleItemDrop":        1 << 28,
+	"HandleItemPickup":      1 << 37,
 }
 
 var selectedCommandInterfaces = []string{
@@ -3829,6 +3846,12 @@ func translateParameters(fields *ast.FieldList) ([]parameter, error) {
 
 func csharpType(expression ast.Expr) (string, bool) {
 	switch value := expression.(type) {
+	case *ast.ArrayType:
+		typeName, ok := csharpType(value.Elt)
+		if !ok {
+			return "", false
+		}
+		return typeName + "[]", true
 	case *ast.Ellipsis:
 		typeName, ok := csharpType(value.Elt)
 		if !ok {
@@ -3840,10 +3863,10 @@ func csharpType(expression ast.Expr) (string, bool) {
 		if !ok {
 			return "", false
 		}
-		if typeName == "string" || typeName == "int" || typeName == "double" || typeName == "bool" {
-			return "ref " + typeName, true
+		if typeName == "Player.Context" || typeName == "Player" {
+			return typeName, true
 		}
-		return typeName, true
+		return "ref " + typeName, true
 	case *ast.Ident:
 		typeName, ok := map[string]string{
 			"any":     "object?",
@@ -3860,8 +3883,13 @@ func csharpType(expression ast.Expr) (string, bool) {
 			return "", false
 		}
 		typeName, ok := map[string]string{
-			"mgl64.Vec3":    "Vector3",
+			"cube.Face":     "Cube.Face",
+			"cube.Pos":      "Cube.Pos",
 			"cube.Rotation": "Rotation",
+			"item.Stack":    "Item.Stack",
+			"mgl64.Vec3":    "Vector3",
+			"time.Duration": "TimeSpan",
+			"world.Block":   "World.Block",
 		}[packageName.Name+"."+value.Sel.Name]
 		return typeName, ok
 	default:

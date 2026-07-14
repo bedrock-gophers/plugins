@@ -112,20 +112,22 @@ func (r *runtimeStub) HandlePlayerToggleSprint(_ native.InvocationID, _ native.P
 func (r *runtimeStub) HandlePlayerToggleSneak(_ native.InvocationID, _ native.PlayerToggleInput, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
-func (r *runtimeStub) HandlePlayerJump(_ native.InvocationID, _ native.PlayerID) error { return nil }
+func (r *runtimeStub) HandlePlayerJump(_ native.InvocationID, _ native.PlayerSnapshot) error {
+	return nil
+}
 func (r *runtimeStub) HandlePlayerTeleport(_ native.InvocationID, _ native.PlayerTeleportInput, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
-func (r *runtimeStub) HandlePlayerExperienceGain(_ native.InvocationID, _ native.PlayerID, amount int, cancelled bool) (native.PlayerExperienceGainOutput, error) {
+func (r *runtimeStub) HandlePlayerExperienceGain(_ native.InvocationID, _ native.PlayerSnapshot, amount int, cancelled bool) (native.PlayerExperienceGainOutput, error) {
 	return native.PlayerExperienceGainOutput{Cancelled: cancelled, Amount: amount}, nil
 }
-func (r *runtimeStub) HandlePlayerPunchAir(_ native.InvocationID, _ native.PlayerID, cancelled bool) (bool, error) {
+func (r *runtimeStub) HandlePlayerPunchAir(_ native.InvocationID, _ native.PlayerSnapshot, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
 func (r *runtimeStub) HandlePlayerHeldSlotChange(_ native.InvocationID, _ native.PlayerHeldSlotChangeInput, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
-func (r *runtimeStub) HandlePlayerSleep(_ native.InvocationID, _ native.PlayerID, sendReminder, cancelled bool) (native.PlayerSleepOutput, error) {
+func (r *runtimeStub) HandlePlayerSleep(_ native.InvocationID, _ native.PlayerSnapshot, sendReminder, cancelled bool) (native.PlayerSleepOutput, error) {
 	return native.PlayerSleepOutput{Cancelled: cancelled, SendReminder: sendReminder}, nil
 }
 func (r *runtimeStub) HandlePlayerBlockPick(_ native.InvocationID, _ native.PlayerBlockPickInput, cancelled bool) (bool, error) {
@@ -137,23 +139,26 @@ func (r *runtimeStub) HandlePlayerLecternPageTurn(_ native.InvocationID, input n
 func (r *runtimeStub) HandlePlayerSignEdit(_ native.InvocationID, _ native.PlayerSignEditInput, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
-func (r *runtimeStub) HandlePlayerItemUse(_ native.InvocationID, _ native.PlayerID, cancelled bool) (bool, error) {
+func (r *runtimeStub) HandlePlayerItemUse(_ native.InvocationID, _ native.PlayerSnapshot, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
 func (r *runtimeStub) HandlePlayerItemUseOnBlock(_ native.InvocationID, _ native.PlayerItemUseOnBlockInput, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
-func (r *runtimeStub) HandlePlayerItemConsume(_ native.InvocationID, _ native.PlayerID, _ native.ItemStack, cancelled bool) (bool, error) {
+func (r *runtimeStub) HandlePlayerItemConsume(_ native.InvocationID, _ native.PlayerSnapshot, _ native.ItemStack, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
-func (r *runtimeStub) HandlePlayerItemRelease(_ native.InvocationID, _ native.PlayerID, _ native.ItemStack, _ time.Duration, cancelled bool) (bool, error) {
+func (r *runtimeStub) HandlePlayerItemRelease(_ native.InvocationID, _ native.PlayerSnapshot, _ native.ItemStack, _ time.Duration, cancelled bool) (bool, error) {
 	return cancelled, nil
 }
-func (r *runtimeStub) HandlePlayerItemDamage(_ native.InvocationID, _ native.PlayerID, _ native.ItemStack, damage int, cancelled bool) (native.PlayerItemDamageOutput, error) {
+func (r *runtimeStub) HandlePlayerItemDamage(_ native.InvocationID, _ native.PlayerSnapshot, _ native.ItemStack, damage int, cancelled bool) (native.PlayerItemDamageOutput, error) {
 	return native.PlayerItemDamageOutput{Cancelled: cancelled, Damage: damage}, nil
 }
-func (r *runtimeStub) HandlePlayerItemDrop(_ native.InvocationID, _ native.PlayerID, _ native.ItemStack, cancelled bool) (bool, error) {
+func (r *runtimeStub) HandlePlayerItemDrop(_ native.InvocationID, _ native.PlayerSnapshot, _ native.ItemStack, cancelled bool) (bool, error) {
 	return cancelled, nil
+}
+func (r *runtimeStub) HandlePlayerItemPickup(_ native.InvocationID, input native.PlayerItemPickupInput, cancelled bool) (native.PlayerItemPickupOutput, error) {
+	return native.PlayerItemPickupOutput{Cancelled: cancelled, Item: input.Item}, nil
 }
 func (r *runtimeStub) HandlePlayerAttackEntity(_ native.InvocationID, input native.PlayerAttackEntityInput, force, height float64, critical, cancelled bool) (native.PlayerAttackEntityOutput, error) {
 	r.attackInput = input
@@ -302,7 +307,7 @@ func TestPlayerHandlerRespawnMutatesPositionAndWorld(t *testing.T) {
 
 		handler.HandleRespawn(p, &position, &chosenWorld)
 
-		if runtime.respawnInput.Player.Generation != 41 {
+		if runtime.respawnInput.Player.Player.Generation != 41 {
 			t.Fatalf("unexpected respawn input: %#v", runtime.respawnInput)
 		}
 		if runtime.respawnTx != tx.World() {
@@ -411,7 +416,9 @@ func TestPlayerHandlerMove(t *testing.T) {
 		if p.Position() != (mgl64.Vec3{1, 2, 3}) {
 			t.Fatalf("cancelled movement changed position: %v", p.Position())
 		}
-		if runtime.moveInput.Player.Generation != 7 || runtime.moveInput.OldPosition != (native.Vec3{X: 1, Y: 2, Z: 3}) {
+		if runtime.moveInput.Player.Player.Generation != 7 || runtime.moveInput.Player.Name != "TestPlayer" ||
+			runtime.moveInput.Player.Position != (native.Vec3{X: 1, Y: 2, Z: 3}) ||
+			runtime.moveInput.OldPosition != (native.Vec3{X: 1, Y: 2, Z: 3}) {
 			t.Fatalf("unexpected movement input: %+v", runtime.moveInput)
 		}
 	})
@@ -464,7 +471,7 @@ func TestPlayerHandlerSkinChangeMutatesAndCancelsCandidate(t *testing.T) {
 				proposed.FullID = "proposed"
 				proposed.ModelConfig.Default = "geometry.proposed"
 				p.SetSkin(proposed)
-				if !runtime.skinChangeCalled || runtime.skinChangeInput.Player != playerID {
+				if !runtime.skinChangeCalled || runtime.skinChangeInput.Player.Player != playerID {
 					t.Fatalf("skin-change input = %#v", runtime.skinChangeInput)
 				}
 				if got := p.Skin().ModelConfig.Default; got != test.wantModel {
@@ -492,7 +499,7 @@ func TestPlayerHandlerAttackEntityUsesStableTargetID(t *testing.T) {
 			t.Fatal("cancelled attack succeeded")
 		}
 		targetID, ok := players.EntityRegistry().ID(target)
-		if !ok || runtime.attackInput.Player != playerID || runtime.attackInput.Target != targetID {
+		if !ok || runtime.attackInput.Player.Player != playerID || runtime.attackInput.Target != targetID {
 			t.Fatalf("attack input = %#v, player=%#v target=%#v", runtime.attackInput, playerID, targetID)
 		}
 	})
@@ -513,7 +520,7 @@ func TestPlayerHandlerItemUseOnEntityUsesStableTargetID(t *testing.T) {
 			t.Fatal("cancelled item use succeeded")
 		}
 		targetID, ok := players.EntityRegistry().ID(target)
-		if !ok || runtime.itemUseEntityInput.Player != playerID || runtime.itemUseEntityInput.Target != targetID {
+		if !ok || runtime.itemUseEntityInput.Player.Player != playerID || runtime.itemUseEntityInput.Target != targetID {
 			t.Fatalf("item-use-on-entity input = %#v, player=%#v target=%#v", runtime.itemUseEntityInput, playerID, targetID)
 		}
 	})
@@ -539,7 +546,7 @@ func TestPlayerHandlerChangeWorldUsesManagedHandlesAndNewWorldTransaction(t *tes
 		playerID := players.Register(p, 93)
 		handler := NewPlayerHandler(runtime, nil, players, resolver)
 		handler.HandleChangeWorld(p, before, after)
-		if runtime.changeWorldInput.Player != playerID || runtime.changeWorldInput.Before == nil ||
+		if runtime.changeWorldInput.Player.Player != playerID || runtime.changeWorldInput.Before == nil ||
 			*runtime.changeWorldInput.Before != 11 || runtime.changeWorldInput.After != 12 {
 			t.Fatalf("change-world input = %#v", runtime.changeWorldInput)
 		}
@@ -573,7 +580,7 @@ func TestPlayerHandlerChat(t *testing.T) {
 		handler := NewPlayerHandler(runtime, nil, players, nil)
 		p.Handle(handler)
 		p.Chat("original")
-		if runtime.chatInput.Message != "original" || runtime.chatInput.Player.Generation != 9 {
+		if runtime.chatInput.Message != "original" || runtime.chatInput.Player.Player.Generation != 9 {
 			t.Fatalf("unexpected chat input: %+v", runtime.chatInput)
 		}
 	})
@@ -592,7 +599,7 @@ func TestPlayerHandlerJoinAndQuit(t *testing.T) {
 			t.Fatal("join was not cancelled")
 		}
 		handler.HandleQuit(p)
-		if runtime.joinInput.Player.Generation != 11 || runtime.quitInput.Player.Generation != 11 {
+		if runtime.joinInput.Player.Player.Generation != 11 || runtime.quitInput.Player.Player.Generation != 11 {
 			t.Fatalf("join=%+v quit=%+v", runtime.joinInput, runtime.quitInput)
 		}
 		if _, ok := players.ID(p); ok {
@@ -626,7 +633,7 @@ func TestPlayerHandlerHurtAndHeal(t *testing.T) {
 		if p.Health() != before+3.5 {
 			t.Fatalf("modified heal = %v, want %v", p.Health(), before+3.5)
 		}
-		if runtime.hurtInput.Player.Generation != 13 || runtime.healInput.Player.Generation != 13 {
+		if runtime.hurtInput.Player.Player.Generation != 13 || runtime.healInput.Player.Player.Generation != 13 {
 			t.Fatalf("hurt=%+v heal=%+v", runtime.hurtInput, runtime.healInput)
 		}
 		if !strings.Contains(runtime.hurtInput.Source.Name, "testDamageSource") ||
@@ -680,6 +687,10 @@ func TestPlayerHandlerBlockBreakAndPlace(t *testing.T) {
 		if runtime.blockBreakInput.Position != (native.BlockPos{X: 1, Y: 2, Z: 4}) || runtime.blockPlaceInput.Position != (native.BlockPos{X: 1, Y: 2, Z: 5}) {
 			t.Fatalf("break=%+v place=%+v", runtime.blockBreakInput, runtime.blockPlaceInput)
 		}
+		if runtime.blockBreakInput.Block.Identifier != "minecraft:stone" || len(runtime.blockBreakInput.Block.PropertiesNBT) == 0 ||
+			runtime.blockPlaceInput.Block.Identifier != "minecraft:dirt" || len(runtime.blockPlaceInput.Block.PropertiesNBT) == 0 {
+			t.Fatalf("full block payloads: break=%+v place=%+v", runtime.blockBreakInput.Block, runtime.blockPlaceInput.Block)
+		}
 		if _, ok := tx.Block(placePos).(block.Air); !ok {
 			t.Fatalf("cancelled placement wrote %T", tx.Block(placePos))
 		}
@@ -709,7 +720,7 @@ func TestPlayerHandlerFoodLossAndDeath(t *testing.T) {
 		if !keepInventory {
 			t.Fatal("keep inventory was not applied")
 		}
-		if runtime.foodLossInput.Player.Generation != 15 || runtime.deathInput.Player.Generation != 15 {
+		if runtime.foodLossInput.Player.Player.Generation != 15 || runtime.deathInput.Player.Player.Generation != 15 {
 			t.Fatalf("food=%+v death=%+v", runtime.foodLossInput, runtime.deathInput)
 		}
 	})

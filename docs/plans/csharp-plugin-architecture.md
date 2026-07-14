@@ -22,7 +22,15 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
 ## Order
 
 1. NativeAOT loading and `OnEnable`/`OnDisable`.
-2. `player.Handler` events. Movement, chat, food loss, jump, teleport, sprint/sneak toggles, punch-air, and quit are implemented.
+2. `player.Handler` events. Movement, chat, food loss, jump, teleport, sprint/sneak toggles,
+   punch-air, quit, fire extinguish, start/block break, block place/pick, item use/use-on-block,
+   item release/consume/damage/pickup/drop, experience gain, sign edit, sleep, lectern page turns,
+   and held-slot changes are implemented. Signatures and subscriptions come from Dragonfly's Go
+   AST. Private plugin ABI 6 gives every callback a borrowed full player snapshot, transports
+   stateful blocks and items directly, preserves signed nanosecond release durations, and returns
+   mutable block-break drops and item-pickup replacements through callback-owned typed stack views.
+   C# item-release durations truncate sub-100 ns remainders toward zero because `TimeSpan` has
+   100 ns precision. Cancellation remains allowed by default and can only transition to cancelled.
 3. Player methods and commands. Command interfaces and the implemented `Player` method surface are generated from Dragonfly's Go AST. C# uses `Cmd.New`/`Cmd.Register`, one `Cmd.Runnable` per overload, and reflected public fields as Dragonfly uses reflected Go struct fields. Supported command fields include subcommands, native enums, dynamic `Cmd.Enum` values, players, vectors, optional values, and `Cmd.Varargs`. The generator roots runnable fields and field types for NativeAOT; runnable types use `internal` visibility and require no linker annotations. Bedrock-facing subcommands and enum/player suggestions are always lowercase. The generated game-mode slice includes the exact `World.GameMode` interface, four registered values, `GameModeByID`, `GameModeID`, `Player.SetGameMode`, and `Player.GameMode`. Custom C# game modes cross the private ABI as their eight Dragonfly capabilities and remain unregistered, matching raw Dragonfly behavior. The text slice includes `Message`, `SendPopup`, `SendTip`, `SendJukeboxPopup`, `SetNameTag`, and `Disconnect`. `Messagef` remains absent until Go `fmt.Sprintf` semantics can be preserved honestly.
 4. World and block parity. The first landed slice generates `Cube.Pos`, `Cube.Range`,
    `Cube.Face`, `World.Block`, `World.SetOpts`, `World.Tx.Range`, `World.Tx.Block`,
@@ -106,8 +114,8 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    inventory, preserving custom `player.Config` sizes. Bounded open/read/close item snapshots preserve damage, unbreakable state, anvil cost, custom
    names, lore, item NBT, plugin values, and enchantments internally. Unknown registered stateful
    NBT-backed items decode to a private opaque item and round-trip losslessly. Public
-   enchantment/value mutation, `WithItem`,
-   ender chests, custom items, and item events remain next; no public identifier fallback is added.
+   enchantment/value mutation, `WithItem`, and custom items remain next; no public identifier
+   fallback is added.
 7. Effects. The generator reads `server/entity/effect` registrations, interfaces, constructors,
    value methods, and player method signatures from Dragonfly's Go AST, then validates all 28
    built-ins against the live registry. C# exposes `Effect.Value`, registered `Type`/`LastingType`
@@ -152,6 +160,8 @@ capabilities, and round-trips the full nested firework stack. Empty, water, lava
 exercise typed content queries, consumption flags, duration, max counts, and lava fuel residue.
 `/kitchen effect` exercises every effect constructor and value method, registry and colour lookup,
 all potion/stew effect families, and a real player add/read/list/remove round trip.
+The same one-file plugin overrides every exposed `Player.Handler` method; mutable drop, pickup,
+experience, page, reminder, and damage arguments traverse the real private ABI.
 `/kitchen form` exercises reflected menu, custom, and modal forms, every built-in element,
 submitted values, closers, and nested sends. `/kitchen raw-form` exercises the open `Form.Value`
 contract plus public element/menu-element JSON marshalling.

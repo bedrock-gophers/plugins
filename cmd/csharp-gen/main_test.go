@@ -28,7 +28,24 @@ type Handler interface {
 	HandleToggleSneak(ctx *Context, after bool)
 	HandleChat(ctx *Context, message *string)
 	HandleFoodLoss(ctx *Context, from int, to *int)
+	HandleFireExtinguish(ctx *Context, pos cube.Pos)
+	HandleStartBreak(ctx *Context, pos cube.Pos)
+	HandleBlockBreak(ctx *Context, pos cube.Pos, drops *[]item.Stack, xp *int)
+	HandleBlockPlace(ctx *Context, pos cube.Pos, b world.Block)
+	HandleBlockPick(ctx *Context, pos cube.Pos, b world.Block)
+	HandleItemUse(ctx *Context)
+	HandleItemUseOnBlock(ctx *Context, pos cube.Pos, face cube.Face, clickPos mgl64.Vec3)
+	HandleItemRelease(ctx *Context, item item.Stack, dur time.Duration)
+	HandleItemConsume(ctx *Context, item item.Stack)
+	HandleExperienceGain(ctx *Context, amount *int)
 	HandlePunchAir(ctx *Context)
+	HandleSignEdit(ctx *Context, pos cube.Pos, frontSide bool, oldText, newText string)
+	HandleSleep(ctx *Context, sendReminder *bool)
+	HandleLecternPageTurn(ctx *Context, pos cube.Pos, oldPage int, newPage *int)
+	HandleItemDamage(ctx *Context, i item.Stack, damage *int)
+	HandleItemPickup(ctx *Context, i *item.Stack)
+	HandleHeldSlotChange(ctx *Context, from, to int)
+	HandleItemDrop(ctx *Context, s item.Stack)
 	HandleQuit(p *Player)
 }`
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
@@ -43,8 +60,15 @@ type Handler interface {
 		"void HandleMove(Player.Context ctx, Vector3 newPos, Rotation newRot);",
 		"void HandleChat(Player.Context ctx, ref string message);",
 		"void HandleFoodLoss(Player.Context ctx, int from, ref int to);",
+		"void HandleFireExtinguish(Player.Context ctx, Cube.Pos pos);",
+		"void HandleBlockBreak(Player.Context ctx, Cube.Pos pos, ref Item.Stack[] drops, ref int xp);",
+		"void HandleBlockPlace(Player.Context ctx, Cube.Pos pos, World.Block b);",
+		"void HandleItemUseOnBlock(Player.Context ctx, Cube.Pos pos, Cube.Face face, Vector3 clickPos);",
+		"void HandleItemRelease(Player.Context ctx, Item.Stack item, TimeSpan dur);",
+		"void HandleItemPickup(Player.Context ctx, ref Item.Stack i);",
 		"void HandleQuit(Player p);",
 		"[HandlerSubscription(1UL)]",
+		"[HandlerSubscription(137438953472UL)]",
 		"public virtual void HandleMove(Player.Context ctx, Vector3 newPos, Rotation newRot) { }",
 	} {
 		if !strings.Contains(output, expected) {

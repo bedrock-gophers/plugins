@@ -9,6 +9,43 @@
 #include "player_operations_generated.h"
 
 #if UINTPTR_MAX == UINT64_MAX
+#define ASSERT_PLAYER_EVENT_LAYOUT(TYPE) _Static_assert(offsetof(TYPE, player) == 8, #TYPE ".player ABI offset changed")
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerMoveInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerChatInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerJoinInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerQuitInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerHurtInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerHealInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerBlockBreakInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerBlockPlaceInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerFoodLossInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerDeathInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerStartBreakInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerFireExtinguishInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerToggleSprintInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerToggleSneakInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerJumpInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerTeleportInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerExperienceGainInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerPunchAirInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerHeldSlotChangeInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerSleepInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerBlockPickInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerLecternPageTurnInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerSignEditInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerItemUseInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerItemUseOnBlockInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerItemConsumeInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerItemReleaseInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerItemDamageInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerItemDropInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerAttackEntityInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerItemUseOnEntityInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerChangeWorldInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerRespawnInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerSkinChangeInput);
+ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerItemPickupInput);
+#undef ASSERT_PLAYER_EVENT_LAYOUT
 _Static_assert(sizeof(DfSkinAnimationInfo) == 40, "DfSkinAnimationInfo ABI layout changed");
 _Static_assert(offsetof(DfSkinAnimationInfo, frame_count) == 16, "DfSkinAnimationInfo.frame_count ABI offset changed");
 _Static_assert(offsetof(DfSkinAnimationInfo, pixels_len) == 32, "DfSkinAnimationInfo.pixels_len ABI offset changed");
@@ -21,9 +58,30 @@ _Static_assert(sizeof(DfSkinAnimationView) == 48, "DfSkinAnimationView ABI layou
 _Static_assert(offsetof(DfSkinAnimationView, pixels) == 32, "DfSkinAnimationView.pixels ABI offset changed");
 _Static_assert(sizeof(DfSkinView) == 152, "DfSkinView ABI layout changed");
 _Static_assert(offsetof(DfSkinView, animations) == 136, "DfSkinView.animations ABI offset changed");
-_Static_assert(sizeof(DfPlayerSkinChangeInput) == 40, "DfPlayerSkinChangeInput ABI layout changed");
-_Static_assert(offsetof(DfPlayerSkinChangeInput, snapshot) == 32, "DfPlayerSkinChangeInput.snapshot ABI offset changed");
+_Static_assert(sizeof(DfPlayerMoveInput) == 144, "DfPlayerMoveInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerMoveInput, player) == 8, "DfPlayerMoveInput.player ABI offset changed");
+_Static_assert(sizeof(DfPlayerBlockBreakInput) == 144, "DfPlayerBlockBreakInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerBlockBreakInput, block) == 96, "DfPlayerBlockBreakInput.block ABI offset changed");
+_Static_assert(offsetof(DfPlayerBlockBreakInput, drops) == 128, "DfPlayerBlockBreakInput.drops ABI offset changed");
+_Static_assert(sizeof(DfPlayerBlockBreakState) == 40, "DfPlayerBlockBreakState ABI layout changed");
+_Static_assert(offsetof(DfPlayerBlockBreakState, replacement_drops) == 8, "DfPlayerBlockBreakState.replacement_drops ABI offset changed");
+_Static_assert(sizeof(DfPlayerBlockPlaceInput) == 128, "DfPlayerBlockPlaceInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerBlockPlaceInput, block) == 96, "DfPlayerBlockPlaceInput.block ABI offset changed");
+_Static_assert(sizeof(DfPlayerItemConsumeInput) == 200, "DfPlayerItemConsumeInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerItemConsumeInput, item) == 80, "DfPlayerItemConsumeInput.item ABI offset changed");
+_Static_assert(sizeof(DfPlayerItemReleaseInput) == 208, "DfPlayerItemReleaseInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerItemReleaseInput, duration_nanoseconds) == 200, "DfPlayerItemReleaseInput.duration_nanoseconds ABI offset changed");
+_Static_assert(sizeof(DfPlayerItemDamageInput) == 200, "DfPlayerItemDamageInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerItemDamageInput, item) == 80, "DfPlayerItemDamageInput.item ABI offset changed");
+_Static_assert(sizeof(DfPlayerItemDropInput) == 200, "DfPlayerItemDropInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerItemDropInput, item) == 80, "DfPlayerItemDropInput.item ABI offset changed");
+_Static_assert(sizeof(DfPlayerSkinChangeInput) == 88, "DfPlayerSkinChangeInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerSkinChangeInput, snapshot) == 80, "DfPlayerSkinChangeInput.snapshot ABI offset changed");
 _Static_assert(sizeof(DfPlayerSkinChangeState) == 1, "DfPlayerSkinChangeState ABI layout changed");
+_Static_assert(sizeof(DfPlayerItemPickupInput) == 200, "DfPlayerItemPickupInput ABI layout changed");
+_Static_assert(offsetof(DfPlayerItemPickupInput, item) == 80, "DfPlayerItemPickupInput.item ABI offset changed");
+_Static_assert(sizeof(DfPlayerItemPickupState) == 32, "DfPlayerItemPickupState ABI layout changed");
+_Static_assert(offsetof(DfPlayerItemPickupState, replacement) == 8, "DfPlayerItemPickupState.replacement ABI offset changed");
 _Static_assert(sizeof(DfCommandParameter) == 56, "DfCommandParameter ABI layout changed");
 _Static_assert(offsetof(DfCommandParameter, suffix) == 24, "DfCommandParameter.suffix ABI offset changed");
 _Static_assert(sizeof(DfCommandDescriptor) == 64, "DfCommandDescriptor ABI layout changed");
@@ -31,7 +89,7 @@ _Static_assert(sizeof(DfCommandPlayer) == 72, "DfCommandPlayer ABI layout change
 _Static_assert(sizeof(DfCommandEnumContext) == 88, "DfCommandEnumContext ABI layout changed");
 _Static_assert(sizeof(DfCommandInput) == 120, "DfCommandInput ABI layout changed");
 _Static_assert(sizeof(DfCommandState) == 32, "DfCommandState ABI layout changed");
-_Static_assert(sizeof(DfPluginApiV5) == 128, "DfPluginApiV5 ABI layout changed");
+_Static_assert(sizeof(DfPluginApiV6) == 128, "DfPluginApiV6 ABI layout changed");
 _Static_assert(sizeof(DfInventoryId) == 32, "DfInventoryId ABI layout changed");
 _Static_assert(sizeof(DfItemStackInfo) == 80, "DfItemStackInfo ABI layout changed");
 _Static_assert(sizeof(DfItemStackSnapshot) == 88, "DfItemStackSnapshot ABI layout changed");
@@ -70,9 +128,11 @@ _Static_assert(sizeof(DfEntityTypeDescriptorV2) == 144, "DfEntityTypeDescriptorV
 _Static_assert(offsetof(DfEntityTypeDescriptorV2, type_key) == 80, "DfEntityTypeDescriptorV2.type_key ABI offset changed");
 _Static_assert(sizeof(DfEntitySpawnViewV3) == 200, "DfEntitySpawnViewV3 ABI layout changed");
 _Static_assert(offsetof(DfEntitySpawnViewV3, custom_instance) == 176, "DfEntitySpawnViewV3.custom_instance ABI offset changed");
-_Static_assert(sizeof(DfPluginApiV5) == 128, "DfPluginApiV5 ABI layout changed");
-_Static_assert(offsetof(DfPluginApiV5, entity_type_count) == 64, "DfPluginApiV5.entity_type_count ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV5, handle_entity) == 80, "DfPluginApiV5.handle_entity ABI offset changed");
+_Static_assert(sizeof(DfPluginApiV6) == 128, "DfPluginApiV6 ABI layout changed");
+_Static_assert(offsetof(DfPluginApiV6, entity_type_count) == 64, "DfPluginApiV6.entity_type_count ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV6, handle_entity) == 80, "DfPluginApiV6.handle_entity ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV6, handle_event) == 120, "DfPluginApiV6.handle_event ABI offset changed");
+_Static_assert(DF_ABI_VERSION == 6u, "plugin ABI version changed without bridge review");
 _Static_assert(sizeof(DfEntityState) == 128, "DfEntityState ABI layout changed");
 _Static_assert(offsetof(DfEntityState, world) == 72, "DfEntityState.world ABI offset changed");
 _Static_assert(sizeof(DfParticleViewV1) == 40, "DfParticleViewV1 ABI layout changed");
@@ -134,6 +194,7 @@ extern DfStatus bg_go_player_form_close(uint64_t context, DfInvocationId invocat
 
 DfStatus bg_call_form_response(DfFormResponseFn callback, void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *submitter, uint32_t outcome, DfStringView response_json) { return callback(callback_context, invocation, submitter, outcome, response_json); }
 void bg_call_form_drop(DfFormDropFn callback, void *callback_context) { callback(callback_context); }
+void bg_call_item_stack_views_drop(DfItemStackViewsDropFn callback, void *context) { callback(context); }
 extern DfStatus bg_go_player_transform(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch);
 extern DfStatus bg_go_player_transfer(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfWorldId world, DfVec3 position);
 extern DfStatus bg_go_player_rotation(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfRotation *rotation);

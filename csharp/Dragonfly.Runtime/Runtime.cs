@@ -73,7 +73,7 @@ internal unsafe sealed class RuntimeState : IDisposable
         // leaves those handlers pointing into unmapped code, so the process owns every successful
         // load until exit even when validation or later server startup fails.
         var library = NativeLibrary.Load(path);
-        var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v5");
+        var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v6");
         var api = entry();
         if (api is null || api->Header.Version != Abi.PluginVersion || api->Header.Size < sizeof(PluginApi))
             throw new InvalidOperationException($"{path} has an incompatible plugin API");
@@ -237,7 +237,7 @@ internal unsafe sealed class RuntimeState : IDisposable
 
     internal int HandleEvent(uint eventId, void* input, void* state)
     {
-        if (!_running) return Abi.Error;
+        if (!_running || input is null || state is null) return Abi.Error;
         Interlocked.Increment(ref _activeCalls);
         try
         {

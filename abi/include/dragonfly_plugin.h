@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define DF_ABI_VERSION 5u
+#define DF_ABI_VERSION 6u
 // Version 31 transports Dragonfly effect fields using signed nanoseconds and ticks.
 #define DF_HOST_ABI_VERSION 31u
 #define DF_STATUS_OK 0
@@ -47,6 +47,13 @@ typedef struct { int32_t metadata; uint32_t count; uint32_t damage; uint8_t unbr
 typedef struct { uint64_t snapshot; DfItemStackInfo info; } DfItemStackSnapshot;
 typedef struct { DfStringBuffer identifier; DfStringBuffer custom_name; DfStringBuffer lore_bytes; DfStringBuffer nbt; DfStringBuffer values_nbt; DfByteSpan *lore; uint64_t lore_capacity; DfItemEnchantment *enchantments; uint64_t enchantment_capacity; } DfItemStackData;
 typedef struct { DfStringView identifier; int32_t metadata; uint32_t count; uint32_t damage; uint8_t unbreakable; int32_t anvil_cost; DfStringView custom_name; const DfStringView *lore; uint64_t lore_count; DfStringView nbt; DfStringView values_nbt; const DfItemEnchantment *enchantments; uint64_t enchantment_count; } DfItemStackViewV3;
+/*
+ * Event item views are borrowed only for the handle_event call. A non-null
+ * replacement_drop transfers a replacement view lease to the host. The host
+ * copies it synchronously and invokes replacement_drop exactly once before
+ * event dispatch returns to Dragonfly, including status and validation errors.
+ */
+typedef void (*DfItemStackViewsDropFn)(void *context);
 #define DF_WORLD_DIMENSION_OVERWORLD 0u
 #define DF_WORLD_DIMENSION_NETHER 1u
 #define DF_WORLD_DIMENSION_END 2u
@@ -534,7 +541,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfVec3 old_position;
     DfVec3 new_position;
     DfRotation rotation;
@@ -548,7 +555,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfStringView message;
 } DfPlayerChatInput;
 
@@ -562,7 +569,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfStringView name;
 } DfPlayerJoinInput;
 
@@ -574,7 +581,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfStringView name;
 } DfPlayerQuitInput;
 
@@ -586,7 +593,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     uint8_t immune;
     DfDamageSourceView source;
 } DfPlayerHurtInput;
@@ -601,7 +608,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfHealingSourceView source;
 } DfPlayerHealInput;
 
@@ -614,23 +621,29 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfBlockPos position;
-    DfStringView block;
+    DfBlockView block;
+    const DfItemStackViewV3 *drops;
+    uint64_t drop_count;
 } DfPlayerBlockBreakInput;
 
 typedef struct {
     uint8_t cancelled;
     int32_t experience;
+    const DfItemStackViewV3 *replacement_drops;
+    uint64_t replacement_drop_count;
+    void *replacement_context;
+    DfItemStackViewsDropFn replacement_drop;
 } DfPlayerBlockBreakState;
 
 #define DF_EVENT_PLAYER_BLOCK_PLACE 8u
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfBlockPos position;
-    DfStringView block;
+    DfBlockView block;
 } DfPlayerBlockPlaceInput;
 
 typedef struct {
@@ -641,7 +654,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     int32_t from;
 } DfPlayerFoodLossInput;
 
@@ -654,7 +667,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfDamageSourceView source;
 } DfPlayerDeathInput;
 
@@ -666,7 +679,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfBlockPos position;
 } DfPlayerStartBreakInput;
 
@@ -678,7 +691,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfBlockPos position;
 } DfPlayerFireExtinguishInput;
 
@@ -690,7 +703,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     uint8_t after;
 } DfPlayerToggleSprintInput;
 
@@ -702,7 +715,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     uint8_t after;
 } DfPlayerToggleSneakInput;
 
@@ -714,7 +727,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
 } DfPlayerJumpInput;
 
 typedef struct {
@@ -725,7 +738,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfVec3 position;
 } DfPlayerTeleportInput;
 
@@ -737,7 +750,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
 } DfPlayerExperienceGainInput;
 
 typedef struct {
@@ -749,7 +762,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
 } DfPlayerPunchAirInput;
 
 typedef struct {
@@ -760,7 +773,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     int32_t from;
     int32_t to;
 } DfPlayerHeldSlotChangeInput;
@@ -773,7 +786,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
 } DfPlayerSleepInput;
 
 typedef struct {
@@ -785,9 +798,9 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfBlockPos position;
-    DfStringView block;
+    DfBlockView block;
 } DfPlayerBlockPickInput;
 
 typedef struct {
@@ -798,7 +811,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfBlockPos position;
     int32_t old_page;
 } DfPlayerLecternPageTurnInput;
@@ -812,7 +825,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfBlockPos position;
     uint8_t front_side;
     DfStringView old_text;
@@ -827,7 +840,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
 } DfPlayerItemUseInput;
 
 typedef struct {
@@ -838,7 +851,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfBlockPos position;
     int32_t face;
     DfVec3 click_position;
@@ -852,8 +865,8 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
-    DfItemStackSnapshot item;
+    DfPlayerSnapshot player;
+    DfItemStackViewV3 item;
 } DfPlayerItemConsumeInput;
 
 typedef struct {
@@ -864,9 +877,9 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
-    DfItemStackSnapshot item;
-    uint64_t duration_milliseconds;
+    DfPlayerSnapshot player;
+    DfItemStackViewV3 item;
+    int64_t duration_nanoseconds;
 } DfPlayerItemReleaseInput;
 
 typedef struct {
@@ -877,8 +890,8 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
-    DfItemStackSnapshot item;
+    DfPlayerSnapshot player;
+    DfItemStackViewV3 item;
 } DfPlayerItemDamageInput;
 
 typedef struct {
@@ -890,8 +903,8 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
-    DfItemStackSnapshot item;
+    DfPlayerSnapshot player;
+    DfItemStackViewV3 item;
 } DfPlayerItemDropInput;
 
 typedef struct {
@@ -902,7 +915,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfEntityId target;
 } DfPlayerAttackEntityInput;
 
@@ -917,7 +930,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfEntityId target;
 } DfPlayerItemUseOnEntityInput;
 
@@ -929,7 +942,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     DfWorldId before;
     DfWorldId after;
 } DfPlayerChangeWorldInput;
@@ -942,7 +955,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
 } DfPlayerRespawnInput;
 
 typedef struct {
@@ -954,13 +967,28 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfPlayerId player;
+    DfPlayerSnapshot player;
     uint64_t snapshot;
 } DfPlayerSkinChangeInput;
 
 typedef struct {
     uint8_t cancelled;
 } DfPlayerSkinChangeState;
+
+#define DF_EVENT_PLAYER_ITEM_PICKUP 38u
+
+typedef struct {
+    DfInvocationId invocation;
+    DfPlayerSnapshot player;
+    DfItemStackViewV3 item;
+} DfPlayerItemPickupInput;
+
+typedef struct {
+    uint8_t cancelled;
+    const DfItemStackViewV3 *replacement;
+    void *replacement_context;
+    DfItemStackViewsDropFn replacement_drop;
+} DfPlayerItemPickupState;
 
 #define DF_EVENT_ENTITY_HURT 35u
 
@@ -1034,9 +1062,9 @@ typedef struct {
     DfPluginSetHostFn set_host;
     DfPluginDestroyFn destroy;
     DfHandleEventFn handle_event;
-} DfPluginApiV5;
+} DfPluginApiV6;
 
-typedef const DfPluginApiV5 *(*DfPluginEntryV5Fn)(void);
+typedef const DfPluginApiV6 *(*DfPluginEntryV6Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
 typedef struct { DfStringView plugin_directory; const DfHostApiV27 *host; } DfRuntimeConfig;

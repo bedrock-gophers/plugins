@@ -60,6 +60,7 @@ const (
 	PlayerChangeWorldSubscription     uint64 = 2147483648
 	PlayerRespawnSubscription         uint64 = 4294967296
 	PlayerSkinChangeSubscription      uint64 = 8589934592
+	PlayerItemPickupSubscription      uint64 = 137438953472
 	MaxChatReplacementBytes                  = 4096
 	MaxCommandOutputBytes                    = 4096
 	MaxCommandEnumBytes                      = 4096
@@ -92,14 +93,14 @@ type BlockPos struct {
 }
 
 type PlayerMoveInput struct {
-	Player      PlayerID
+	Player      PlayerSnapshot
 	OldPosition Vec3
 	NewPosition Vec3
 	Rotation    Rotation
 }
 
 type PlayerChatInput struct {
-	Player  PlayerID
+	Player  PlayerSnapshot
 	Message string
 }
 
@@ -109,12 +110,12 @@ type PlayerChatOutput struct {
 }
 
 type PlayerJoinInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	Name   string
 }
 
 type PlayerQuitInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	Name   string
 }
 
@@ -175,7 +176,7 @@ type PlayerHurtResult struct {
 }
 
 type PlayerHurtInput struct {
-	Player         PlayerID
+	Player         PlayerSnapshot
 	Damage         float64
 	Immune         bool
 	AttackImmunity time.Duration
@@ -189,7 +190,7 @@ type PlayerHurtOutput struct {
 }
 
 type PlayerHealInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	Health float64
 	Source HealingSource
 }
@@ -200,25 +201,27 @@ type PlayerHealOutput struct {
 }
 
 type PlayerBlockBreakInput struct {
-	Player     PlayerID
+	Player     PlayerSnapshot
 	Position   BlockPos
-	Block      string
+	Block      WorldBlock
+	Drops      []ItemStack
 	Experience int32
 }
 
 type PlayerBlockBreakOutput struct {
 	Cancelled  bool
+	Drops      []ItemStack
 	Experience int32
 }
 
 type PlayerBlockPlaceInput struct {
-	Player   PlayerID
+	Player   PlayerSnapshot
 	Position BlockPos
-	Block    string
+	Block    WorldBlock
 }
 
 type PlayerFoodLossInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	From   int32
 	To     int32
 }
@@ -229,20 +232,20 @@ type PlayerFoodLossOutput struct {
 }
 
 type PlayerDeathInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	Source DamageSource
 }
 
 type PlayerPositionInput struct {
-	Player   PlayerID
+	Player   PlayerSnapshot
 	Position BlockPos
 }
 type PlayerToggleInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	After  bool
 }
 type PlayerTeleportInput struct {
-	Player   PlayerID
+	Player   PlayerSnapshot
 	Position Vec3
 }
 type PlayerExperienceGainOutput struct {
@@ -250,7 +253,7 @@ type PlayerExperienceGainOutput struct {
 	Amount    int
 }
 type PlayerHeldSlotChangeInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	From   int
 	To     int
 }
@@ -259,12 +262,12 @@ type PlayerSleepOutput struct {
 	SendReminder bool
 }
 type PlayerBlockPickInput struct {
-	Player   PlayerID
+	Player   PlayerSnapshot
 	Position BlockPos
-	Block    string
+	Block    WorldBlock
 }
 type PlayerLecternPageTurnInput struct {
-	Player   PlayerID
+	Player   PlayerSnapshot
 	Position BlockPos
 	OldPage  int
 	NewPage  int
@@ -274,14 +277,14 @@ type PlayerLecternPageTurnOutput struct {
 	NewPage   int
 }
 type PlayerSignEditInput struct {
-	Player    PlayerID
+	Player    PlayerSnapshot
 	Position  BlockPos
 	FrontSide bool
 	OldText   string
 	NewText   string
 }
 type PlayerItemUseOnBlockInput struct {
-	Player        PlayerID
+	Player        PlayerSnapshot
 	Position      BlockPos
 	Face          int
 	ClickPosition Vec3
@@ -291,7 +294,7 @@ type PlayerItemDamageOutput struct {
 	Damage    int
 }
 type PlayerAttackEntityInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	Target EntityID
 }
 type PlayerAttackEntityOutput struct {
@@ -301,27 +304,37 @@ type PlayerAttackEntityOutput struct {
 	Critical        bool
 }
 type PlayerItemUseOnEntityInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	Target EntityID
 }
 type PlayerChangeWorldInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 	Before *WorldID
 	After  WorldID
 }
 type PlayerRespawnInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 }
 type PlayerRespawnOutput struct {
 	Position Vec3
 	World    WorldID
 }
 type PlayerSkinChangeInput struct {
-	Player PlayerID
+	Player PlayerSnapshot
 }
 type PlayerSkinChangeOutput struct {
 	Cancelled bool
 	Skin      PlayerSkin
+}
+
+type PlayerItemPickupInput struct {
+	Player PlayerSnapshot
+	Item   ItemStack
+}
+
+type PlayerItemPickupOutput struct {
+	Cancelled bool
+	Item      ItemStack
 }
 
 type Command struct {
@@ -948,7 +961,7 @@ func (r *Runtime) HandlePlayerMove(invocation InvocationID, input PlayerMoveInpu
 	}
 	var nativeInput C.DfPlayerMoveInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	fillBorrowedPlayerSnapshot(&nativeInput.player, input.Player)
 	nativeInput.old_position = C.DfVec3{x: C.double(input.OldPosition.X), y: C.double(input.OldPosition.Y), z: C.double(input.OldPosition.Z)}
 	nativeInput.new_position = C.DfVec3{x: C.double(input.NewPosition.X), y: C.double(input.NewPosition.Y), z: C.double(input.NewPosition.Z)}
 	nativeInput.rotation = C.DfRotation{yaw: C.double(input.Rotation.Yaw), pitch: C.double(input.Rotation.Pitch)}
@@ -957,6 +970,7 @@ func (r *Runtime) HandlePlayerMove(invocation InvocationID, input PlayerMoveInpu
 		state.cancelled = 1
 	}
 	packed := uint64(C.bg_runtime_handle_player_move_value(r.ptr, nativeInput, state.cancelled))
+	runtime.KeepAlive(input.Player.Name)
 	status := int32(uint32(packed >> 32))
 	finalCancelled := uint8(packed) != 0
 	if status != C.DF_STATUS_OK {
@@ -980,7 +994,8 @@ func (r *Runtime) HandlePlayerChat(invocation InvocationID, input PlayerChatInpu
 
 	var nativeInput C.DfPlayerChatInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.message = C.DfStringView{
 		data: (*C.uint8_t)(message),
 		len:  C.uint64_t(len(input.Message)),
@@ -1014,7 +1029,8 @@ func (r *Runtime) HandlePlayerJoin(invocation InvocationID, input PlayerJoinInpu
 	defer C.free(name)
 	var nativeInput C.DfPlayerJoinInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.name = C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(input.Name))}
 	var state C.DfPlayerJoinState
 	if cancelled {
@@ -1034,7 +1050,8 @@ func (r *Runtime) HandlePlayerQuit(invocation InvocationID, input PlayerQuitInpu
 	defer C.free(name)
 	var nativeInput C.DfPlayerQuitInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.name = C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(input.Name))}
 	var state C.DfPlayerQuitState
 	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_QUIT, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
@@ -1055,7 +1072,8 @@ func (r *Runtime) HandlePlayerHurt(invocation InvocationID, input PlayerHurtInpu
 	defer releaseSource()
 	var nativeInput C.DfPlayerHurtInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.immune = C.uint8_t(boolByte(input.Immune))
 	nativeInput.source = source
 	state := C.DfPlayerHurtState{
@@ -1086,7 +1104,8 @@ func (r *Runtime) HandlePlayerHeal(invocation InvocationID, input PlayerHealInpu
 	defer releaseSource()
 	var nativeInput C.DfPlayerHealInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.source = source
 	state := C.DfPlayerHealState{health: C.double(input.Health)}
 	if cancelled {
@@ -1101,26 +1120,56 @@ func (r *Runtime) HandlePlayerHeal(invocation InvocationID, input PlayerHealInpu
 }
 
 func (r *Runtime) HandlePlayerBlockBreak(invocation InvocationID, input PlayerBlockBreakInput, cancelled bool) (PlayerBlockBreakOutput, error) {
-	output := PlayerBlockBreakOutput{Cancelled: cancelled, Experience: input.Experience}
+	output := PlayerBlockBreakOutput{Cancelled: cancelled, Drops: input.Drops, Experience: input.Experience}
 	if r == nil || r.ptr == nil {
 		return output, errors.New("native runtime is closed")
 	}
-	block := C.CBytes([]byte(input.Block))
-	defer C.free(block)
+	blockArena := &nativeViewArena{}
+	defer blockArena.release()
+	block, ok := nativeBlockView(input.Block, blockArena)
+	if !ok {
+		return output, errors.New("encode block-break block")
+	}
+	drops, dropCount, releaseDrops, ok := nativeItemStackViews(input.Drops)
+	defer releaseDrops()
+	if !ok {
+		return output, errors.New("encode block-break drops")
+	}
 	var nativeInput C.DfPlayerBlockBreakInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.position = nativeBlockPos(input.Position)
-	nativeInput.block = C.DfStringView{data: (*C.uint8_t)(block), len: C.uint64_t(len(input.Block))}
+	nativeInput.block = block
+	nativeInput.drops = drops
+	nativeInput.drop_count = C.uint64_t(dropCount)
 	state := C.DfPlayerBlockBreakState{experience: C.int32_t(input.Experience)}
 	if cancelled {
 		state.cancelled = 1
 	}
-	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_BLOCK_BREAK, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
+	status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_BLOCK_BREAK, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state))
+	hasReplacement := state.replacement_drop != nil
+	replacementFields := state.replacement_drops != nil || state.replacement_drop_count != 0 || state.replacement_context != nil
+	var replacements []ItemStack
+	validReplacement := true
+	if hasReplacement {
+		replacements, validReplacement = copyOwnedItemStackViews(
+			state.replacement_drops, uint64(state.replacement_drop_count), state.replacement_context, state.replacement_drop,
+		)
+	} else if replacementFields {
+		validReplacement = false
+	}
+	if status != C.DF_STATUS_OK {
 		return output, fmt.Errorf("native block-break handler failed with status %d", int32(status))
+	}
+	if !validReplacement {
+		return output, errors.New("native block-break handler returned invalid replacement drops")
 	}
 	output.Cancelled = state.cancelled != 0
 	output.Experience = int32(state.experience)
+	if hasReplacement {
+		output.Drops = replacements
+	}
 	return output, nil
 }
 
@@ -1128,13 +1177,18 @@ func (r *Runtime) HandlePlayerBlockPlace(invocation InvocationID, input PlayerBl
 	if r == nil || r.ptr == nil {
 		return cancelled, errors.New("native runtime is closed")
 	}
-	block := C.CBytes([]byte(input.Block))
-	defer C.free(block)
+	blockArena := &nativeViewArena{}
+	defer blockArena.release()
+	block, ok := nativeBlockView(input.Block, blockArena)
+	if !ok {
+		return cancelled, errors.New("encode block-place block")
+	}
 	var nativeInput C.DfPlayerBlockPlaceInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.position = nativeBlockPos(input.Position)
-	nativeInput.block = C.DfStringView{data: (*C.uint8_t)(block), len: C.uint64_t(len(input.Block))}
+	nativeInput.block = block
 	var state C.DfPlayerBlockPlaceState
 	if cancelled {
 		state.cancelled = 1
@@ -1152,7 +1206,8 @@ func (r *Runtime) HandlePlayerFoodLoss(invocation InvocationID, input PlayerFood
 	}
 	var nativeInput C.DfPlayerFoodLossInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.from = C.int32_t(input.From)
 	state := C.DfPlayerFoodLossState{to: C.int32_t(input.To)}
 	if cancelled {
@@ -1177,7 +1232,8 @@ func (r *Runtime) HandlePlayerDeath(invocation InvocationID, input PlayerDeathIn
 	defer releaseSource()
 	var nativeInput C.DfPlayerDeathInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.source = source
 	var state C.DfPlayerDeathState
 	if keepInventory {
@@ -1195,7 +1251,8 @@ func (r *Runtime) HandlePlayerStartBreak(invocation InvocationID, input PlayerPo
 	}
 	var nativeInput C.DfPlayerStartBreakInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.position = nativeBlockPos(input.Position)
 	var state C.DfPlayerStartBreakState
 	if cancelled {
@@ -1213,7 +1270,8 @@ func (r *Runtime) HandlePlayerFireExtinguish(invocation InvocationID, input Play
 	}
 	var nativeInput C.DfPlayerFireExtinguishInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.position = nativeBlockPos(input.Position)
 	var state C.DfPlayerFireExtinguishState
 	if cancelled {
@@ -1231,7 +1289,8 @@ func (r *Runtime) HandlePlayerToggleSprint(invocation InvocationID, input Player
 	}
 	var nativeInput C.DfPlayerToggleSprintInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.after = C.uint8_t(boolByte(input.After))
 	var state C.DfPlayerToggleSprintState
 	if cancelled {
@@ -1248,7 +1307,8 @@ func (r *Runtime) HandlePlayerToggleSneak(invocation InvocationID, input PlayerT
 	}
 	var nativeInput C.DfPlayerToggleSneakInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.after = C.uint8_t(boolByte(input.After))
 	var state C.DfPlayerToggleSneakState
 	if cancelled {
@@ -1260,13 +1320,14 @@ func (r *Runtime) HandlePlayerToggleSneak(invocation InvocationID, input PlayerT
 	return state.cancelled != 0, nil
 }
 
-func (r *Runtime) HandlePlayerJump(invocation InvocationID, player PlayerID) error {
+func (r *Runtime) HandlePlayerJump(invocation InvocationID, player PlayerSnapshot) error {
 	if r == nil || r.ptr == nil {
 		return errors.New("native runtime is closed")
 	}
 	var input C.DfPlayerJumpInput
 	input.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&input.player, player)
+	playerName := fillPlayerSnapshot(&input.player, player)
+	defer C.free(playerName)
 	var state C.DfPlayerJumpState
 	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_JUMP, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return fmt.Errorf("native jump handler failed with status %d", int32(status))
@@ -1280,7 +1341,8 @@ func (r *Runtime) HandlePlayerTeleport(invocation InvocationID, input PlayerTele
 	}
 	var nativeInput C.DfPlayerTeleportInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.position = C.DfVec3{x: C.double(input.Position.X), y: C.double(input.Position.Y), z: C.double(input.Position.Z)}
 	var state C.DfPlayerTeleportState
 	if cancelled {
@@ -1292,14 +1354,15 @@ func (r *Runtime) HandlePlayerTeleport(invocation InvocationID, input PlayerTele
 	return state.cancelled != 0, nil
 }
 
-func (r *Runtime) HandlePlayerExperienceGain(invocation InvocationID, player PlayerID, amount int, cancelled bool) (PlayerExperienceGainOutput, error) {
+func (r *Runtime) HandlePlayerExperienceGain(invocation InvocationID, player PlayerSnapshot, amount int, cancelled bool) (PlayerExperienceGainOutput, error) {
 	output := PlayerExperienceGainOutput{Cancelled: cancelled, Amount: amount}
 	if r == nil || r.ptr == nil {
 		return output, errors.New("native runtime is closed")
 	}
 	var input C.DfPlayerExperienceGainInput
 	input.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&input.player, player)
+	playerName := fillPlayerSnapshot(&input.player, player)
+	defer C.free(playerName)
 	state := C.DfPlayerExperienceGainState{amount: C.int32_t(amount)}
 	if cancelled {
 		state.cancelled = 1
@@ -1310,13 +1373,14 @@ func (r *Runtime) HandlePlayerExperienceGain(invocation InvocationID, player Pla
 	return PlayerExperienceGainOutput{Cancelled: state.cancelled != 0, Amount: int(state.amount)}, nil
 }
 
-func (r *Runtime) HandlePlayerPunchAir(invocation InvocationID, player PlayerID, cancelled bool) (bool, error) {
+func (r *Runtime) HandlePlayerPunchAir(invocation InvocationID, player PlayerSnapshot, cancelled bool) (bool, error) {
 	if r == nil || r.ptr == nil {
 		return cancelled, errors.New("native runtime is closed")
 	}
 	var input C.DfPlayerPunchAirInput
 	input.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&input.player, player)
+	playerName := fillPlayerSnapshot(&input.player, player)
+	defer C.free(playerName)
 	var state C.DfPlayerPunchAirState
 	if cancelled {
 		state.cancelled = 1
@@ -1333,7 +1397,8 @@ func (r *Runtime) HandlePlayerHeldSlotChange(invocation InvocationID, input Play
 	}
 	var nativeInput C.DfPlayerHeldSlotChangeInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.from = C.int32_t(input.From)
 	nativeInput.to = C.int32_t(input.To)
 	var state C.DfPlayerHeldSlotChangeState
@@ -1346,14 +1411,15 @@ func (r *Runtime) HandlePlayerHeldSlotChange(invocation InvocationID, input Play
 	return state.cancelled != 0, nil
 }
 
-func (r *Runtime) HandlePlayerSleep(invocation InvocationID, player PlayerID, sendReminder, cancelled bool) (PlayerSleepOutput, error) {
+func (r *Runtime) HandlePlayerSleep(invocation InvocationID, player PlayerSnapshot, sendReminder, cancelled bool) (PlayerSleepOutput, error) {
 	output := PlayerSleepOutput{Cancelled: cancelled, SendReminder: sendReminder}
 	if r == nil || r.ptr == nil {
 		return output, errors.New("native runtime is closed")
 	}
 	var input C.DfPlayerSleepInput
 	input.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&input.player, player)
+	playerName := fillPlayerSnapshot(&input.player, player)
+	defer C.free(playerName)
 	state := C.DfPlayerSleepState{send_reminder: C.uint8_t(boolByte(sendReminder))}
 	if cancelled {
 		state.cancelled = 1
@@ -1368,9 +1434,15 @@ func (r *Runtime) HandlePlayerBlockPick(invocation InvocationID, input PlayerBlo
 	if r == nil || r.ptr == nil {
 		return cancelled, errors.New("native runtime is closed")
 	}
-	block := unsafe.StringData(input.Block)
-	nativeInput := C.DfPlayerBlockPickInput{invocation: C.DfInvocationId(invocation), position: nativeBlockPos(input.Position), block: C.DfStringView{data: (*C.uint8_t)(unsafe.Pointer(block)), len: C.uint64_t(len(input.Block))}}
-	fillPlayerID(&nativeInput.player, input.Player)
+	blockArena := &nativeViewArena{}
+	defer blockArena.release()
+	block, ok := nativeBlockView(input.Block, blockArena)
+	if !ok {
+		return cancelled, errors.New("encode block-pick block")
+	}
+	nativeInput := C.DfPlayerBlockPickInput{invocation: C.DfInvocationId(invocation), position: nativeBlockPos(input.Position), block: block}
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	var state C.DfPlayerBlockPickState
 	if cancelled {
 		state.cancelled = 1
@@ -1388,7 +1460,8 @@ func (r *Runtime) HandlePlayerLecternPageTurn(invocation InvocationID, input Pla
 	}
 	var nativeInput C.DfPlayerLecternPageTurnInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.position = nativeBlockPos(input.Position)
 	nativeInput.old_page = C.int32_t(input.OldPage)
 	state := C.DfPlayerLecternPageTurnState{new_page: C.int32_t(input.NewPage)}
@@ -1413,7 +1486,8 @@ func (r *Runtime) HandlePlayerSignEdit(invocation InvocationID, input PlayerSign
 		old_text:   C.DfStringView{data: (*C.uint8_t)(unsafe.Pointer(oldText)), len: C.uint64_t(len(input.OldText))},
 		new_text:   C.DfStringView{data: (*C.uint8_t)(unsafe.Pointer(newText)), len: C.uint64_t(len(input.NewText))},
 	}
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	var state C.DfPlayerSignEditState
 	if cancelled {
 		state.cancelled = 1
@@ -1424,13 +1498,14 @@ func (r *Runtime) HandlePlayerSignEdit(invocation InvocationID, input PlayerSign
 	return state.cancelled != 0, nil
 }
 
-func (r *Runtime) HandlePlayerItemUse(invocation InvocationID, player PlayerID, cancelled bool) (bool, error) {
+func (r *Runtime) HandlePlayerItemUse(invocation InvocationID, player PlayerSnapshot, cancelled bool) (bool, error) {
 	if r == nil || r.ptr == nil {
 		return cancelled, errors.New("native runtime is closed")
 	}
 	var input C.DfPlayerItemUseInput
 	input.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&input.player, player)
+	playerName := fillPlayerSnapshot(&input.player, player)
+	defer C.free(playerName)
 	var state C.DfPlayerItemUseState
 	if cancelled {
 		state.cancelled = 1
@@ -1447,7 +1522,8 @@ func (r *Runtime) HandlePlayerItemUseOnBlock(invocation InvocationID, input Play
 	}
 	var nativeInput C.DfPlayerItemUseOnBlockInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.position = nativeBlockPos(input.Position)
 	nativeInput.face = C.int32_t(input.Face)
 	nativeInput.click_position = C.DfVec3{x: C.double(input.ClickPosition.X), y: C.double(input.ClickPosition.Y), z: C.double(input.ClickPosition.Z)}
@@ -1461,27 +1537,24 @@ func (r *Runtime) HandlePlayerItemUseOnBlock(invocation InvocationID, input Play
 	return state.cancelled != 0, nil
 }
 
-func (r *Runtime) HandlePlayerItemConsume(invocation InvocationID, player PlayerID, item ItemStack, cancelled bool) (bool, error) {
+func (r *Runtime) HandlePlayerItemConsume(invocation InvocationID, player PlayerSnapshot, item ItemStack, cancelled bool) (bool, error) {
 	return r.handlePlayerItemStackEvent(invocation, C.DF_EVENT_PLAYER_ITEM_CONSUME, player, item, 0, cancelled)
 }
 
-func (r *Runtime) HandlePlayerItemRelease(invocation InvocationID, player PlayerID, item ItemStack, duration time.Duration, cancelled bool) (bool, error) {
-	milliseconds := duration.Milliseconds()
-	if milliseconds < 0 {
-		milliseconds = 0
-	}
-	return r.handlePlayerItemStackEvent(invocation, C.DF_EVENT_PLAYER_ITEM_RELEASE, player, item, uint64(milliseconds), cancelled)
+func (r *Runtime) HandlePlayerItemRelease(invocation InvocationID, player PlayerSnapshot, item ItemStack, duration time.Duration, cancelled bool) (bool, error) {
+	return r.handlePlayerItemStackEvent(invocation, C.DF_EVENT_PLAYER_ITEM_RELEASE, player, item, int64(duration), cancelled)
 }
 
-func (r *Runtime) handlePlayerItemStackEvent(invocation InvocationID, event C.DfEventId, player PlayerID, item ItemStack, duration uint64, cancelled bool) (bool, error) {
+func (r *Runtime) handlePlayerItemStackEvent(invocation InvocationID, event C.DfEventId, player PlayerSnapshot, item ItemStack, duration int64, cancelled bool) (bool, error) {
 	if r == nil || r.ptr == nil {
 		return cancelled, errors.New("native runtime is closed")
 	}
-	stack, ok := r.openEventItemSnapshot(item)
+	arena := &nativeViewArena{}
+	defer arena.release()
+	itemView, ok := nativeItemStackView(item, arena)
 	if !ok {
-		return cancelled, errors.New("open item event snapshot")
+		return cancelled, errors.New("encode item event stack")
 	}
-	defer unregisterItemSnapshot(r.hostContext, uint64(stack.snapshot))
 	var state C.DfPlayerItemConsumeState
 	if cancelled {
 		state.cancelled = 1
@@ -1489,8 +1562,9 @@ func (r *Runtime) handlePlayerItemStackEvent(invocation InvocationID, event C.Df
 	if event == C.DF_EVENT_PLAYER_ITEM_CONSUME {
 		var input C.DfPlayerItemConsumeInput
 		input.invocation = C.DfInvocationId(invocation)
-		fillPlayerID(&input.player, player)
-		input.item = stack
+		playerName := fillPlayerSnapshot(&input.player, player)
+		defer C.free(playerName)
+		input.item = itemView
 		if status := C.bg_runtime_handle_event(r.ptr, event, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 			return state.cancelled != 0, fmt.Errorf("native item-consume handler failed with status %d", int32(status))
 		}
@@ -1498,29 +1572,32 @@ func (r *Runtime) handlePlayerItemStackEvent(invocation InvocationID, event C.Df
 	}
 	var input C.DfPlayerItemReleaseInput
 	input.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&input.player, player)
-	input.item = stack
-	input.duration_milliseconds = C.uint64_t(duration)
+	playerName := fillPlayerSnapshot(&input.player, player)
+	defer C.free(playerName)
+	input.item = itemView
+	input.duration_nanoseconds = C.int64_t(duration)
 	if status := C.bg_runtime_handle_event(r.ptr, event, unsafe.Pointer(&input), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
 		return state.cancelled != 0, fmt.Errorf("native item-release handler failed with status %d", int32(status))
 	}
 	return state.cancelled != 0, nil
 }
 
-func (r *Runtime) HandlePlayerItemDamage(invocation InvocationID, player PlayerID, item ItemStack, damage int, cancelled bool) (PlayerItemDamageOutput, error) {
+func (r *Runtime) HandlePlayerItemDamage(invocation InvocationID, player PlayerSnapshot, item ItemStack, damage int, cancelled bool) (PlayerItemDamageOutput, error) {
 	output := PlayerItemDamageOutput{Cancelled: cancelled, Damage: damage}
 	if r == nil || r.ptr == nil {
 		return output, errors.New("native runtime is closed")
 	}
 	var input C.DfPlayerItemDamageInput
 	input.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&input.player, player)
-	stack, ok := r.openEventItemSnapshot(item)
+	playerName := fillPlayerSnapshot(&input.player, player)
+	defer C.free(playerName)
+	arena := &nativeViewArena{}
+	defer arena.release()
+	itemView, ok := nativeItemStackView(item, arena)
 	if !ok {
-		return output, errors.New("open item event snapshot")
+		return output, errors.New("encode item-damage stack")
 	}
-	defer unregisterItemSnapshot(r.hostContext, uint64(stack.snapshot))
-	input.item = stack
+	input.item = itemView
 	state := C.DfPlayerItemDamageState{damage: C.int32_t(damage)}
 	if cancelled {
 		state.cancelled = 1
@@ -1531,19 +1608,21 @@ func (r *Runtime) HandlePlayerItemDamage(invocation InvocationID, player PlayerI
 	return PlayerItemDamageOutput{Cancelled: state.cancelled != 0, Damage: int(state.damage)}, nil
 }
 
-func (r *Runtime) HandlePlayerItemDrop(invocation InvocationID, player PlayerID, item ItemStack, cancelled bool) (bool, error) {
+func (r *Runtime) HandlePlayerItemDrop(invocation InvocationID, player PlayerSnapshot, item ItemStack, cancelled bool) (bool, error) {
 	if r == nil || r.ptr == nil {
 		return cancelled, errors.New("native runtime is closed")
 	}
 	var input C.DfPlayerItemDropInput
 	input.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&input.player, player)
-	stack, ok := r.openEventItemSnapshot(item)
+	playerName := fillPlayerSnapshot(&input.player, player)
+	defer C.free(playerName)
+	arena := &nativeViewArena{}
+	defer arena.release()
+	itemView, ok := nativeItemStackView(item, arena)
 	if !ok {
-		return cancelled, errors.New("open item event snapshot")
+		return cancelled, errors.New("encode item-drop stack")
 	}
-	defer unregisterItemSnapshot(r.hostContext, uint64(stack.snapshot))
-	input.item = stack
+	input.item = itemView
 	var state C.DfPlayerItemDropState
 	if cancelled {
 		state.cancelled = 1
@@ -1554,6 +1633,44 @@ func (r *Runtime) HandlePlayerItemDrop(invocation InvocationID, player PlayerID,
 	return state.cancelled != 0, nil
 }
 
+func (r *Runtime) HandlePlayerItemPickup(invocation InvocationID, input PlayerItemPickupInput, cancelled bool) (PlayerItemPickupOutput, error) {
+	output := PlayerItemPickupOutput{Cancelled: cancelled, Item: input.Item}
+	if r == nil || r.ptr == nil {
+		return output, errors.New("native runtime is closed")
+	}
+	arena := &nativeViewArena{}
+	defer arena.release()
+	itemView, ok := nativeItemStackView(input.Item, arena)
+	if !ok {
+		return output, errors.New("encode item-pickup item")
+	}
+	nativeInput := C.DfPlayerItemPickupInput{invocation: C.DfInvocationId(invocation), item: itemView}
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
+	state := C.DfPlayerItemPickupState{cancelled: C.uint8_t(boolByte(cancelled))}
+	status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_ITEM_PICKUP, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state))
+	hasReplacement := state.replacement_drop != nil
+	replacementFields := state.replacement != nil || state.replacement_context != nil
+	var replacement []ItemStack
+	validReplacement := true
+	if hasReplacement {
+		replacement, validReplacement = copyOwnedItemStackViews(state.replacement, 1, state.replacement_context, state.replacement_drop)
+	} else if replacementFields {
+		validReplacement = false
+	}
+	if status != C.DF_STATUS_OK {
+		return output, fmt.Errorf("native item-pickup handler failed with status %d", int32(status))
+	}
+	if !validReplacement {
+		return output, errors.New("native item-pickup handler returned invalid replacement")
+	}
+	output.Cancelled = state.cancelled != 0
+	if hasReplacement {
+		output.Item = replacement[0]
+	}
+	return output, nil
+}
+
 func (r *Runtime) HandlePlayerAttackEntity(invocation InvocationID, input PlayerAttackEntityInput, force, height float64, critical, cancelled bool) (PlayerAttackEntityOutput, error) {
 	output := PlayerAttackEntityOutput{Cancelled: cancelled, KnockbackForce: force, KnockbackHeight: height, Critical: critical}
 	if r == nil || r.ptr == nil {
@@ -1561,7 +1678,8 @@ func (r *Runtime) HandlePlayerAttackEntity(invocation InvocationID, input Player
 	}
 	var nativeInput C.DfPlayerAttackEntityInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	fillEntityID(&nativeInput.target, input.Target)
 	state := C.DfPlayerAttackEntityState{
 		knockback_force: C.double(force), knockback_height: C.double(height),
@@ -1582,7 +1700,8 @@ func (r *Runtime) HandlePlayerItemUseOnEntity(invocation InvocationID, input Pla
 	}
 	var nativeInput C.DfPlayerItemUseOnEntityInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	fillEntityID(&nativeInput.target, input.Target)
 	var state C.DfPlayerItemUseOnEntityState
 	state.cancelled = C.uint8_t(boolByte(cancelled))
@@ -1598,7 +1717,8 @@ func (r *Runtime) HandlePlayerChangeWorld(invocation InvocationID, input PlayerC
 	}
 	var nativeInput C.DfPlayerChangeWorldInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	if input.Before != nil {
 		nativeInput.before.value = C.uint64_t(*input.Before)
 	}
@@ -1617,7 +1737,8 @@ func (r *Runtime) HandlePlayerRespawn(invocation InvocationID, input PlayerRespa
 	}
 	var nativeInput C.DfPlayerRespawnInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	state := C.DfPlayerRespawnState{
 		position: C.DfVec3{x: C.double(position.X), y: C.double(position.Y), z: C.double(position.Z)},
 		world:    C.DfWorldId{value: C.uint64_t(world)},
@@ -1636,7 +1757,7 @@ func (r *Runtime) HandlePlayerSkinChange(invocation InvocationID, input PlayerSk
 	if r == nil || r.ptr == nil {
 		return output, errors.New("native runtime is closed")
 	}
-	if input.Player.Generation == 0 || !validPlayerSkinPayload(skin) {
+	if input.Player.Player.Generation == 0 || !validPlayerSkinPayload(skin) {
 		return output, errors.New("invalid skin-change input")
 	}
 	snapshot, ok := registerSkinSnapshot(r.hostContext, invocation, skin, true)
@@ -1647,7 +1768,8 @@ func (r *Runtime) HandlePlayerSkinChange(invocation InvocationID, input PlayerSk
 
 	var nativeInput C.DfPlayerSkinChangeInput
 	nativeInput.invocation = C.DfInvocationId(invocation)
-	fillPlayerID(&nativeInput.player, input.Player)
+	playerName := fillPlayerSnapshot(&nativeInput.player, input.Player)
+	defer C.free(playerName)
 	nativeInput.snapshot = C.uint64_t(snapshot)
 	state := C.DfPlayerSkinChangeState{cancelled: C.uint8_t(boolByte(cancelled))}
 	if status := C.bg_runtime_handle_event(r.ptr, C.DF_EVENT_PLAYER_SKIN_CHANGE, unsafe.Pointer(&nativeInput), unsafe.Pointer(&state)); status != C.DF_STATUS_OK {
@@ -1662,17 +1784,145 @@ func (r *Runtime) HandlePlayerSkinChange(invocation InvocationID, input PlayerSk
 	return PlayerSkinChangeOutput{Cancelled: state.cancelled != 0, Skin: finalSkin}, nil
 }
 
-func (r *Runtime) openEventItemSnapshot(item ItemStack) (C.DfItemStackSnapshot, bool) {
-	if r == nil || r.ptr == nil || !validNativeItem(item) {
-		return C.DfItemStackSnapshot{}, false
+type nativeViewArena struct {
+	allocations []unsafe.Pointer
+}
+
+func (a *nativeViewArena) allocate(size uintptr) (unsafe.Pointer, bool) {
+	if size == 0 {
+		return nil, true
 	}
-	id, ok := registerItemSnapshot(r.hostContext, item)
+	pointer := C.malloc(C.size_t(size))
+	if pointer == nil {
+		return nil, false
+	}
+	a.allocations = append(a.allocations, pointer)
+	return pointer, true
+}
+
+func (a *nativeViewArena) stringView(value []byte) (C.DfStringView, bool) {
+	pointer, ok := a.allocate(uintptr(len(value)))
 	if !ok {
-		return C.DfItemStackSnapshot{}, false
+		return C.DfStringView{}, false
 	}
-	var info C.DfItemStackInfo
-	fillItemStackInfo(&info, item)
-	return C.DfItemStackSnapshot{snapshot: C.uint64_t(id), info: info}, true
+	if len(value) != 0 {
+		copy(unsafe.Slice((*byte)(pointer), len(value)), value)
+	}
+	return C.DfStringView{data: (*C.uint8_t)(pointer), len: C.uint64_t(len(value))}, true
+}
+
+func (a *nativeViewArena) release() {
+	for index := len(a.allocations) - 1; index >= 0; index-- {
+		C.free(a.allocations[index])
+	}
+}
+
+func nativeItemStackView(value ItemStack, arena *nativeViewArena) (C.DfItemStackViewV3, bool) {
+	identifier, ok := arena.stringView([]byte(value.Identifier))
+	if !ok {
+		return C.DfItemStackViewV3{}, false
+	}
+	customName, ok := arena.stringView([]byte(value.CustomName))
+	if !ok {
+		return C.DfItemStackViewV3{}, false
+	}
+	nbtData, ok := arena.stringView(value.NBT)
+	if !ok {
+		return C.DfItemStackViewV3{}, false
+	}
+	valuesNBT, ok := arena.stringView(value.ValuesNBT)
+	if !ok {
+		return C.DfItemStackViewV3{}, false
+	}
+	view := C.DfItemStackViewV3{
+		identifier: identifier, metadata: C.int32_t(value.Metadata), count: C.uint32_t(value.Count),
+		damage: C.uint32_t(value.Damage), unbreakable: C.uint8_t(boolByte(value.Unbreakable)),
+		anvil_cost: C.int32_t(value.AnvilCost), custom_name: customName, nbt: nbtData, values_nbt: valuesNBT,
+		lore_count: C.uint64_t(len(value.Lore)), enchantment_count: C.uint64_t(len(value.Enchantments)),
+	}
+	if len(value.Lore) != 0 {
+		pointer, allocated := arena.allocate(uintptr(len(value.Lore)) * C.sizeof_DfStringView)
+		if !allocated {
+			return C.DfItemStackViewV3{}, false
+		}
+		view.lore = (*C.DfStringView)(pointer)
+		for index, line := range value.Lore {
+			lineView, valid := arena.stringView([]byte(line))
+			if !valid {
+				return C.DfItemStackViewV3{}, false
+			}
+			unsafe.Slice(view.lore, len(value.Lore))[index] = lineView
+		}
+	}
+	if len(value.Enchantments) != 0 {
+		pointer, allocated := arena.allocate(uintptr(len(value.Enchantments)) * C.sizeof_DfItemEnchantment)
+		if !allocated {
+			return C.DfItemStackViewV3{}, false
+		}
+		view.enchantments = (*C.DfItemEnchantment)(pointer)
+		for index, enchantment := range value.Enchantments {
+			unsafe.Slice(view.enchantments, len(value.Enchantments))[index] = C.DfItemEnchantment{
+				id: C.uint32_t(enchantment.ID), level: C.uint32_t(enchantment.Level),
+			}
+		}
+	}
+	return view, true
+}
+
+func nativeItemStackViews(values []ItemStack) (*C.DfItemStackViewV3, uint64, func(), bool) {
+	arena := &nativeViewArena{}
+	release := arena.release
+	if len(values) == 0 {
+		return nil, 0, release, true
+	}
+	pointer, ok := arena.allocate(uintptr(len(values)) * C.sizeof_DfItemStackViewV3)
+	if !ok {
+		return nil, 0, release, false
+	}
+	views := unsafe.Slice((*C.DfItemStackViewV3)(pointer), len(values))
+	for index, value := range values {
+		view, valid := nativeItemStackView(value, arena)
+		if !valid {
+			return nil, 0, release, false
+		}
+		views[index] = view
+	}
+	return (*C.DfItemStackViewV3)(pointer), uint64(len(values)), release, true
+}
+
+func nativeBlockView(value WorldBlock, arena *nativeViewArena) (C.DfBlockView, bool) {
+	identifier, ok := arena.stringView([]byte(value.Identifier))
+	if !ok {
+		return C.DfBlockView{}, false
+	}
+	properties, ok := arena.stringView(value.PropertiesNBT)
+	if !ok {
+		return C.DfBlockView{}, false
+	}
+	return C.DfBlockView{identifier: identifier, properties_nbt: properties}, true
+}
+
+func copyOwnedItemStackViews(data *C.DfItemStackViewV3, count uint64, context unsafe.Pointer, drop C.DfItemStackViewsDropFn) ([]ItemStack, bool) {
+	if drop == nil {
+		return nil, false
+	}
+	defer C.bg_call_item_stack_views_drop(drop, context)
+	if count == 0 {
+		return []ItemStack{}, true
+	}
+	if data == nil || count > uint64(^uint(0)>>1) {
+		return nil, false
+	}
+	views := unsafe.Slice(data, int(count))
+	values := make([]ItemStack, len(views))
+	for index := range views {
+		value, ok := copyItemStackView(&views[index])
+		if !ok {
+			return nil, false
+		}
+		values[index] = value
+	}
+	return values, true
 }
 
 func nativeBlockPos(position BlockPos) C.DfBlockPos {
@@ -1766,6 +2016,25 @@ func fillPlayerID(destination *C.DfPlayerId, source PlayerID) {
 		destination.bytes[i] = C.uint8_t(value)
 	}
 	destination.generation = C.uint64_t(source.Generation)
+}
+
+func fillPlayerSnapshot(destination *C.DfPlayerSnapshot, source PlayerSnapshot) unsafe.Pointer {
+	name := C.CBytes([]byte(source.Name))
+	fillPlayerID(&destination.player, source.Player)
+	destination.name = C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(source.Name))}
+	destination.latency_milliseconds = C.uint64_t(source.LatencyMilliseconds)
+	destination.position = C.DfVec3{x: C.double(source.Position.X), y: C.double(source.Position.Y), z: C.double(source.Position.Z)}
+	return name
+}
+
+// fillBorrowedPlayerSnapshot avoids allocating the stable player name for the hot movement path.
+// The containing input must be passed to C by value and source.Name kept alive until the call returns.
+func fillBorrowedPlayerSnapshot(destination *C.DfPlayerSnapshot, source PlayerSnapshot) {
+	name := unsafe.StringData(source.Name)
+	fillPlayerID(&destination.player, source.Player)
+	destination.name = C.DfStringView{data: (*C.uint8_t)(unsafe.Pointer(name)), len: C.uint64_t(len(source.Name))}
+	destination.latency_milliseconds = C.uint64_t(source.LatencyMilliseconds)
+	destination.position = C.DfVec3{x: C.double(source.Position.X), y: C.double(source.Position.Y), z: C.double(source.Position.Z)}
 }
 
 func fillEntityID(destination *C.DfEntityId, source EntityID) {
