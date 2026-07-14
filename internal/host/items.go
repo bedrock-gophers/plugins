@@ -81,31 +81,21 @@ func (p *Players) SetInventoryItem(invocation native.InvocationID, id native.Inv
 	if !ok {
 		return false
 	}
-	if !validInventorySlot(id.Kind, slot) {
-		return false
-	}
-	return p.mutatePlayer(invocation, id.Player, func(connected *player.Player) {
+	changed := false
+	ok = p.mutatePlayer(invocation, id.Player, func(connected *player.Player) {
 		if id.Kind == native.InventoryOffhand {
+			if slot != 0 {
+				return
+			}
 			main, _ := connected.HeldItems()
 			connected.SetHeldItems(main, stack)
+			changed = true
 			return
 		}
-		inv, _ := playerInventory(connected, id.Kind)
-		_ = inv.SetItem(int(slot), stack)
+		inv, valid := playerInventory(connected, id.Kind)
+		changed = valid && inv.SetItem(int(slot), stack) == nil
 	})
-}
-
-func validInventorySlot(kind native.InventoryKind, slot uint32) bool {
-	switch kind {
-	case native.InventoryMain:
-		return slot < 36
-	case native.InventoryArmour:
-		return slot < 4
-	case native.InventoryOffhand:
-		return slot == 0
-	default:
-		return false
-	}
+	return ok && changed
 }
 
 func (p *Players) AddInventoryItem(invocation native.InvocationID, id native.InventoryID, value native.ItemStack) (uint32, bool) {
@@ -113,7 +103,11 @@ func (p *Players) AddInventoryItem(invocation native.InvocationID, id native.Inv
 	if !ok {
 		return 0, false
 	}
-	var added uint32
+	type addResult struct {
+		added uint32
+		valid bool
+	}
+	result := addResult{}
 	ok = p.mutatePlayer(invocation, id.Player, func(connected *player.Player) {
 		if id.Kind == native.InventoryOffhand {
 			main, offhand := connected.HeldItems()
@@ -122,7 +116,7 @@ func (p *Players) AddInventoryItem(invocation native.InvocationID, id native.Inv
 			count, _ := temporary.AddItem(stack)
 			offhand, _ = temporary.Item(0)
 			connected.SetHeldItems(main, offhand)
-			added = uint32(count)
+			result = addResult{uint32(count), true}
 			return
 		}
 		inv, valid := playerInventory(connected, id.Kind)
@@ -130,22 +124,26 @@ func (p *Players) AddInventoryItem(invocation native.InvocationID, id native.Inv
 			return
 		}
 		count, _ := inv.AddItem(stack)
-		added = uint32(count)
+		result = addResult{uint32(count), true}
 	})
-	return added, ok
+	return result.added, ok && result.valid
 }
 
 func (p *Players) ClearInventory(invocation native.InvocationID, id native.InventoryID) bool {
-	return p.mutatePlayer(invocation, id.Player, func(connected *player.Player) {
+	cleared := false
+	ok := p.mutatePlayer(invocation, id.Player, func(connected *player.Player) {
 		if id.Kind == native.InventoryOffhand {
 			main, _ := connected.HeldItems()
 			connected.SetHeldItems(main, item.Stack{})
+			cleared = true
 			return
 		}
 		if inv, valid := playerInventory(connected, id.Kind); valid {
 			inv.Clear()
+			cleared = true
 		}
 	})
+	return ok && cleared
 }
 
 func (p *Players) HeldItem(invocation native.InvocationID, id native.PlayerID, hand uint32) (native.ItemStack, bool) {
@@ -210,6 +208,8 @@ func playerInventory(connected *player.Player, kind native.InventoryKind) (*inve
 		return connected.Inventory(), true
 	case native.InventoryArmour:
 		return connected.Armour().Inventory(), true
+	case native.InventoryEnderChest:
+		return connected.EnderChestInventory(), true
 	default:
 		return nil, false
 	}

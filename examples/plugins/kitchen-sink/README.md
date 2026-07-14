@@ -19,7 +19,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - generated typed items (including finite stateful families, NBT-backed books, typed fireworks,
   seven armour tiers, four armour pieces, and 11 trim materials), firework explosions and shapes,
   armour defence/durability/repair/smelting behavior, all 28 armour round-trips, private dyed/trim
-  NBT, stack metadata, inventories, armour slots, and held items in `/kitchen item`;
+  NBT, stack metadata, main/ender-chest inventories, armour slots, and held items in `/kitchen item`;
 - the full reflected form API in `/kitchen form`: menu, custom, and modal callbacks; every
   element type; URL and resource-pack button images; tooltips; closers; and submitted values;
 - open `Form.Value`, `Element.MarshalJSON`, and `MenuElement.MarshalJSON` implementations in

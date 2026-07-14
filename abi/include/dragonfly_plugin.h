@@ -39,6 +39,7 @@ typedef struct { uint8_t *data; uint64_t len; uint64_t capacity; } DfStringBuffe
 #define DF_INVENTORY_MAIN 0u
 #define DF_INVENTORY_ARMOUR 1u
 #define DF_INVENTORY_OFFHAND 2u
+#define DF_INVENTORY_ENDER_CHEST 3u
 typedef struct { DfPlayerId player; uint32_t kind; uint32_t reserved; } DfInventoryId;
 typedef struct { uint64_t offset; uint64_t len; } DfByteSpan;
 typedef struct { uint32_t id; uint32_t level; } DfItemEnchantment;

@@ -439,6 +439,8 @@ public sealed class KitchenSink : Plugin
             }
             var inventory = player.Inventory();
             var previous = inventory.Item(0);
+            var enderChest = player.EnderChestInventory();
+            var previousEnderItem = enderChest.Item(0);
             var (mainHand, offHand) = player.HeldItems();
             var sword = Dragonfly.Item.NewStack(
                     new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond),
@@ -448,14 +450,17 @@ public sealed class KitchenSink : Plugin
             try
             {
                 inventory.SetItem(0, sword);
+                enderChest.SetItem(0, sword);
                 player.SetHeldItems(sword, offHand);
                 var stored = inventory.Item(0);
+                var enderStored = enderChest.Item(0);
                 var (held, _) = player.HeldItems();
                 var armour = player.Armour();
                 var helmet = armour.Helmet();
                 armour.SetHelmet(helmet);
                 var addedEmpty = inventory.AddItem(default);
-                if (stored.Item() is not Dragonfly.Item.Sword typed)
+                if (stored.Item() is not Dragonfly.Item.Sword typed ||
+                    enderStored.Item() is not Dragonfly.Item.Sword || enderChest.Size() != 27)
                 {
                     output.Error("Typed item round-trip failed.");
                     return;
@@ -714,17 +719,19 @@ public sealed class KitchenSink : Plugin
                     }
                 }
                 output.Printf(
-                    "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, added_empty={4}, variants={5}",
+                    "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, ender_slots={4}, added_empty={5}, variants={6}",
                     typed.Tier.Name,
                     stored.Count(),
                     held.Item() is Dragonfly.Item.Sword ? "true" : "false",
                     armour.Inventory().Size(),
+                    enderChest.Size(),
                     addedEmpty,
                     variants.Length + 33);
             }
             finally
             {
                 inventory.SetItem(0, previous);
+                enderChest.SetItem(0, previousEnderItem);
                 player.SetHeldItems(mainHand, offHand);
             }
         }

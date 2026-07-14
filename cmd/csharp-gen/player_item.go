@@ -16,6 +16,7 @@ type inventorySpec struct {
 
 var selectedPlayerItemMethods = []string{
 	"Inventory",
+	"EnderChestInventory",
 	"Armour",
 	"HeldItems",
 	"SetHeldItems",
@@ -36,11 +37,12 @@ func inspectPlayerItemMethods(path string) ([]string, error) {
 		found[function.Name.Name] = function
 	}
 	want := map[string]goSignature{
-		"Inventory":    {Results: "*inventory.Inventory"},
-		"Armour":       {Results: "*inventory.Armour"},
-		"HeldItems":    {Results: "item.Stack, item.Stack"},
-		"SetHeldItems": {Parameters: "item.Stack, item.Stack"},
-		"SetHeldSlot":  {Parameters: "int", Results: "error"},
+		"Inventory":           {Results: "*inventory.Inventory"},
+		"EnderChestInventory": {Results: "*inventory.Inventory"},
+		"Armour":              {Results: "*inventory.Armour"},
+		"HeldItems":           {Results: "item.Stack, item.Stack"},
+		"SetHeldItems":        {Parameters: "item.Stack, item.Stack"},
+		"SetHeldSlot":         {Parameters: "int", Results: "error"},
 	}
 	for _, name := range selectedPlayerItemMethods {
 		function := found[name]
@@ -99,6 +101,8 @@ func generatePlayerItemMethods(methods []string) []byte {
 		switch method {
 		case "Inventory":
 			output.WriteString("    public Inventory.Value Inventory() => new(_invocation, Id, Abi.InventoryMain);\n")
+		case "EnderChestInventory":
+			output.WriteString("    public Inventory.Value EnderChestInventory() => new(_invocation, Id, Abi.InventoryEnderChest);\n")
 		case "Armour":
 			output.WriteString("    public Inventory.Armour Armour() => new(_invocation, Id);\n")
 		case "HeldItems":

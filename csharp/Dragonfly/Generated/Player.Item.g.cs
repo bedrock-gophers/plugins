@@ -7,6 +7,7 @@ namespace Dragonfly;
 public sealed partial class Player
 {
     public Inventory.Value Inventory() => new(_invocation, Id, Abi.InventoryMain);
+    public Inventory.Value EnderChestInventory() => new(_invocation, Id, Abi.InventoryEnderChest);
     public Inventory.Armour Armour() => new(_invocation, Id);
     public (Item.Stack MainHand, Item.Stack OffHand) HeldItems() =>
         PluginBridge.Host.HeldItems(_invocation, Id);

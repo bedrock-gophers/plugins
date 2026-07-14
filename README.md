@@ -63,8 +63,10 @@ var sword = Item.NewStack(new Item.Sword(Item.ToolTierDiamond), 1)
     .WithCustomName("Arena sword")
     .WithLore("Unranked");
 var inventory = player.Inventory();
+var enderChest = player.EnderChestInventory();
 var previous = inventory.Item(0);
 inventory.SetItem(0, sword);
+enderChest.SetItem(0, sword);
 var (mainHand, offHand) = player.HeldItems();
 player.SetHeldItems(sword, offHand);
 ```

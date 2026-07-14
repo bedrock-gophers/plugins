@@ -97,12 +97,13 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    Dragonfly's live item registry supplies the private identifier/metadata and capability codecs.
    `Item.Stack` exposes `NewStack`, count/growth/max-count, durability/damage/unbreakable,
    attack damage, custom names, lore, anvil cost, comparison/equality, and stack merging.
-   Generated player methods expose `Inventory`, `Armour`, `HeldItems`,
+   Generated player methods expose `Inventory`, `EnderChestInventory`, `Armour`, `HeldItems`,
    `SetHeldItems`, and `SetHeldSlot`; `Inventory.Value` exposes `Size`, `Item`, `SetItem`, and
    `AddItem`. C# setters return `void` as the chosen language adaptation, and invalid slots
    throw `ArgumentOutOfRangeException`; host statuses never enter the public API. The existing
    ABI 31 includes one atomic held-item pair snapshot, so `HeldItems` observes the same player state
-   with one host read. Bounded open/read/close item snapshots preserve damage, unbreakable state, anvil cost, custom
+   with one host read. Main and ender-chest inventory sizes are read from the live Dragonfly
+   inventory, preserving custom `player.Config` sizes. Bounded open/read/close item snapshots preserve damage, unbreakable state, anvil cost, custom
    names, lore, item NBT, plugin values, and enchantments internally. Unknown registered stateful
    NBT-backed items decode to a private opaque item and round-trip losslessly. Public
    enchantment/value mutation, `WithItem`,

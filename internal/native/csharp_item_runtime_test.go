@@ -11,10 +11,12 @@ import (
 type csharpItemHost struct {
 	*recordingHost
 	inventory  ItemStack
+	enderChest ItemStack
 	armour     ItemStack
 	held       [2]ItemStack
 	sets       []ItemStack
 	armourSets []ItemStack
+	enderSets  []ItemStack
 	adds       []ItemStack
 	heldSets   [][2]ItemStack
 	failWrites bool
@@ -24,6 +26,9 @@ func (h *csharpItemHost) InventorySize(_ InvocationID, inventory InventoryID) (u
 	if inventory.Kind == InventoryArmour {
 		return 4, true
 	}
+	if inventory.Kind == InventoryEnderChest {
+		return 27, true
+	}
 	return 36, inventory.Kind == InventoryMain
 }
 
@@ -31,6 +36,9 @@ func (h *csharpItemHost) InventoryItem(_ InvocationID, inventory InventoryID, sl
 	if inventory.Kind != InventoryMain || slot != 0 {
 		if inventory.Kind == InventoryArmour && slot == 0 {
 			return h.armour, true
+		}
+		if inventory.Kind == InventoryEnderChest && slot == 0 {
+			return h.enderChest, true
 		}
 		return ItemStack{}, false
 	}
@@ -45,6 +53,11 @@ func (h *csharpItemHost) SetInventoryItem(_ InvocationID, inventory InventoryID,
 		if inventory.Kind == InventoryArmour && slot == 0 {
 			h.armourSets = append(h.armourSets, cloneNativeItem(stack))
 			h.armour = cloneNativeItem(stack)
+			return true
+		}
+		if inventory.Kind == InventoryEnderChest && slot == 0 {
+			h.enderSets = append(h.enderSets, cloneNativeItem(stack))
+			h.enderChest = cloneNativeItem(stack)
 			return true
 		}
 		return false
@@ -150,7 +163,7 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 			Overload: uint64(overload), Arguments: []string{"item"},
 			OnlinePlayers: []CommandPlayer{{Player: player, Name: "ItemTester"}},
 		})
-		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, added_empty=0, variants=48" {
+		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, ender_slots=27, added_empty=0, variants=48" {
 			t.Fatalf("iteration %d: output=%#v error=%v", iteration, output, err)
 		}
 	}
@@ -173,6 +186,9 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 	}
 	if len(host.armourSets) != 70 || len(host.adds) != 70 || host.adds[0].Identifier != "" || host.adds[0].Count != 0 {
 		t.Fatalf("armour writes=%d adds=%d", len(host.armourSets), len(host.adds))
+	}
+	if len(host.enderSets) != 140 || host.enderChest.Count != 0 || host.enderChest.Identifier != "" {
+		t.Fatalf("ender writes=%d ender=%#v", len(host.enderSets), host.enderChest)
 	}
 	sword := host.sets[0]
 	if sword.Identifier != "minecraft:diamond_sword" || sword.Count != 1 ||

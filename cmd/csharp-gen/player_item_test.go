@@ -19,7 +19,7 @@ func TestPlayerItemMethodsFollowDragonflyAST(t *testing.T) {
 		t.Fatal(err)
 	}
 	generated := string(generatePlayerItemMethods(methods))
-	for _, value := range []string{"Inventory.Value Inventory()", "Inventory.Armour Armour()", "HeldItems()", "SetHeldItems(", "SetHeldSlot("} {
+	for _, value := range []string{"Inventory.Value Inventory()", "Inventory.Value EnderChestInventory()", "Inventory.Armour Armour()", "HeldItems()", "SetHeldItems(", "SetHeldSlot("} {
 		if !strings.Contains(generated, value) {
 			t.Fatalf("generated player item methods missing %q", value)
 		}

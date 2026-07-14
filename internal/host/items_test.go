@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
+	"github.com/df-mc/dragonfly/server/item/inventory"
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
@@ -175,6 +176,74 @@ func TestPlayersSetInventoryItemRejectsInvalidSlots(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestPlayersUseConfiguredInventorySizesAndEnderChest(t *testing.T) {
+	w := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	id := uuid.MustParse("5b99d638-03e7-49ad-a479-a35db62dc142")
+	handle := world.EntitySpawnOpts{ID: id}.New(player.Type, player.Config{
+		UUID: id, Name: "CustomInventories",
+		Inventory:           inventory.New(7, nil),
+		EnderChestInventory: inventory.New(5, nil),
+	})
+	if err := w.Do(func(tx *world.Tx) {
+		connected := tx.AddEntity(handle).(*player.Player)
+		players := NewPlayers()
+		playerID := players.Register(connected, 12)
+		invocation, leave := players.BeginInvocation(tx)
+		defer leave()
+
+		main := native.InventoryID{Player: playerID, Kind: native.InventoryMain}
+		enderChest := native.InventoryID{Player: playerID, Kind: native.InventoryEnderChest}
+		for _, test := range []struct {
+			name      string
+			inventory native.InventoryID
+			size      uint32
+		}{
+			{name: "main", inventory: main, size: 7},
+			{name: "ender chest", inventory: enderChest, size: 5},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				if size, ok := players.InventorySize(invocation, test.inventory); !ok || size != test.size {
+					t.Fatalf("size=%d ok=%v", size, ok)
+				}
+				stack := native.ItemStack{Identifier: "minecraft:apple", Count: 1}
+				if !players.SetInventoryItem(invocation, test.inventory, test.size-1, stack) {
+					t.Fatal("last configured slot rejected")
+				}
+				if players.SetInventoryItem(invocation, test.inventory, test.size, stack) {
+					t.Fatal("slot beyond configured size accepted")
+				}
+				got, ok := players.InventoryItem(invocation, test.inventory, test.size-1)
+				if !ok || got.Identifier != stack.Identifier || got.Count != stack.Count {
+					t.Fatalf("item=%#v ok=%v", got, ok)
+				}
+				if !players.ClearInventory(invocation, test.inventory) {
+					t.Fatal("clear failed")
+				}
+				if added, ok := players.AddInventoryItem(invocation, test.inventory, native.ItemStack{
+					Identifier: "minecraft:apple", Count: 70,
+				}); !ok || added != 70 {
+					t.Fatalf("added=%d ok=%v", added, ok)
+				}
+				if !players.ClearInventory(invocation, test.inventory) {
+					t.Fatal("second clear failed")
+				}
+			})
+		}
+
+		invalid := native.InventoryID{Player: playerID, Kind: 99}
+		if players.SetInventoryItem(invocation, invalid, 0, native.ItemStack{}) ||
+			players.ClearInventory(invocation, invalid) {
+			t.Fatal("unknown inventory kind accepted")
+		}
+		if _, ok := players.AddInventoryItem(invocation, invalid, native.ItemStack{}); ok {
+			t.Fatal("add accepted unknown inventory kind")
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPlayersSetInventoryItemSchedulesAcrossWorldInvocation(t *testing.T) {

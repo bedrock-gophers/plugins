@@ -71,6 +71,7 @@ const (
 	InventoryMain InventoryKind = iota
 	InventoryArmour
 	InventoryOffhand
+	InventoryEnderChest
 )
 
 type InventoryID struct {

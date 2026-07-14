@@ -48,6 +48,7 @@ public static class Abi
     public const uint InventoryMain = 0;
     public const uint InventoryArmour = 1;
     public const uint InventoryOffhand = 2;
+    public const uint InventoryEnderChest = 3;
     public const uint SetBlockDisableBlockUpdates = 1;
     public const uint SetBlockDisableLiquidDisplacement = 1 << 1;
     public const uint SetBlockDisableRedstoneUpdates = 1 << 2;
