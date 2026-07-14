@@ -75,6 +75,9 @@ patterns, smithing templates, suspicious stews, pottery sherds, goat horns, and 
 Their exact factory values come from Dragonfly's Go AST and live registries. NBT-backed item
 families remain opaque during transport until their full typed state lands; raw identifiers,
 metadata, NBT, enchantment IDs, snapshots, and host statuses stay private.
+Generated value methods include colour conversions, numeric IDs, horn names, and music-disc
+identifiers, display names, and authors. Effect-returning potion and stew methods wait for the
+typed effect API.
 `Inventory.Value` currently exposes `Size`, `Item`, `SetItem`, and `AddItem`; player armour
 and held-item access use the same typed `Item.Stack`. Invalid C# slot indices throw
 `ArgumentOutOfRangeException`; setters return `void`.

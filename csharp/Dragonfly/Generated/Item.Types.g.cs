@@ -1,5 +1,6 @@
 // Code generated from Dragonfly server/item Go AST and live registry. DO NOT EDIT.
 #nullable enable
+using System;
 
 namespace Dragonfly
 {
@@ -20,6 +21,111 @@ namespace Dragonfly
             private readonly int _value;
             internal Colour(int value) => _value = value;
             internal int Id => _value;
+
+            public Color.RGBA RGBA() => _value switch
+            {
+                0 => new Color.RGBA(240, 240, 240, 255),
+                1 => new Color.RGBA(249, 128, 29, 255),
+                2 => new Color.RGBA(199, 78, 189, 255),
+                3 => new Color.RGBA(58, 179, 218, 255),
+                4 => new Color.RGBA(254, 216, 61, 255),
+                5 => new Color.RGBA(128, 199, 31, 255),
+                6 => new Color.RGBA(243, 139, 170, 255),
+                7 => new Color.RGBA(71, 79, 82, 255),
+                8 => new Color.RGBA(157, 157, 151, 255),
+                9 => new Color.RGBA(22, 156, 156, 255),
+                10 => new Color.RGBA(137, 50, 184, 255),
+                11 => new Color.RGBA(60, 68, 170, 255),
+                12 => new Color.RGBA(131, 84, 50, 255),
+                13 => new Color.RGBA(94, 124, 22, 255),
+                14 => new Color.RGBA(176, 46, 38, 255),
+                15 => new Color.RGBA(29, 29, 33, 255),
+                _ => throw new InvalidOperationException("Invalid Colour value."),
+            };
+
+            public Color.RGBA SignRGBA() => _value switch
+            {
+                0 => new Color.RGBA(240, 240, 240, 255),
+                1 => new Color.RGBA(249, 128, 29, 255),
+                2 => new Color.RGBA(199, 78, 189, 255),
+                3 => new Color.RGBA(58, 179, 218, 255),
+                4 => new Color.RGBA(254, 216, 61, 255),
+                5 => new Color.RGBA(128, 199, 31, 255),
+                6 => new Color.RGBA(243, 139, 170, 255),
+                7 => new Color.RGBA(71, 79, 82, 255),
+                8 => new Color.RGBA(157, 157, 151, 255),
+                9 => new Color.RGBA(22, 156, 156, 255),
+                10 => new Color.RGBA(137, 50, 184, 255),
+                11 => new Color.RGBA(60, 68, 170, 255),
+                12 => new Color.RGBA(131, 84, 50, 255),
+                13 => new Color.RGBA(94, 124, 22, 255),
+                14 => new Color.RGBA(176, 46, 38, 255),
+                15 => new Color.RGBA(0, 0, 0, 255),
+                _ => throw new InvalidOperationException("Invalid Colour value."),
+            };
+
+            public string String() => _value switch
+            {
+                0 => "white",
+                1 => "orange",
+                2 => "magenta",
+                3 => "light_blue",
+                4 => "yellow",
+                5 => "lime",
+                6 => "pink",
+                7 => "gray",
+                8 => "light_gray",
+                9 => "cyan",
+                10 => "purple",
+                11 => "blue",
+                12 => "brown",
+                13 => "green",
+                14 => "red",
+                15 => "black",
+                _ => throw new InvalidOperationException("Invalid Colour value."),
+            };
+
+            public string SilverString() => _value switch
+            {
+                0 => "white",
+                1 => "orange",
+                2 => "magenta",
+                3 => "light_blue",
+                4 => "yellow",
+                5 => "lime",
+                6 => "pink",
+                7 => "gray",
+                8 => "silver",
+                9 => "cyan",
+                10 => "purple",
+                11 => "blue",
+                12 => "brown",
+                13 => "green",
+                14 => "red",
+                15 => "black",
+                _ => throw new InvalidOperationException("Invalid Colour value."),
+            };
+
+            public byte Uint8() => _value switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 5,
+                6 => 6,
+                7 => 7,
+                8 => 8,
+                9 => 9,
+                10 => 10,
+                11 => 11,
+                12 => 12,
+                13 => 13,
+                14 => 14,
+                15 => 15,
+                _ => throw new InvalidOperationException("Invalid Colour value."),
+            };
         }
 
         public static Colour ColourWhite() => new(0);
@@ -44,6 +150,30 @@ namespace Dragonfly
             private readonly int _value;
             internal SmithingTemplateType(int value) => _value = value;
             internal int Id => _value;
+
+            public string String() => _value switch
+            {
+                0 => "netherite_upgrade",
+                1 => "sentry",
+                2 => "vex",
+                3 => "wild",
+                4 => "coast",
+                5 => "dune",
+                6 => "wayfinder",
+                7 => "raiser",
+                8 => "shaper",
+                9 => "host",
+                10 => "ward",
+                11 => "silence",
+                12 => "tide",
+                13 => "snout",
+                14 => "rib",
+                15 => "eye",
+                16 => "spire",
+                17 => "flow",
+                18 => "bolt",
+                _ => throw new InvalidOperationException("Invalid SmithingTemplateType value."),
+            };
         }
 
         public static SmithingTemplateType TemplateNetheriteUpgrade() => new(0);
@@ -71,6 +201,36 @@ namespace Dragonfly
             private readonly int _value;
             internal BannerPatternType(int value) => _value = value;
             internal int Id => _value;
+
+            public byte Uint8() => _value switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 5,
+                6 => 6,
+                7 => 7,
+                8 => 8,
+                9 => 9,
+                _ => throw new InvalidOperationException("Invalid BannerPatternType value."),
+            };
+
+            public string String() => _value switch
+            {
+                0 => "creeper",
+                1 => "skull",
+                2 => "flower",
+                3 => "mojang",
+                4 => "field_masoned",
+                5 => "bordure_indented",
+                6 => "piglin",
+                7 => "globe",
+                8 => "flow",
+                9 => "guster",
+                _ => throw new InvalidOperationException("Invalid BannerPatternType value."),
+            };
         }
 
         public static BannerPatternType CreeperBannerPattern() => new(0);
@@ -89,6 +249,24 @@ namespace Dragonfly
             private readonly int _value;
             internal StewType(int value) => _value = value;
             internal int Id => _value;
+
+            public byte Uint8() => _value switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 5,
+                6 => 6,
+                7 => 7,
+                8 => 8,
+                9 => 9,
+                10 => 10,
+                11 => 11,
+                12 => 12,
+                _ => throw new InvalidOperationException("Invalid StewType value."),
+            };
         }
 
         public static StewType NightVisionPoppyStew() => new(0);
@@ -110,6 +288,62 @@ namespace Dragonfly
             private readonly int _value;
             internal SherdType(int value) => _value = value;
             internal int Id => _value;
+
+            public string String() => _value switch
+            {
+                0 => "angler",
+                1 => "archer",
+                2 => "arms_up",
+                3 => "blade",
+                4 => "brewer",
+                5 => "burn",
+                6 => "danger",
+                7 => "explorer",
+                8 => "friend",
+                9 => "heart",
+                10 => "heartbreak",
+                11 => "howl",
+                12 => "miner",
+                13 => "mourner",
+                14 => "plenty",
+                15 => "prize",
+                16 => "sheaf",
+                17 => "shelter",
+                18 => "skull",
+                19 => "snort",
+                20 => "flow",
+                21 => "guster",
+                22 => "scrape",
+                _ => throw new InvalidOperationException("Invalid SherdType value."),
+            };
+
+            public byte Uint8() => _value switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 5,
+                6 => 6,
+                7 => 7,
+                8 => 8,
+                9 => 9,
+                10 => 10,
+                11 => 11,
+                12 => 12,
+                13 => 13,
+                14 => 14,
+                15 => 15,
+                16 => 16,
+                17 => 17,
+                18 => 18,
+                19 => 19,
+                20 => 20,
+                21 => 21,
+                22 => 22,
+                _ => throw new InvalidOperationException("Invalid SherdType value."),
+            };
         }
 
         public static SherdType SherdTypeAngler() => new(0);
@@ -266,6 +500,54 @@ namespace Dragonfly
             private readonly int _value;
             internal Value(int value) => _value = value;
             internal int Id => _value;
+
+            public byte Uint8() => _value switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 5,
+                6 => 6,
+                7 => 7,
+                8 => 8,
+                9 => 9,
+                10 => 10,
+                11 => 11,
+                12 => 12,
+                13 => 13,
+                14 => 14,
+                15 => 15,
+                16 => 16,
+                17 => 17,
+                18 => 18,
+                19 => 19,
+                20 => 20,
+                21 => 21,
+                22 => 22,
+                23 => 23,
+                24 => 24,
+                25 => 25,
+                26 => 26,
+                27 => 27,
+                28 => 28,
+                29 => 29,
+                30 => 30,
+                31 => 31,
+                32 => 32,
+                33 => 33,
+                34 => 34,
+                35 => 35,
+                36 => 36,
+                37 => 37,
+                38 => 38,
+                39 => 39,
+                40 => 40,
+                41 => 41,
+                42 => 42,
+                _ => throw new InvalidOperationException("Invalid Value value."),
+            };
         }
 
         public static Value Water() => new(0);
@@ -321,6 +603,32 @@ namespace Dragonfly
             private readonly int _value;
             internal Horn(int value) => _value = value;
             internal int Id => _value;
+
+            public byte Uint8() => _value switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 5,
+                6 => 6,
+                7 => 7,
+                _ => throw new InvalidOperationException("Invalid Horn value."),
+            };
+
+            public string Name() => _value switch
+            {
+                0 => "Ponder",
+                1 => "Sing",
+                2 => "Seek",
+                3 => "Feel",
+                4 => "Admire",
+                5 => "Call",
+                6 => "Yearn",
+                7 => "Dream",
+                _ => throw new InvalidOperationException("Invalid Horn value."),
+            };
         }
 
         public static Horn Ponder() => new(0);
@@ -337,6 +645,110 @@ namespace Dragonfly
             private readonly int _value;
             internal DiscType(int value) => _value = value;
             internal int Id => _value;
+
+            public byte Uint8() => _value switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 5,
+                6 => 6,
+                7 => 7,
+                8 => 8,
+                9 => 9,
+                10 => 10,
+                11 => 11,
+                12 => 12,
+                13 => 13,
+                14 => 14,
+                15 => 15,
+                16 => 16,
+                17 => 17,
+                18 => 18,
+                19 => 19,
+                20 => 20,
+                _ => throw new InvalidOperationException("Invalid DiscType value."),
+            };
+
+            public string String() => _value switch
+            {
+                0 => "13",
+                1 => "cat",
+                2 => "blocks",
+                3 => "chirp",
+                4 => "far",
+                5 => "mall",
+                6 => "mellohi",
+                7 => "stal",
+                8 => "strad",
+                9 => "ward",
+                10 => "11",
+                11 => "wait",
+                12 => "otherside",
+                13 => "pigstep",
+                14 => "5",
+                15 => "relic",
+                16 => "creator",
+                17 => "creator_music_box",
+                18 => "precipice",
+                19 => "tears",
+                20 => "lava_chicken",
+                _ => throw new InvalidOperationException("Invalid DiscType value."),
+            };
+
+            public string DisplayName() => _value switch
+            {
+                0 => "13",
+                1 => "cat",
+                2 => "blocks",
+                3 => "chirp",
+                4 => "far",
+                5 => "mall",
+                6 => "mellohi",
+                7 => "stal",
+                8 => "strad",
+                9 => "ward",
+                10 => "11",
+                11 => "wait",
+                12 => "otherside",
+                13 => "Pigstep",
+                14 => "5",
+                15 => "Relic",
+                16 => "Creator",
+                17 => "Creator (Music Box)",
+                18 => "Precipice",
+                19 => "Tears",
+                20 => "Lava Chicken",
+                _ => throw new InvalidOperationException("Invalid DiscType value."),
+            };
+
+            public string Author() => _value switch
+            {
+                0 => "C418",
+                1 => "C418",
+                2 => "C418",
+                3 => "C418",
+                4 => "C418",
+                5 => "C418",
+                6 => "C418",
+                7 => "C418",
+                8 => "C418",
+                9 => "C418",
+                10 => "C418",
+                11 => "C418",
+                12 => "Lena Raine",
+                13 => "Lena Raine",
+                14 => "Samuel Åberg",
+                15 => "Aaron Cherof",
+                16 => "Lena Raine",
+                17 => "Lena Raine",
+                18 => "Aaron Cherof",
+                19 => "Amos Roddy",
+                20 => "Hyper Potions",
+                _ => throw new InvalidOperationException("Invalid DiscType value."),
+            };
         }
 
         public static DiscType Disc13() => new(0);

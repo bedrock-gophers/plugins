@@ -454,6 +454,20 @@ public sealed class KitchenSink : Plugin
                     return;
                 }
 
+                var black = Dragonfly.Item.ColourBlack();
+                var lavaChicken = Dragonfly.Sound.DiscLavaChicken();
+                if (black.String() != "black" || black.SilverString() != "black" || black.Uint8() != 15 ||
+                    black.RGBA() != new Dragonfly.Color.RGBA(29, 29, 33, 255) ||
+                    black.SignRGBA() != new Dragonfly.Color.RGBA(0, 0, 0, 255) ||
+                    Dragonfly.Sound.Dream().Name() != "Dream" ||
+                    Dragonfly.Potion.StrongSlowness().Uint8() != 42 ||
+                    lavaChicken.String() != "lava_chicken" || lavaChicken.DisplayName() != "Lava Chicken" ||
+                    lavaChicken.Author() != "Hyper Potions")
+                {
+                    output.Error("Stateful item value methods failed.");
+                    return;
+                }
+
                 Dragonfly.Item.Stack[] variants =
                 [
                     Dragonfly.Item.NewStack(new Dragonfly.Item.Arrow(Dragonfly.Potion.NightVision()), 1),

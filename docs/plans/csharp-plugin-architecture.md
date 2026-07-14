@@ -67,7 +67,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    five tiered tools, and 121 concrete item structs. Finite stateful families now include typed
    colours, potions and tipped arrows, banner patterns, smithing templates, suspicious stews,
    pottery sherds, goat horns, and music discs. Dependency factories and encoded states are
-   derived from Dragonfly's Go AST and live registries rather than a handwritten schema.
+   derived from Dragonfly's Go AST and live registries rather than a handwritten schema. Their
+   scalar, string, and colour methods are generated from live Dragonfly behavior too; methods
+   returning effects wait for the typed effect slice.
    Dragonfly's live item registry supplies the private identifier/metadata codec. `Item.Stack`
    starts with `NewStack`, `Count`, `Empty`, `Item`, `Grow`, `CustomName`, `WithCustomName`, `Lore`,
    and `WithLore`. Generated player methods expose `Inventory`, `Armour`, `HeldItems`,

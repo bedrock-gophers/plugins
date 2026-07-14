@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"image/color"
 	"math"
 	"os"
 	"os/exec"
@@ -165,6 +166,13 @@ type itemValueTypeSpec struct {
 	Name       string
 	Factories  []string
 	Values     []any
+	Methods    []itemValueMethodSpec
+}
+
+type itemValueMethodSpec struct {
+	Name       string
+	ReturnType string
+	Results    []string
 }
 
 type formFieldSpec struct {
@@ -1676,8 +1684,86 @@ func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncD
 			return nil, fmt.Errorf("Dragonfly %s AST/live lengths differ: %d/%d", collection.name, len(factories), len(specs[index].Values))
 		}
 		specs[index].Factories = factories
+		methods, err := inspectItemValueMethods(specs[index])
+		if err != nil {
+			return nil, err
+		}
+		specs[index].Methods = methods
 	}
 	return specs, nil
+}
+
+func inspectItemValueMethods(spec itemValueTypeSpec) ([]itemValueMethodSpec, error) {
+	methods := map[string][]struct {
+		Name       string
+		ReturnType string
+	}{
+		"Colour": {
+			{Name: "RGBA", ReturnType: "Color.RGBA"},
+			{Name: "SignRGBA", ReturnType: "Color.RGBA"},
+			{Name: "String", ReturnType: "string"},
+			{Name: "SilverString", ReturnType: "string"},
+			{Name: "Uint8", ReturnType: "byte"},
+		},
+		"SmithingTemplateType": {{Name: "String", ReturnType: "string"}},
+		"BannerPatternType": {
+			{Name: "Uint8", ReturnType: "byte"},
+			{Name: "String", ReturnType: "string"},
+		},
+		"StewType":      {{Name: "Uint8", ReturnType: "byte"}},
+		"SherdType":     {{Name: "String", ReturnType: "string"}, {Name: "Uint8", ReturnType: "byte"}},
+		"potion.Potion": {{Name: "Uint8", ReturnType: "byte"}},
+		"sound.Horn":    {{Name: "Uint8", ReturnType: "byte"}, {Name: "Name", ReturnType: "string"}},
+		"sound.DiscType": {
+			{Name: "Uint8", ReturnType: "byte"},
+			{Name: "String", ReturnType: "string"},
+			{Name: "DisplayName", ReturnType: "string"},
+			{Name: "Author", ReturnType: "string"},
+		},
+	}[spec.GoType]
+	result := make([]itemValueMethodSpec, 0, len(methods))
+	for _, method := range methods {
+		generated := itemValueMethodSpec{Name: method.Name, ReturnType: method.ReturnType}
+		for _, value := range spec.Values {
+			call := reflect.ValueOf(value).MethodByName(method.Name)
+			if !call.IsValid() || call.Type().NumIn() != 0 || call.Type().NumOut() != 1 {
+				return nil, fmt.Errorf("Dragonfly %s.%s signature changed", spec.GoType, method.Name)
+			}
+			outputs := call.Call(nil)
+			formatted, err := csharpItemValueResult(outputs[0].Interface(), method.ReturnType)
+			if err != nil {
+				return nil, fmt.Errorf("Dragonfly %s.%s: %w", spec.GoType, method.Name, err)
+			}
+			generated.Results = append(generated.Results, formatted)
+		}
+		result = append(result, generated)
+	}
+	return result, nil
+}
+
+func csharpItemValueResult(value any, returnType string) (string, error) {
+	switch returnType {
+	case "byte":
+		value, ok := value.(uint8)
+		if !ok {
+			return "", fmt.Errorf("result is %T, not uint8", value)
+		}
+		return strconv.Itoa(int(value)), nil
+	case "string":
+		value, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("result is %T, not string", value)
+		}
+		return strconv.Quote(value), nil
+	case "Color.RGBA":
+		value, ok := value.(color.RGBA)
+		if !ok {
+			return "", fmt.Errorf("result is %T, not color.RGBA", value)
+		}
+		return fmt.Sprintf("new Color.RGBA(%d, %d, %d, %d)", value.R, value.G, value.B, value.A), nil
+	default:
+		return "", fmt.Errorf("unsupported C# return type %s", returnType)
+	}
 }
 
 func packageFunctions(directory, packageName string) (map[string]*ast.FuncDecl, error) {
@@ -3420,7 +3506,7 @@ func generateBiomes(biomes []encodedBiome) []byte {
 func generateItems(spec itemSpec) []byte {
 	var output bytes.Buffer
 	output.WriteString("// Code generated from Dragonfly server/item Go AST and live registry. DO NOT EDIT.\n")
-	output.WriteString("#nullable enable\n\nnamespace Dragonfly\n{\n")
+	output.WriteString("#nullable enable\nusing System;\n\nnamespace Dragonfly\n{\n")
 	output.WriteString("    public static partial class Item\n    {\n")
 	fmt.Fprintf(&output, "        public readonly record struct ToolTier(%s);\n\n", formatParameters(spec.ToolTierFields))
 	for _, tier := range spec.ToolTiers {
@@ -3524,6 +3610,13 @@ func generateItemValueType(output *bytes.Buffer, spec itemValueTypeSpec, indent 
 	fmt.Fprintf(output, "%s    private readonly int _value;\n", indent)
 	fmt.Fprintf(output, "%s    internal %s(int value) => _value = value;\n", indent, spec.Name)
 	fmt.Fprintf(output, "%s    internal int Id => _value;\n", indent)
+	for _, method := range spec.Methods {
+		fmt.Fprintf(output, "\n%s    public %s %s() => _value switch\n%s    {\n", indent, method.ReturnType, method.Name, indent)
+		for index, result := range method.Results {
+			fmt.Fprintf(output, "%s        %d => %s,\n", indent, index, result)
+		}
+		fmt.Fprintf(output, "%s        _ => throw new InvalidOperationException(\"Invalid %s value.\"),\n%s    };\n", indent, spec.Name, indent)
+	}
 	fmt.Fprintf(output, "%s}\n\n", indent)
 	for index, factory := range spec.Factories {
 		fmt.Fprintf(output, "%spublic static %s %s() => new(%d);\n", indent, spec.Name, factory, index)
