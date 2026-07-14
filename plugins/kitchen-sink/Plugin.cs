@@ -45,6 +45,7 @@ public sealed class KitchenSink : Plugin
             new KitchenHeal(),
             new KitchenWorld(),
             new KitchenEntities(),
+            new KitchenServer(this),
             new KitchenHandle()));
         Console.WriteLine("kitchen-sink enabled");
     }
@@ -706,6 +707,39 @@ public sealed class KitchenSink : Plugin
                 foundDetached ? "true" : "false",
                 foundAfter && resolvedAfter is not null ? "true" : "false",
                 removed.Closed() ? "true" : "false");
+        }
+    }
+
+    internal sealed class KitchenServer(KitchenSink plugin) : Cmd.Runnable
+    {
+        public Cmd.SubCommand Server;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            var server = plugin.Server();
+            var count = 0;
+            World.EntityHandle? first = null;
+            foreach (var connected in server.Players(tx))
+            {
+                first ??= connected.H();
+                connected.Message("Kitchen server iteration is live.");
+                count++;
+            }
+
+            if (source is Player player)
+            {
+                var uuid = player.H().UUID();
+                var (byUuid, foundUuid) = server.Player(uuid);
+                var (byName, foundName) = server.PlayerByName(player.Name());
+                if (!foundUuid || !foundName || byUuid is null || byName is null ||
+                    !byUuid.Equals(byName))
+                {
+                    output.Error("Server player lookup failed.");
+                    return;
+                }
+            }
+
+            output.Printf("players={0}, first={1}", count, first is null ? "none" : first.UUID());
         }
     }
 
