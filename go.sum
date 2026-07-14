@@ -1,5 +1,5 @@
-github.com/bedrock-gophers/plugins v0.0.0-20260714175544-1957177491e6 h1:BOzxzt7nrtZzr8vqRAmEQF3GylkAY5HFOzuz76k5hxM=
-github.com/bedrock-gophers/plugins v0.0.0-20260714175544-1957177491e6/go.mod h1:PgEFSPxWUTt565SiLDvhCeSy09Cob8RK+cXW4rwOSKs=
+github.com/bedrock-gophers/plugins v0.0.0-20260714192910-c2e40386ca57 h1:v1MvxSQCqezHbgX3MSkfEiVFJnnHdPLFp8cnNwOCsmk=
+github.com/bedrock-gophers/plugins v0.0.0-20260714192910-c2e40386ca57/go.mod h1:PgEFSPxWUTt565SiLDvhCeSy09Cob8RK+cXW4rwOSKs=
 github.com/brentp/intintmap v0.0.0-20251106190759-56907b1f8479 h1:UZbbt19ACBOFO+CiDQFjaEoPJkBhj7GNGtIq59WR6Os=
 github.com/brentp/intintmap v0.0.0-20251106190759-56907b1f8479/go.mod h1:TOk10ahXejq9wkEaym3KPRNeuR/h5Jx+s8QRWIa2oTM=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
