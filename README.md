@@ -54,11 +54,14 @@ the same transaction-owned `Player.Context` and may cancel admission. The remain
 callbacks continue to mirror `player.Handler`.
 
 Current C# slice: loading, lifecycle, reflected commands, player text actions, game mode, typed
-effects, forms, items and player inventories, and all 37 methods in Dragonfly's current
-`player.Handler`. This includes movement, world changes, damage/healing/death, mutable respawns and
+effects, forms, items and player inventories, all 37 methods in Dragonfly's current
+`player.Handler`, and all 13 methods in `world.Handler`. Player callbacks include movement, world
+changes, damage/healing/death, mutable respawns and
 skins, block and item interactions, entity use/attacks, transfers, command execution, client
 diagnostics, and quit. The separate host `OnJoin` lifecycle hook allows first-join initialization
-before those generated handler callbacks. Player handler, command-interface,
+before those generated handler callbacks. World callbacks include liquids, sounds, fire, crops,
+leaves, entity spawn/despawn, mutable explosions, full redstone updates, and close. Player and world
+handler signatures, command-interface,
 player-text, player-state, game-mode, effect, form, item, and player-inventory surfaces are generated
 from Dragonfly's Go AST. Generated player state parity currently includes `Food`/`SetFood`,
 `Health`, `MaxHealth`/`SetMaxHealth`, level and progress experience accessors, scale accessors,
@@ -183,18 +186,28 @@ materialised as concrete `Player` objects. `EntityHandle.Entity`, `UUID`, `Close
 while the world-bound entity ID changes on remove/re-add. Generic player removal remains blocked;
 use `Player.ChangeWorld` so Dragonfly's session transfer completes safely.
 
-Public block, liquid, biome, particle, colour, instrument, and item types come from Dragonfly's Go AST.
+`World.Handler` is generated from Dragonfly's Go AST and installed on every framework-managed
+world. Cancellable callbacks remain allowed by default. `HandleExplosion` may resize, reorder, or
+replace both entity and block lists and mutate item-drop chance and fire spawning. Entity callback
+values remain concrete `Player` objects where applicable, and `RedstoneUpdate` carries every
+Dragonfly field and cause.
+
+Public block, liquid, biome, particle, colour, instrument, sound, and item types come from Dragonfly's Go AST.
 Live registries feed internal generated codecs, so Minecraft identifiers, state NBT, numeric biome
-IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 35 preserves the
+IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 36 preserves the
 separate “no liquid” result, nullable liquid removal, signed nanosecond scheduling delays,
 biome/weather queries, particle payloads, registered/custom game-mode capabilities, and full
 callback-scoped player snapshots for form responses. Structurally valid form contexts receive
 exactly one response or drop callback, including synchronous send failures. World handles,
 capability descriptors, and ABI errors also remain private transport details.
 
+All 87 concrete `sound` package types are AST-generated under `Sound.*`. `HandleSound` receives
+their exact exported fields, including stateful blocks and bucket liquids, typed items,
+instruments, music discs, goat horns, crossbow stages, and scalar values.
+
 The generated effect slice exposes all 28 registered Dragonfly effects, `Effect.Value`, the five
 constructors, value methods, colour mixing, registry lookup, and `Player.AddEffect`, `RemoveEffect`,
-`Effect`, and `Effects`. ABI 35 carries effect duration, potency, ambient/particle/infinite flags,
+`Effect`, and `Effects`. ABI 36 carries effect duration, potency, ambient/particle/infinite flags,
 and the current tick; C# exposes duration at `TimeSpan`'s 100 ns precision. Custom effect callbacks,
 registration, and concrete effect-specific multiplier methods wait for the entity and damage-source
 slices; no identifier-based fallback is exposed.

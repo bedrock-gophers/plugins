@@ -10,7 +10,7 @@ extern "C" {
 
 #define DF_ABI_VERSION 7u
 // Version 35 adds stable entity handles and exact transaction add/remove.
-#define DF_HOST_ABI_VERSION 35u
+#define DF_HOST_ABI_VERSION 36u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -1084,6 +1084,119 @@ typedef struct {
 typedef struct {
     uint8_t _reserved;
 } DfPlayerDiagnosticsState;
+
+#define DF_EVENT_WORLD_LIQUID_FLOW 42u
+#define DF_EVENT_WORLD_LIQUID_DECAY 43u
+#define DF_EVENT_WORLD_LIQUID_HARDEN 44u
+#define DF_EVENT_WORLD_SOUND 45u
+#define DF_EVENT_WORLD_FIRE_SPREAD 46u
+#define DF_EVENT_WORLD_BLOCK_BURN 47u
+#define DF_EVENT_WORLD_CROP_TRAMPLE 48u
+#define DF_EVENT_WORLD_LEAVES_DECAY 49u
+#define DF_EVENT_WORLD_ENTITY_SPAWN 50u
+#define DF_EVENT_WORLD_ENTITY_DESPAWN 51u
+#define DF_EVENT_WORLD_EXPLOSION 52u
+#define DF_EVENT_WORLD_REDSTONE_UPDATE 53u
+#define DF_EVENT_WORLD_CLOSE 54u
+
+typedef struct {
+    uint8_t cancelled;
+} DfWorldCancellableState;
+
+typedef struct {
+    uint8_t _reserved;
+} DfWorldNotificationState;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfBlockPos from;
+    DfBlockPos into;
+    DfBlockView liquid;
+    DfBlockView replaced;
+} DfWorldLiquidFlowInput;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfBlockPos position;
+    DfBlockView before;
+    const DfBlockView *after;
+} DfWorldLiquidDecayInput;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfBlockPos position;
+    DfBlockView liquid_hardened;
+    DfBlockView other_liquid;
+    DfBlockView new_block;
+} DfWorldLiquidHardenInput;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfSoundViewV1 sound;
+    DfVec3 position;
+} DfWorldSoundInput;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfBlockPos from;
+    DfBlockPos to;
+} DfWorldFireSpreadInput;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfBlockPos position;
+} DfWorldPositionInput;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfEntityId entity;
+} DfWorldEntityInput;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfVec3 position;
+    const DfEntityId *entities;
+    uint64_t entity_count;
+    const DfBlockPos *blocks;
+    uint64_t block_count;
+} DfWorldExplosionInput;
+
+/*
+ * A non-null replacement_drop transfers both replacement arrays to the host.
+ * The host copies the arrays and invokes replacement_drop exactly once,
+ * including validation and error paths.
+ */
+typedef struct {
+    uint8_t cancelled;
+    uint8_t spawn_fire;
+    double item_drop_chance;
+    const DfEntityId *replacement_entities;
+    uint64_t replacement_entity_count;
+    const DfBlockPos *replacement_blocks;
+    uint64_t replacement_block_count;
+    void *replacement_context;
+    DfEventDropFn replacement_drop;
+} DfWorldExplosionState;
+
+typedef struct {
+    DfInvocationId invocation;
+    DfBlockPos position;
+    DfBlockPos changed_neighbour;
+    uint8_t has_changed_neighbour;
+    uint8_t changed_redstone_relevant;
+    DfBlockPos source;
+    uint8_t has_source;
+    DfBlockView before;
+    const DfBlockView *after;
+    int32_t old_power;
+    int32_t new_power;
+    int64_t current_tick;
+    uint32_t cause;
+} DfWorldRedstoneUpdateInput;
+
+typedef struct {
+    DfInvocationId invocation;
+} DfWorldCloseInput;
 
 #define DF_EVENT_ENTITY_HURT 35u
 

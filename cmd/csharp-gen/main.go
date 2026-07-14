@@ -524,6 +524,14 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	worldHandlerMethods, err := inspectWorldHandler(filepath.Join(directory, "server", "world", "handler.go"))
+	if err != nil {
+		fatal(err)
+	}
+	redstoneUpdate, err := inspectRedstoneUpdate(filepath.Join(directory, "server", "world", "redstone.go"))
+	if err != nil {
+		fatal(err)
+	}
 	entityMethods, err := inspectWorldEntity(filepath.Join(directory, "server", "world", "entity.go"))
 	if err != nil {
 		fatal(err)
@@ -608,6 +616,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	sounds, err := inspectSounds(filepath.Join(directory, "server", "world", "sound"))
+	if err != nil {
+		fatal(err)
+	}
 	gameModes, err := inspectGameModes(filepath.Join(directory, "server", "world", "game_mode.go"))
 	if err != nil {
 		fatal(err)
@@ -624,6 +636,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Handler.g.cs"),
 			Content: generatePlayerHandler(methods),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Handler.g.cs"),
+			Content: generateWorldHandler(worldHandlerMethods, redstoneUpdate),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Text.g.cs"),
@@ -692,6 +708,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Particle.Types.g.cs"),
 			Content: generateParticles(particles),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Sound.Types.g.cs"),
+			Content: generateSounds(sounds),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "GameMode.Types.g.cs"),

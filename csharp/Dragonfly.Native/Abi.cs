@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 7;
-    public const uint HostVersion = 35;
+    public const uint HostVersion = 36;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerMoveEvent = 1;
@@ -84,6 +84,32 @@ public static class Abi
     public const ulong PlayerCommandExecutionSubscription = 1UL << 39;
     public const uint PlayerDiagnosticsEvent = 41;
     public const ulong PlayerDiagnosticsSubscription = 1UL << 40;
+    public const uint WorldLiquidFlowEvent = 42;
+    public const ulong WorldLiquidFlowSubscription = 1UL << 41;
+    public const uint WorldLiquidDecayEvent = 43;
+    public const ulong WorldLiquidDecaySubscription = 1UL << 42;
+    public const uint WorldLiquidHardenEvent = 44;
+    public const ulong WorldLiquidHardenSubscription = 1UL << 43;
+    public const uint WorldSoundEvent = 45;
+    public const ulong WorldSoundSubscription = 1UL << 44;
+    public const uint WorldFireSpreadEvent = 46;
+    public const ulong WorldFireSpreadSubscription = 1UL << 45;
+    public const uint WorldBlockBurnEvent = 47;
+    public const ulong WorldBlockBurnSubscription = 1UL << 46;
+    public const uint WorldCropTrampleEvent = 48;
+    public const ulong WorldCropTrampleSubscription = 1UL << 47;
+    public const uint WorldLeavesDecayEvent = 49;
+    public const ulong WorldLeavesDecaySubscription = 1UL << 48;
+    public const uint WorldEntitySpawnEvent = 50;
+    public const ulong WorldEntitySpawnSubscription = 1UL << 49;
+    public const uint WorldEntityDespawnEvent = 51;
+    public const ulong WorldEntityDespawnSubscription = 1UL << 50;
+    public const uint WorldExplosionEvent = 52;
+    public const ulong WorldExplosionSubscription = 1UL << 51;
+    public const uint WorldRedstoneUpdateEvent = 53;
+    public const ulong WorldRedstoneUpdateSubscription = 1UL << 52;
+    public const uint WorldCloseEvent = 54;
+    public const ulong WorldCloseSubscription = 1UL << 53;
     public const uint CommandParameterSubcommand = 1;
     public const uint CommandParameterEnum = 2;
     public const uint CommandParameterString = 3;
@@ -640,6 +666,18 @@ public unsafe struct ParticleView
 }
 
 [StructLayout(LayoutKind.Sequential)]
+public unsafe struct SoundViewV1
+{
+    public uint Kind;
+    public uint Data;
+    public int Integer;
+    public uint Flags;
+    public double Scalar;
+    public BlockView* Block;
+    public ItemStackViewV3* Item;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 public struct NativeRotation
 {
     public double Yaw;
@@ -1066,6 +1104,126 @@ public struct PlayerDiagnosticsInput
 public struct PlayerDiagnosticsState
 {
     public byte Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldCancellableState
+{
+    public byte Cancelled;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldNotificationState
+{
+    public byte Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldLiquidFlowInput
+{
+    public ulong Invocation;
+    public BlockPos From;
+    public BlockPos Into;
+    public BlockView Liquid;
+    public BlockView Replaced;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct WorldLiquidDecayInput
+{
+    public ulong Invocation;
+    public BlockPos Position;
+    public BlockView Before;
+    public BlockView* After;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldLiquidHardenInput
+{
+    public ulong Invocation;
+    public BlockPos Position;
+    public BlockView LiquidHardened;
+    public BlockView OtherLiquid;
+    public BlockView NewBlock;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldSoundInput
+{
+    public ulong Invocation;
+    public SoundViewV1 Sound;
+    public Vec3 Position;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldFireSpreadInput
+{
+    public ulong Invocation;
+    public BlockPos From;
+    public BlockPos To;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldPositionInput
+{
+    public ulong Invocation;
+    public BlockPos Position;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldEntityInput
+{
+    public ulong Invocation;
+    public EntityId Entity;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct WorldExplosionInput
+{
+    public ulong Invocation;
+    public Vec3 Position;
+    public EntityId* Entities;
+    public ulong EntityCount;
+    public BlockPos* Blocks;
+    public ulong BlockCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct WorldExplosionState
+{
+    public byte Cancelled;
+    public byte SpawnFire;
+    public double ItemDropChance;
+    public EntityId* ReplacementEntities;
+    public ulong ReplacementEntityCount;
+    public BlockPos* ReplacementBlocks;
+    public ulong ReplacementBlockCount;
+    public void* ReplacementContext;
+    public delegate* unmanaged[Cdecl]<void*, void> ReplacementDrop;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct WorldRedstoneUpdateInput
+{
+    public ulong Invocation;
+    public BlockPos Position;
+    public BlockPos ChangedNeighbour;
+    public byte HasChangedNeighbour;
+    public byte ChangedRedstoneRelevant;
+    public BlockPos Source;
+    public byte HasSource;
+    public BlockView Before;
+    public BlockView* After;
+    public int OldPower;
+    public int NewPower;
+    public long CurrentTick;
+    public uint Cause;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WorldCloseInput
+{
+    public ulong Invocation;
 }
 
 [StructLayout(LayoutKind.Sequential)]

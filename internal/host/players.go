@@ -69,6 +69,42 @@ func (p *Players) Register(player *player.Player, generation uint64) native.Play
 	return id
 }
 
+// registerTemporary exposes a player through the synchronous callback that
+// first observes its entity, without publishing it as an accepted player.
+// cleanup leaves the shared entity identity intact for the later Register.
+func (p *Players) registerTemporary(connected *player.Player, id native.EntityID) (cleanup func()) {
+	if p == nil || connected == nil || id.Generation == 0 {
+		return func() {}
+	}
+	entityID := p.entities.registerHandle(connected.H(), id.Generation)
+	if entityID != id {
+		return func() {}
+	}
+	playerID := native.PlayerID{UUID: id.UUID, Generation: id.Generation}
+	entry := &playerEntry{
+		id: playerID, handle: connected.H(), name: connected.Name(),
+		latency: uint64(max(connected.Latency().Milliseconds(), 0)), position: connected.Position(),
+	}
+	p.mu.Lock()
+	if _, exists := p.entries[connected.H()]; exists {
+		p.mu.Unlock()
+		return func() {}
+	}
+	p.entries[connected.H()] = entry
+	p.byID[playerID] = entry
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		if p.entries[connected.H()] == entry {
+			delete(p.entries, connected.H())
+			if p.byID[playerID] == entry {
+				delete(p.byID, playerID)
+			}
+		}
+		p.mu.Unlock()
+	}
+}
+
 func (p *Players) Unregister(player *player.Player) {
 	if player != nil {
 		p.UnregisterHandle(player.H())

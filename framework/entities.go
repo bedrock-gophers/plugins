@@ -93,18 +93,11 @@ func (m *WorldManager) SpawnWorldEntity(invocation native.InvocationID, id nativ
 // CurrentWorld resolves the exact managed world owned by invocation's active
 // Dragonfly transaction. It deliberately rejects the context-free invocation.
 func (m *WorldManager) CurrentWorld(invocation native.InvocationID) (native.WorldID, bool) {
-	if invocation == 0 {
-		return 0, false
-	}
-	tx, ok := m.invocationTx(invocation)
+	entry, ok := m.entryForInvocation(invocation, 0)
 	if !ok {
 		return 0, false
 	}
-	w, ok := transactionWorld(tx)
-	if !ok {
-		return 0, false
-	}
-	return m.handleByWorld(w)
+	return entry.id, true
 }
 
 // OpenWorldEntityIterator opens a lazy pull iterator over the exact current

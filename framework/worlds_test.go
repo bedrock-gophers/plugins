@@ -58,6 +58,59 @@ func TestWorldManagerCreatesAndUnloadsCustomWorld(t *testing.T) {
 	}
 }
 
+type closeWorldRuntime struct {
+	host.WorldRuntime
+	manager *WorldManager
+	block   native.WorldBlock
+	called  bool
+	valid   bool
+}
+
+func (*closeWorldRuntime) Subscriptions() uint64 { return native.WorldCloseSubscription }
+
+func (r *closeWorldRuntime) HandleWorldClose(invocation native.InvocationID) error {
+	r.called = true
+	id, currentOK := r.manager.CurrentWorld(invocation)
+	name, nameOK := r.manager.WorldName(invocation, id)
+	_, rangeOK := r.manager.WorldRange(invocation, 0)
+	_, spawnOK := r.manager.WorldSpawn(invocation, id)
+	position := native.BlockPos{X: 2, Y: 64, Z: 3}
+	setOK := r.manager.SetWorldBlock(invocation, 0, position, r.block, native.WorldSetOpts{})
+	got, blockOK := r.manager.WorldBlock(invocation, 0, position)
+	r.valid = currentOK && nameOK && name == "example:closing" && rangeOK && spawnOK && setOK && blockOK && got.Identifier == r.block.Identifier
+	return nil
+}
+
+func TestWorldManagerCloseHandlerRetainsActiveTransaction(t *testing.T) {
+	players := host.NewPlayers()
+	manager := newWorldManager("", nil, players)
+	properties, ok := encodeBlockProperties(map[string]any{})
+	if !ok {
+		t.Fatal("encode stone properties")
+	}
+	runtime := &closeWorldRuntime{
+		manager: manager,
+		block:   native.WorldBlock{Identifier: "minecraft:stone", PropertiesNBT: properties},
+	}
+	manager.attachRuntime(runtime)
+	if _, err := manager.Create("example:closing", world.Config{Synchronous: true}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- manager.Unload("example:closing") }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("world unload deadlocked in close handler")
+	}
+	if !runtime.called || !runtime.valid {
+		t.Fatalf("close callback called=%v transaction-valid=%v", runtime.called, runtime.valid)
+	}
+}
+
 func TestWorldManagerRejectsInvalidOrDuplicateIDs(t *testing.T) {
 	manager := NewWorldManager()
 	if _, err := manager.Create("minecraft:custom", world.Config{Synchronous: true}); err == nil {

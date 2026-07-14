@@ -2723,6 +2723,178 @@ internal static unsafe class PluginBridge
                     ApplyCancellation(context, &result->Cancelled);
                     return Abi.Ok;
                 }
+                case Abi.WorldLiquidFlowEvent:
+                {
+                    var value = (WorldLiquidFlowInput*)input;
+                    var result = (WorldCancellableState*)state;
+                    var context = new World.Context(value->Invocation, result->Cancelled != 0);
+                    var liquid = EventLiquid(value->Liquid);
+                    plugin.HandleLiquidFlow(
+                        context,
+                        EventPos(value->From),
+                        EventPos(value->Into),
+                        liquid,
+                        EventBlock(value->Replaced));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.WorldLiquidDecayEvent:
+                {
+                    var value = (WorldLiquidDecayInput*)input;
+                    var result = (WorldCancellableState*)state;
+                    var context = new World.Context(value->Invocation, result->Cancelled != 0);
+                    plugin.HandleLiquidDecay(
+                        context,
+                        EventPos(value->Position),
+                        EventLiquid(value->Before),
+                        value->After is null ? null : EventLiquid(*value->After));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.WorldLiquidHardenEvent:
+                {
+                    var value = (WorldLiquidHardenInput*)input;
+                    var result = (WorldCancellableState*)state;
+                    var context = new World.Context(value->Invocation, result->Cancelled != 0);
+                    plugin.HandleLiquidHarden(
+                        context,
+                        EventPos(value->Position),
+                        EventBlock(value->LiquidHardened),
+                        EventBlock(value->OtherLiquid),
+                        EventBlock(value->NewBlock));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.WorldSoundEvent:
+                {
+                    var value = (WorldSoundInput*)input;
+                    var result = (WorldCancellableState*)state;
+                    var context = new World.Context(value->Invocation, result->Cancelled != 0);
+                    plugin.HandleSound(
+                        context,
+                        EventSound(value->Sound),
+                        new Vector3(value->Position.X, value->Position.Y, value->Position.Z));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.WorldFireSpreadEvent:
+                {
+                    var value = (WorldFireSpreadInput*)input;
+                    var result = (WorldCancellableState*)state;
+                    var context = new World.Context(value->Invocation, result->Cancelled != 0);
+                    plugin.HandleFireSpread(context, EventPos(value->From), EventPos(value->To));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.WorldBlockBurnEvent:
+                case Abi.WorldCropTrampleEvent:
+                case Abi.WorldLeavesDecayEvent:
+                {
+                    var value = (WorldPositionInput*)input;
+                    var result = (WorldCancellableState*)state;
+                    var context = new World.Context(value->Invocation, result->Cancelled != 0);
+                    var position = EventPos(value->Position);
+                    if (eventId == Abi.WorldBlockBurnEvent)
+                        plugin.HandleBlockBurn(context, position);
+                    else if (eventId == Abi.WorldCropTrampleEvent)
+                        plugin.HandleCropTrample(context, position);
+                    else
+                        plugin.HandleLeavesDecay(context, position);
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.WorldEntitySpawnEvent:
+                case Abi.WorldEntityDespawnEvent:
+                {
+                    var value = (WorldEntityInput*)input;
+                    var entity = EventEntity(value->Entity, value->Invocation);
+                    if (entity is null) return Abi.Error;
+                    var tx = new World.Tx(value->Invocation);
+                    if (eventId == Abi.WorldEntitySpawnEvent)
+                        plugin.HandleEntitySpawn(tx, entity);
+                    else
+                        plugin.HandleEntityDespawn(tx, entity);
+                    return Abi.Ok;
+                }
+                case Abi.WorldExplosionEvent:
+                {
+                    const ulong maxValues = 1UL << 20;
+                    var value = (WorldExplosionInput*)input;
+                    var result = (WorldExplosionState*)state;
+                    if (result->SpawnFire > 1)
+                        return Abi.Error;
+                    var previousContext = result->ReplacementContext;
+                    var previousDrop = result->ReplacementDrop;
+                    var replacementFields = result->ReplacementEntities is not null ||
+                        result->ReplacementEntityCount != 0 || result->ReplacementBlocks is not null ||
+                        result->ReplacementBlockCount != 0 || result->ReplacementContext is not null;
+                    if (previousDrop == null && replacementFields) return Abi.Error;
+                    if (value->EntityCount > maxValues || value->BlockCount > maxValues ||
+                        result->ReplacementEntityCount > maxValues || result->ReplacementBlockCount > maxValues)
+                        return Abi.Error;
+                    var entities = previousDrop == null
+                        ? EventEntities(value->Entities, value->EntityCount, value->Invocation)
+                        : EventEntities(result->ReplacementEntities, result->ReplacementEntityCount, value->Invocation);
+                    var blocks = previousDrop == null
+                        ? EventPositions(value->Blocks, value->BlockCount)
+                        : EventPositions(result->ReplacementBlocks, result->ReplacementBlockCount);
+                    var context = new World.Context(value->Invocation, result->Cancelled != 0);
+                    var itemDropChance = result->ItemDropChance;
+                    var spawnFire = result->SpawnFire != 0;
+                    plugin.HandleExplosion(
+                        context,
+                        new Vector3(value->Position.X, value->Position.Y, value->Position.Z),
+                        ref entities,
+                        ref blocks,
+                        ref itemDropChance,
+                        ref spawnFire);
+                    ArgumentNullException.ThrowIfNull(entities);
+                    ArgumentNullException.ThrowIfNull(blocks);
+                    var replacement = new PendingWorldExplosion(entities, blocks);
+                    result->ReplacementEntities = replacement.Entities;
+                    result->ReplacementEntityCount = replacement.EntityCount;
+                    result->ReplacementBlocks = replacement.Blocks;
+                    result->ReplacementBlockCount = replacement.BlockCount;
+                    result->ReplacementContext = replacement.Context;
+                    result->ReplacementDrop = replacement.Drop;
+                    result->ItemDropChance = itemDropChance;
+                    result->SpawnFire = spawnFire ? (byte)1 : (byte)0;
+                    ApplyCancellation(context, &result->Cancelled);
+                    if (previousDrop != null) previousDrop(previousContext);
+                    return Abi.Ok;
+                }
+                case Abi.WorldRedstoneUpdateEvent:
+                {
+                    var value = (WorldRedstoneUpdateInput*)input;
+                    var result = (WorldCancellableState*)state;
+                    if (value->HasChangedNeighbour > 1 || value->ChangedRedstoneRelevant > 1 ||
+                        value->HasSource > 1 || value->Cause > 2)
+                        return Abi.Error;
+                    var context = new World.Context(value->Invocation, result->Cancelled != 0);
+                    plugin.HandleRedstoneUpdate(
+                        context,
+                        new World.RedstoneUpdate(
+                            EventPos(value->Position),
+                            EventPos(value->ChangedNeighbour),
+                            value->HasChangedNeighbour != 0,
+                            value->ChangedRedstoneRelevant != 0,
+                            EventPos(value->Source),
+                            value->HasSource != 0,
+                            EventBlock(value->Before),
+                            value->After is null ? null : EventBlock(*value->After),
+                            value->OldPower,
+                            value->NewPower,
+                            value->CurrentTick,
+                            (World.RedstoneUpdateCause)value->Cause));
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
+                case Abi.WorldCloseEvent:
+                {
+                    var value = (WorldCloseInput*)input;
+                    plugin.HandleClose(new World.Tx(value->Invocation));
+                    return Abi.Ok;
+                }
                 default:
                     return Abi.Ok;
             }
@@ -2758,6 +2930,74 @@ internal static unsafe class PluginBridge
                 block.PropertiesNbt.Data,
                 checked((int)block.PropertiesNbt.Length)).ToArray();
         return BlockCodec.Decode(Utf8(block.Identifier), properties);
+    }
+
+    private static World.Liquid EventLiquid(BlockView block)
+    {
+        if (block.Identifier.Length > 256 || block.PropertiesNbt.Length > 64 * 1024 ||
+            block.Identifier.Length != 0 && block.Identifier.Data is null ||
+            block.PropertiesNbt.Length != 0 && block.PropertiesNbt.Data is null)
+            throw new InvalidOperationException("invalid liquid returned by server");
+        var properties = block.PropertiesNbt.Length == 0
+            ? Array.Empty<byte>()
+            : new ReadOnlySpan<byte>(
+                block.PropertiesNbt.Data,
+                checked((int)block.PropertiesNbt.Length)).ToArray();
+        return BlockCodec.DecodeLiquid(Utf8(block.Identifier), properties);
+    }
+
+    private static World.Sound EventSound(SoundViewV1 sound)
+    {
+        const uint goatHorn = 86;
+        const uint attack = 68;
+        const uint note = 78;
+        const uint musicDiscPlay = 79;
+        const uint bucketFill = 83;
+        const uint bucketEmpty = 84;
+        const uint crossbowLoad = 85;
+        if (sound.Kind > goatHorn || !double.IsFinite(sound.Scalar) ||
+            sound.Kind == attack && sound.Flags > 1 ||
+            sound.Kind == note && sound.Data >= 16 ||
+            sound.Kind == musicDiscPlay && sound.Data >= 21 ||
+            (sound.Kind == bucketFill || sound.Kind == bucketEmpty) && sound.Data >= 2 ||
+            sound.Kind == crossbowLoad && (sound.Integer is < 0 or > 2 || sound.Flags > 1) ||
+            sound.Kind == goatHorn && sound.Data >= 8)
+            throw new InvalidOperationException("invalid sound returned by server");
+        var block = sound.Block is null
+            ? null
+            : sound.Kind is bucketFill or bucketEmpty
+                ? EventLiquid(*sound.Block)
+                : EventBlock(*sound.Block);
+        return Sound.DecodeEvent(
+            sound.Kind,
+            sound.Data,
+            sound.Integer,
+            sound.Flags,
+            sound.Scalar,
+            block,
+            sound.Item is null ? null : Host.EventItem(*sound.Item).Item());
+    }
+
+    private static World.Entity[] EventEntities(EntityId* values, ulong count, ulong invocation)
+    {
+        const ulong maxValues = 1UL << 20;
+        if (count > maxValues || count != 0 && values is null)
+            throw new InvalidOperationException("invalid entity array returned by server");
+        var result = new World.Entity[checked((int)count)];
+        for (var index = 0; index < result.Length; index++)
+            result[index] = EventEntity(values[index], invocation) ??
+                throw new InvalidOperationException("invalid entity returned by server");
+        return result;
+    }
+
+    private static Cube.Pos[] EventPositions(BlockPos* values, ulong count)
+    {
+        const ulong maxValues = 1UL << 20;
+        if (count > maxValues || count != 0 && values is null)
+            throw new InvalidOperationException("invalid block-position array returned by server");
+        var result = new Cube.Pos[checked((int)count)];
+        for (var index = 0; index < result.Length; index++) result[index] = EventPos(values[index]);
+        return result;
     }
 
     private static World.Entity? EventEntity(EntityId entity, ulong invocation) =>
@@ -2847,6 +3087,69 @@ internal static unsafe class PluginBridge
     }
 
     private static PendingEventItems TransferEventItems(IReadOnlyList<Item.Stack> items) => new(items);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void DropWorldExplosion(void* context)
+    {
+        if (context is null) return;
+        var handle = GCHandle.FromIntPtr((nint)context);
+        try { (handle.Target as PendingWorldExplosion)?.Dispose(); }
+        finally { handle.Free(); }
+    }
+
+    private sealed class PendingWorldExplosion : IDisposable
+    {
+        private GCHandle _handle;
+
+        internal PendingWorldExplosion(IReadOnlyList<World.Entity> entities, IReadOnlyList<Cube.Pos> blocks)
+        {
+            const int maxValues = 1 << 20;
+            if (entities.Count > maxValues || blocks.Count > maxValues)
+                throw new ArgumentException("an explosion replacement exceeds the maximum array length");
+            try
+            {
+                Entities = entities.Count == 0
+                    ? null
+                    : (EntityId*)NativeMemory.Alloc((nuint)entities.Count, (nuint)sizeof(EntityId));
+                Blocks = blocks.Count == 0
+                    ? null
+                    : (BlockPos*)NativeMemory.Alloc((nuint)blocks.Count, (nuint)sizeof(BlockPos));
+                for (var index = 0; index < entities.Count; index++)
+                {
+                    ArgumentNullException.ThrowIfNull(entities[index]);
+                    Entities[index] = World.EntityIdOf(entities[index]);
+                }
+                for (var index = 0; index < blocks.Count; index++)
+                {
+                    var position = blocks[index];
+                    Blocks[index] = new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() };
+                }
+                EntityCount = (ulong)entities.Count;
+                BlockCount = (ulong)blocks.Count;
+                _handle = GCHandle.Alloc(this);
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
+        }
+
+        internal EntityId* Entities { get; private set; }
+        internal ulong EntityCount { get; }
+        internal BlockPos* Blocks { get; private set; }
+        internal ulong BlockCount { get; }
+        internal void* Context => (void*)GCHandle.ToIntPtr(_handle);
+        internal delegate* unmanaged[Cdecl]<void*, void> Drop => &DropWorldExplosion;
+
+        public void Dispose()
+        {
+            if (Entities is not null) NativeMemory.Free(Entities);
+            if (Blocks is not null) NativeMemory.Free(Blocks);
+            Entities = null;
+            Blocks = null;
+        }
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void DropTransferAddress(void* context)
@@ -3016,6 +3319,11 @@ internal static unsafe class PluginBridge
     }
 
     private static void ApplyCancellation(Player.Context context, byte* cancelled)
+    {
+        if (context.Cancelled()) *cancelled = 1;
+    }
+
+    private static void ApplyCancellation(World.Context context, byte* cancelled)
     {
         if (context.Cancelled()) *cancelled = 1;
     }

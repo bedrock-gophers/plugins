@@ -70,7 +70,12 @@ func openCSharpRuntimeWithHost(t testing.TB, host Host) *Runtime {
 		PlayerItemReleaseSubscription | PlayerItemDamageSubscription | PlayerItemPickupSubscription |
 		PlayerItemDropSubscription | PlayerAttackEntitySubscription | PlayerItemUseOnEntitySubscription |
 		PlayerChangeWorldSubscription | PlayerRespawnSubscription | PlayerSkinChangeSubscription |
-		PlayerTransferSubscription | PlayerCommandExecutionSubscription | PlayerDiagnosticsSubscription
+		PlayerTransferSubscription | PlayerCommandExecutionSubscription | PlayerDiagnosticsSubscription |
+		WorldLiquidFlowSubscription | WorldLiquidDecaySubscription | WorldLiquidHardenSubscription |
+		WorldSoundSubscription | WorldFireSpreadSubscription | WorldBlockBurnSubscription |
+		WorldCropTrampleSubscription | WorldLeavesDecaySubscription | WorldEntitySpawnSubscription |
+		WorldEntityDespawnSubscription | WorldExplosionSubscription | WorldRedstoneUpdateSubscription |
+		WorldCloseSubscription
 	if got := pluginRuntime.Subscriptions(); got != wantSubscriptions {
 		t.Fatalf("Subscriptions() = %d, want %d", got, wantSubscriptions)
 	}
@@ -1412,6 +1417,127 @@ func TestCSharpRuntimeLifecycleAndQuit(t *testing.T) {
 		if cancelled {
 			t.Fatalf("%s unexpectedly cancelled", name)
 		}
+	}
+}
+
+func TestCSharpRuntimeReflectedWorldHandlers(t *testing.T) {
+	host := &recordingHost{}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	properties, err := nbt.MarshalEncoding(map[string]any{}, nbt.LittleEndian)
+	if err != nil {
+		t.Fatal(err)
+	}
+	water := WorldBlock{Identifier: "minecraft:water", PropertiesNBT: properties}
+	lava := WorldBlock{Identifier: "minecraft:lava", PropertiesNBT: properties}
+	stone := WorldBlock{Identifier: "minecraft:stone", PropertiesNBT: properties}
+	from, into := BlockPos{X: 1, Y: 64, Z: 2}, BlockPos{X: 3, Y: 65, Z: 4}
+	allowed := func(name string, call func() (bool, error)) {
+		t.Helper()
+		cancelled, err := call()
+		if err != nil || cancelled {
+			t.Fatalf("%s cancelled=%v error=%v", name, cancelled, err)
+		}
+	}
+	allowed("liquid flow", func() (bool, error) {
+		return pluginRuntime.HandleWorldLiquidFlow(300, WorldLiquidFlowInput{
+			From: from, Into: into, Liquid: water, Replaced: stone,
+		}, false)
+	})
+	allowed("liquid decay", func() (bool, error) {
+		return pluginRuntime.HandleWorldLiquidDecay(301, WorldLiquidDecayInput{
+			Position: from, Before: water, After: &lava,
+		}, false)
+	})
+	allowed("liquid harden", func() (bool, error) {
+		return pluginRuntime.HandleWorldLiquidHarden(302, WorldLiquidHardenInput{
+			Position: into, LiquidHardened: water, OtherLiquid: lava, NewBlock: stone,
+		}, false)
+	})
+
+	item := ItemStack{Identifier: "minecraft:diamond_sword", Count: 1}
+	for kind := SoundKind(0); kind <= SoundGoatHorn; kind++ {
+		sound := WorldSound{Kind: kind}
+		switch kind {
+		case SoundAttack:
+			sound.Flags = 1
+		case SoundFall, SoundDecoratedPotInserted:
+			sound.Scalar = 0.75
+		case SoundBlockPlace, SoundBlockBreaking, SoundDoorOpen, SoundDoorClose,
+			SoundTrapdoorOpen, SoundTrapdoorClose, SoundFenceGateOpen, SoundFenceGateClose,
+			SoundItemUseOn:
+			sound.Block = &stone
+		case SoundNote:
+			sound.Data, sound.Integer = 3, 7
+		case SoundMusicDiscPlay:
+			sound.Data = 5
+		case SoundEquipItem:
+			sound.Item = &item
+		case SoundBucketFill, SoundBucketEmpty:
+			sound.Data, sound.Block = 0, &water
+		case SoundCrossbowLoad:
+			sound.Integer, sound.Flags = 1, 1
+		case SoundGoatHorn:
+			sound.Data = 2
+		}
+		allowed("sound", func() (bool, error) {
+			return pluginRuntime.HandleWorldSound(303, WorldSoundInput{
+				Sound: sound, Position: Vec3{X: 1, Y: 65, Z: 2},
+			}, false)
+		})
+	}
+	cancelled, err := pluginRuntime.HandleWorldSound(304, WorldSoundInput{
+		Sound: WorldSound{Kind: SoundExplosion}, Position: Vec3{X: math.NaN()},
+	}, false)
+	if err != nil || !cancelled {
+		t.Fatalf("non-finite sound cancelled=%v error=%v", cancelled, err)
+	}
+
+	allowed("fire spread", func() (bool, error) {
+		return pluginRuntime.HandleWorldFireSpread(305, WorldFireSpreadInput{From: from, To: into}, false)
+	})
+	for name, call := range map[string]func() (bool, error){
+		"block burn": func() (bool, error) {
+			return pluginRuntime.HandleWorldBlockBurn(306, WorldPositionInput{Position: from}, false)
+		},
+		"crop trample": func() (bool, error) {
+			return pluginRuntime.HandleWorldCropTrample(307, WorldPositionInput{Position: from}, false)
+		},
+		"leaves decay": func() (bool, error) {
+			return pluginRuntime.HandleWorldLeavesDecay(308, WorldPositionInput{Position: from}, false)
+		},
+	} {
+		allowed(name, call)
+	}
+
+	entity := EntityID{UUID: [16]byte{0x55}, Generation: 12}
+	host.entityState = EntityState{
+		Type: "minecraft:item", Position: Vec3{X: 1, Y: 65, Z: 2}, Rotation: Rotation{Yaw: 30, Pitch: 10},
+	}
+	if err := pluginRuntime.HandleWorldEntitySpawn(309, WorldEntityInput{Entity: entity}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pluginRuntime.HandleWorldEntityDespawn(310, WorldEntityInput{Entity: entity}); err != nil {
+		t.Fatal(err)
+	}
+	explosion, err := pluginRuntime.HandleWorldExplosion(311, WorldExplosionInput{
+		Position: Vec3{Y: 65}, Entities: []EntityID{entity}, Blocks: []BlockPos{from, from, into},
+	}, -0.25, true, false)
+	if err != nil || explosion.Cancelled || explosion.ItemDropChance != 0 || !explosion.SpawnFire ||
+		!reflect.DeepEqual(explosion.Entities, []EntityID{entity}) ||
+		!reflect.DeepEqual(explosion.Blocks, []BlockPos{from, into}) {
+		t.Fatalf("explosion=%+v error=%v", explosion, err)
+	}
+	redstoneCancelled, err := pluginRuntime.HandleWorldRedstoneUpdate(312, WorldRedstoneUpdateInput{
+		Position: from, ChangedNeighbour: into, HasChangedNeighbour: true,
+		ChangedRedstoneRelevant: true, Source: from, HasSource: true,
+		Before: stone, After: &stone, OldPower: 2, NewPower: 13, CurrentTick: 99,
+		Cause: RedstoneUpdateCauseCompilerRebuild,
+	}, false)
+	if err != nil || redstoneCancelled {
+		t.Fatalf("redstone cancelled=%v error=%v", redstoneCancelled, err)
+	}
+	if err := pluginRuntime.HandleWorldClose(313); err != nil {
+		t.Fatal(err)
 	}
 }
 

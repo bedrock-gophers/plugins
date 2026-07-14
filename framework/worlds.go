@@ -95,6 +95,7 @@ type WorldManager struct {
 	log              *slog.Logger
 	players          *host.Players
 	entityHandles    *host.Entities
+	runtime          host.WorldRuntime
 	blocks           world.BlockRegistry
 	entityTypes      world.EntityRegistry
 	registriesReady  bool
@@ -149,6 +150,12 @@ func newWorldManager(root string, log *slog.Logger, players *host.Players) *Worl
 		detachedEntities: make(map[native.EntityHandleID]func()),
 		root:             root, log: log, players: players, entityHandles: entityHandles,
 	}
+}
+
+func (m *WorldManager) attachRuntime(runtime host.WorldRuntime) {
+	m.mu.Lock()
+	m.runtime = runtime
+	m.mu.Unlock()
 }
 
 // RegisterCore registers a Dragonfly-owned dimension. Its handler is installed before publication.
@@ -283,7 +290,9 @@ func (m *WorldManager) openNormalized(name WorldID, spec normalizedWorldSpec) (n
 	m.next++
 	stored := spec
 	entry := &managedWorld{id: m.next, name: name, world: w, spec: &stored}
-	w.Handle(host.NewWorldHandler(m.entityHandles, m.players, entry.id))
+	handler := host.NewWorldHandler(m.entityHandles, m.players, entry.id)
+	handler.AttachRuntime(m.runtime, m.log)
+	w.Handle(handler)
 	m.worlds[name], m.handles[entry.id], m.byWorld[w] = entry, entry, entry
 	m.mu.Unlock()
 	return entry.id, nil
@@ -356,7 +365,9 @@ func (m *WorldManager) register(name WorldID, w *world.World, core bool) (native
 		m.blocks, m.entityTypes, m.registriesReady = w.BlockRegistry(), w.EntityRegistry(), true
 	}
 	entry := &managedWorld{id: m.next, name: name, world: w, core: core}
-	w.Handle(host.NewWorldHandler(m.entityHandles, m.players, entry.id))
+	handler := host.NewWorldHandler(m.entityHandles, m.players, entry.id)
+	handler.AttachRuntime(m.runtime, m.log)
+	w.Handle(handler)
 	m.worlds[name], m.handles[entry.id], m.byWorld[w] = entry, entry, entry
 	return entry.id, nil
 }
@@ -494,10 +505,17 @@ func (m *WorldManager) unload(invocation native.InvocationID, entry *managedWorl
 	entry.unloading = true
 	m.mu.Unlock()
 	entry.lifecycle.Lock()
-	defer entry.lifecycle.Unlock()
 	if entry.closed {
+		entry.lifecycle.Unlock()
+		m.mu.Lock()
+		entry.unloading = false
+		m.mu.Unlock()
 		return fmt.Errorf("world %q is closed", entry.name)
 	}
+	// Marking the entry as unloading prevents new off-owner operations. Drain
+	// operations that already resolved it, but do not hold this lock while
+	// waiting on the world owner: an active callback may still use its Tx.
+	entry.lifecycle.Unlock()
 	players, err := world.Call(context.Background(), entry.world, func(tx *world.Tx) (int, error) {
 		count := 0
 		for range tx.Players() {
@@ -514,7 +532,6 @@ func (m *WorldManager) unload(invocation native.InvocationID, entry *managedWorl
 		}
 		return fmt.Errorf("world %q contains %d player(s)", entry.name, players)
 	}
-	entry.closed = true
 	return m.finishWorldClose(entry, entry.world.Close)
 }
 
@@ -553,13 +570,13 @@ func (m *WorldManager) CloseCustom() error {
 	var failures []error
 	for _, entry := range custom {
 		entry.lifecycle.Lock()
-		if !entry.closed {
-			entry.closed = true
+		closed := entry.closed
+		entry.lifecycle.Unlock()
+		if !closed {
 			if err := m.finishWorldClose(entry, entry.world.Close); err != nil {
 				failures = append(failures, err)
 			}
 		}
-		entry.lifecycle.Unlock()
 	}
 	err := errors.Join(failures...)
 	m.mu.Lock()
@@ -571,6 +588,9 @@ func (m *WorldManager) CloseCustom() error {
 
 func (m *WorldManager) finishWorldClose(entry *managedWorld, closeWorld func() error) error {
 	err := closeWorld()
+	entry.lifecycle.Lock()
+	entry.closed = true
+	entry.lifecycle.Unlock()
 	m.mu.Lock()
 	if m.worlds[entry.name] == entry {
 		delete(m.worlds, entry.name)
@@ -593,8 +613,8 @@ func (m *WorldManager) WorldByName(_ native.InvocationID, name string) (native.W
 	return entry.id, true
 }
 
-func (m *WorldManager) WorldName(_ native.InvocationID, id native.WorldID) (string, bool) {
-	entry, ok := m.entryByHandle(id)
+func (m *WorldManager) WorldName(invocation native.InvocationID, id native.WorldID) (string, bool) {
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
 		return "", false
 	}
@@ -1079,7 +1099,9 @@ func (m *WorldManager) worldWeather(invocation native.InvocationID, id native.Wo
 
 func (m *WorldManager) entryForInvocation(invocation native.InvocationID, id native.WorldID) (*managedWorld, bool) {
 	if id != 0 {
-		return m.entryByHandle(id)
+		if entry, ok := m.entryByHandle(id); ok {
+			return entry, true
+		}
 	}
 	if invocation == 0 || m.players == nil {
 		return nil, false
@@ -1095,11 +1117,14 @@ func (m *WorldManager) entryForInvocation(invocation native.InvocationID, id nat
 	m.mu.RLock()
 	entry, ok := m.byWorld[w]
 	m.mu.RUnlock()
+	if id != 0 && (!ok || entry.id != id) {
+		return nil, false
+	}
 	return entry, ok
 }
 
-func (m *WorldManager) WorldTime(_ native.InvocationID, id native.WorldID) (int64, bool) {
-	entry, ok := m.entryByHandle(id)
+func (m *WorldManager) WorldTime(invocation native.InvocationID, id native.WorldID) (int64, bool) {
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
 		return 0, false
 	}
@@ -1111,8 +1136,8 @@ func (m *WorldManager) WorldTime(_ native.InvocationID, id native.WorldID) (int6
 	return int64(entry.world.Time()), true
 }
 
-func (m *WorldManager) SetWorldTime(_ native.InvocationID, id native.WorldID, value int64) bool {
-	entry, ok := m.entryByHandle(id)
+func (m *WorldManager) SetWorldTime(invocation native.InvocationID, id native.WorldID, value int64) bool {
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok || value < math.MinInt || value > math.MaxInt {
 		return false
 	}
@@ -1125,8 +1150,8 @@ func (m *WorldManager) SetWorldTime(_ native.InvocationID, id native.WorldID, va
 	return true
 }
 
-func (m *WorldManager) WorldSpawn(_ native.InvocationID, id native.WorldID) (native.BlockPos, bool) {
-	entry, ok := m.entryByHandle(id)
+func (m *WorldManager) WorldSpawn(invocation native.InvocationID, id native.WorldID) (native.BlockPos, bool) {
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
 		return native.BlockPos{}, false
 	}
@@ -1139,8 +1164,8 @@ func (m *WorldManager) WorldSpawn(_ native.InvocationID, id native.WorldID) (nat
 	return native.BlockPos{X: int32(spawn.X()), Y: int32(spawn.Y()), Z: int32(spawn.Z())}, true
 }
 
-func (m *WorldManager) SetWorldSpawn(_ native.InvocationID, id native.WorldID, value native.BlockPos) bool {
-	entry, ok := m.entryByHandle(id)
+func (m *WorldManager) SetWorldSpawn(invocation native.InvocationID, id native.WorldID, value native.BlockPos) bool {
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
 		return false
 	}

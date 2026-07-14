@@ -60,6 +60,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	worlds.attachRuntime(pluginRuntime)
 	entityTypes, err := pluginRuntime.EntityTypes()
 	if err != nil {
 		pluginRuntime.Close()

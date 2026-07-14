@@ -2,6 +2,8 @@ package host
 
 import (
 	"context"
+	"math"
+	"reflect"
 	"testing"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
@@ -22,31 +24,7 @@ func TestSoundFromNativeCoversEveryDragonflySound(t *testing.T) {
 	item := &native.ItemStack{Identifier: "minecraft:diamond_sword", Count: 1}
 	if err := w.Do(func(tx *world.Tx) {
 		for kind := native.SoundAnvilBreak; kind <= native.SoundGoatHorn; kind++ {
-			value := native.WorldSound{Kind: kind}
-			switch kind {
-			case native.SoundAttack:
-				value.Flags = 1
-			case native.SoundFall:
-				value.Scalar = 5.5
-			case native.SoundBlockPlace, native.SoundBlockBreaking, native.SoundDoorOpen, native.SoundDoorClose,
-				native.SoundTrapdoorOpen, native.SoundTrapdoorClose, native.SoundFenceGateOpen, native.SoundFenceGateClose,
-				native.SoundItemUseOn:
-				value.Block = block
-			case native.SoundNote:
-				value.Data, value.Integer = 15, 30
-			case native.SoundMusicDiscPlay:
-				value.Data = 20
-			case native.SoundDecoratedPotInserted:
-				value.Scalar = 0.75
-			case native.SoundEquipItem:
-				value.Item = item
-			case native.SoundBucketFill, native.SoundBucketEmpty:
-				value.Data = 1
-			case native.SoundCrossbowLoad:
-				value.Integer, value.Flags = sound.CrossbowLoadingEnd, 1
-			case native.SoundGoatHorn:
-				value.Data = 7
-			}
+			value := testSoundDescriptor(kind, block, item)
 			decoded, ok := SoundFromNative(tx, value)
 			if !ok || decoded == nil {
 				t.Fatalf("kind %d decoded as %T, ok=%v", kind, decoded, ok)
@@ -72,6 +50,161 @@ func TestSoundFromNativeCoversEveryDragonflySound(t *testing.T) {
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestSoundToNativeCoversEverySoundFromNative(t *testing.T) {
+	w := world.Config{Synchronous: true, Entities: entity.DefaultRegistry}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	properties, ok := EncodeBlockProperties(map[string]any{})
+	if !ok {
+		t.Fatal("encode block properties")
+	}
+	stone := &native.WorldBlock{Identifier: "minecraft:stone", PropertiesNBT: properties}
+	sword := &native.ItemStack{Identifier: "minecraft:diamond_sword", Count: 1}
+	if err := w.Do(func(tx *world.Tx) {
+		for kind := native.SoundAnvilBreak; kind <= native.SoundGoatHorn; kind++ {
+			want := testSoundDescriptor(kind, stone, sword)
+			decoded, ok := SoundFromNative(tx, want)
+			if !ok {
+				t.Fatalf("kind %d did not decode", kind)
+			}
+			got, ok := SoundToNative(tx, decoded)
+			if !ok {
+				t.Fatalf("kind %d (%T) did not encode", kind, decoded)
+			}
+			pointer := reflect.New(reflect.TypeOf(decoded))
+			pointer.Elem().Set(reflect.ValueOf(decoded))
+			pointerSound, ok := pointer.Interface().(world.Sound)
+			if !ok {
+				t.Fatalf("kind %d pointer %T does not implement world.Sound", kind, pointer.Interface())
+			}
+			pointerGot, ok := SoundToNative(tx, pointerSound)
+			if !ok || !reflect.DeepEqual(pointerGot, got) {
+				t.Fatalf("kind %d pointer mismatch\nvalue:   %#v\npointer: %#v, ok=%v", kind, got, pointerGot, ok)
+			}
+			if kind == native.SoundBucketFill || kind == native.SoundBucketEmpty {
+				if got.Kind != want.Kind || got.Data != want.Data || got.Block == nil {
+					t.Fatalf("kind %d (%T) bucket descriptor = %#v", kind, decoded, got)
+				}
+				continue
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("kind %d (%T) mismatch\ngot:  %#v\nwant: %#v", kind, decoded, got, want)
+			}
+		}
+
+		state, ok := EncodeBlockProperties(map[string]any{"pillar_axis": "x"})
+		if !ok {
+			t.Fatal("encode stateful block properties")
+		}
+		want := native.WorldSound{
+			Kind:  native.SoundDoorOpen,
+			Block: &native.WorldBlock{Identifier: "minecraft:oak_log", PropertiesNBT: state},
+		}
+		decoded, ok := SoundFromNative(tx, want)
+		if !ok {
+			t.Fatal("decode stateful block sound")
+		}
+		got, ok := SoundToNative(tx, decoded)
+		if !ok || got.Kind != want.Kind || got.Block == nil || got.Block.Identifier != want.Block.Identifier {
+			t.Fatalf("stateful block sound = %#v, ok=%v", got, ok)
+		}
+		gotProperties, gotOK := DecodeBlockProperties(got.Block.PropertiesNBT)
+		wantProperties, wantOK := DecodeBlockProperties(want.Block.PropertiesNBT)
+		if !gotOK || !wantOK || !reflect.DeepEqual(gotProperties, wantProperties) {
+			t.Fatalf("stateful block properties = %#v, want %#v", gotProperties, wantProperties)
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSoundToNativePreservesBucketLiquidState(t *testing.T) {
+	w := world.Config{Synchronous: true, Entities: entity.DefaultRegistry}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	tests := []struct {
+		name  string
+		sound world.Sound
+		kind  native.SoundKind
+		data  uint32
+		block world.Block
+	}{
+		{name: "flowing water", sound: sound.BucketFill{Liquid: block.Water{Depth: 3, Falling: true}}, kind: native.SoundBucketFill, block: block.Water{Depth: 3, Falling: true}},
+		{name: "still lava", sound: sound.BucketEmpty{Liquid: block.Lava{Depth: 6, Still: true}}, kind: native.SoundBucketEmpty, data: 1, block: block.Lava{Depth: 6, Still: true}},
+	}
+	if err := w.Do(func(tx *world.Tx) {
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				got, ok := SoundToNative(tx, test.sound)
+				if !ok || got.Kind != test.kind || got.Data != test.data || got.Block == nil {
+					t.Fatalf("encoded bucket sound = %#v, ok=%v", got, ok)
+				}
+				identifier, properties := test.block.EncodeBlock()
+				gotProperties, propertiesOK := DecodeBlockProperties(got.Block.PropertiesNBT)
+				if !propertiesOK || got.Block.Identifier != identifier || !reflect.DeepEqual(gotProperties, properties) {
+					t.Fatalf("encoded liquid = %s %#v, want %s %#v", got.Block.Identifier, gotProperties, identifier, properties)
+				}
+			})
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSoundToNativeRejectsUnsupportedValues(t *testing.T) {
+	w := world.Config{Synchronous: true, Entities: entity.DefaultRegistry}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	if _, ok := SoundToNative(nil, sound.LevelUp{}); ok {
+		t.Fatal("accepted nil transaction")
+	}
+	if err := w.Do(func(tx *world.Tx) {
+		for _, value := range []world.Sound{
+			nil,
+			(*sound.LevelUp)(nil),
+			sound.Fall{Distance: math.NaN()},
+			sound.DecoratedPotInserted{Progress: math.Inf(1)},
+			sound.BlockPlace{},
+			sound.EquipItem{},
+			sound.BucketFill{},
+			sound.BucketEmpty{},
+			sound.CrossbowLoad{Stage: sound.CrossbowLoadingEnd + 1},
+		} {
+			if encoded, ok := SoundToNative(tx, value); ok {
+				t.Fatalf("encoded unsupported %T as %#v", value, encoded)
+			}
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testSoundDescriptor(kind native.SoundKind, block *native.WorldBlock, item *native.ItemStack) native.WorldSound {
+	value := native.WorldSound{Kind: kind}
+	switch kind {
+	case native.SoundAttack:
+		value.Flags = 1
+	case native.SoundFall:
+		value.Scalar = 5.5
+	case native.SoundBlockPlace, native.SoundBlockBreaking, native.SoundDoorOpen, native.SoundDoorClose,
+		native.SoundTrapdoorOpen, native.SoundTrapdoorClose, native.SoundFenceGateOpen, native.SoundFenceGateClose,
+		native.SoundItemUseOn:
+		value.Block = block
+	case native.SoundNote:
+		value.Data, value.Integer = 15, 30
+	case native.SoundMusicDiscPlay:
+		value.Data = 20
+	case native.SoundDecoratedPotInserted:
+		value.Scalar = 0.75
+	case native.SoundEquipItem:
+		value.Item = item
+	case native.SoundBucketFill, native.SoundBucketEmpty:
+		value.Data = 1
+	case native.SoundCrossbowLoad:
+		value.Integer, value.Flags = sound.CrossbowLoadingEnd, 1
+	case native.SoundGoatHorn:
+		value.Data = 7
+	}
+	return value
 }
 
 func assertParameterizedSound(t *testing.T, kind native.SoundKind, decoded world.Sound) {

@@ -8,6 +8,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
   mutable skins and respawns, transfer addresses, command arguments, diagnostics, typed block/item
   payloads, mutable break drops, item-pickup replacement, signed durations, and full snapshots;
 - concrete `Player` targets and `Player.Name()` in attack and entity-use handlers;
+- all 13 Dragonfly world handlers, including typed liquids/sounds/blocks/entities, entity
+  spawn/despawn, mutable explosion lists and scalars, full redstone updates, and world close;
 - the cancellable host `OnJoin` lifecycle extension emitted after the framework installs its
   Dragonfly player handler;
 - player-action telemetry;
