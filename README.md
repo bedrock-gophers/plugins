@@ -1,9 +1,9 @@
 # Minimal bedrock-gophers server
 
-Consumer-only example. This branch contains no bedrock-gophers framework/runtime source.
+Strict consumer-only example. This branch contains no framework, runtime, SDK, or plugin source.
 
 ```shell
 make run
 ```
 
-Examples cover every current SDK area: lifecycle, join/quit, mutable and cancellable skin changes, player messaging/tips/popups/titles, teleport/move/velocity/rotation actions, typed damage and healing sources with Dragonfly results, food loss/death, block break/place/pick, sign edits, lectern page turns, item use/consume/release/damage/drop and item use on blocks, item-stack views, sprint/sneak toggles, jump/teleport events, experience gain, punch-air, held-slot changes, sleep, mutable chat, typed command contexts, subcommands, enum parameters, player latency, managed worlds, typed block state, stable entity handles and their worlds, typed built-in/projectile spawning, automatically registered persistent base entities, all typed Dragonfly particles and sounds, and cancellable attack-entity events. Command-language features live in `hello-command`; player actions live in `player-command`. Each plugin owns its Cargo manifest, lockfile, source, and target. Build fetches the pinned bedrock-gophers revision, compiles runtime and plugins, then starts the server.
+The build fetches the exact framework revision pinned in `go.mod`, compiles its C# NativeAOT runtime and lifecycle example, stages both shared libraries, then starts the Go server.

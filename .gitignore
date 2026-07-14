@@ -1,7 +1,6 @@
 /.cache/
 /.data/
 /lib/
-**/target/
 /plugins/*.so
 /plugins/*.dylib
 /plugins/*.dll
