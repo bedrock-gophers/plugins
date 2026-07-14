@@ -5,6 +5,8 @@
     <NativeLib>Shared</NativeLib>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
     <DragonflyFrameworkRoot Condition="'$(DragonflyFrameworkRoot)' == ''">$(MSBuildThisFileDirectory)../.cache/bedrock-gophers</DragonflyFrameworkRoot>
   </PropertyGroup>
   <ItemGroup>
