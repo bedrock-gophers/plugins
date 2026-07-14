@@ -64,7 +64,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    a null response preserves Dragonfly's close signal. `Element` and `MenuElement` retain their
    public JSON-marshalling contract too.
 6. Items. The current item slice generates `World.Item`, `Item.ToolTier`, all seven tool-tier
-   values, five tiered tools, and 131 concrete item structs. Typed finite stateful families now
+   values, five tiered tools, and 132 concrete item structs. Typed finite stateful families now
    include colours, potions and tipped arrows, banner patterns, smithing templates, suspicious stews,
    pottery sherds, goat horns, and music discs. Dependency factories and encoded states are
    derived from Dragonfly's Go AST and live registries rather than a handwritten schema. Their
@@ -86,6 +86,13 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    preserves typed item NBT, plugin values, and enchantments without exposing disk NBT or another
    public stack model. `Fuel` and `FuelInfo` are live-derived for every fuel implementation in this
    slice, including the zero-duration states of tiered tool types.
+   Generated `Bucket(BucketContent Content)` and its typed liquid/milk factories preserve all four
+   registered empty, water, lava, and milk states. Pure count, consumption, duration, empty, and
+   fuel behavior matches Dragonfly, including lava's typed empty-bucket residue. Runtime consume
+   and block-use methods wait for the `Consumer`, `User`, and `UseContext` slices. Liquid types
+   registered only by the host at runtime still need their semantic `LiquidType` transported across
+   the ABI; the private opaque fallback fails explicitly instead of treating a block identifier as
+   a liquid type.
    Dragonfly's live item registry supplies the private identifier/metadata and capability codecs.
    `Item.Stack` exposes `NewStack`, count/growth/max-count, durability/damage/unbreakable,
    attack damage, custom names, lore, anvil cost, comparison/equality, and stack merging.
@@ -96,8 +103,8 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    ABI 30 adds one atomic held-item pair snapshot, so `HeldItems` observes the same player state
    with one host read. Bounded open/read/close item snapshots preserve damage, unbreakable state, anvil cost, custom
    names, lore, item NBT, plugin values, and enchantments internally. Unknown registered stateful
-   NBT-backed items decode to a private opaque item and round-trip losslessly. Bucket content,
-   public enchantment/value mutation, `WithItem`,
+   NBT-backed items decode to a private opaque item and round-trip losslessly. Public
+   enchantment/value mutation, `WithItem`,
    ender chests, custom items, and item events remain next; no public identifier fallback is added.
 7. Entities, remaining sounds, and remaining world/block methods.
 8. Convert practice-core and expand parity tests against Dragonfly.
@@ -128,7 +135,8 @@ state. Its firework coverage also exercises typed explosion shapes, colours, fad
 trail, off-hand support, and randomised duration. Its armour coverage checks tier, defence,
 durability, repair, smelting, trim-material, and private dyed/trim NBT behavior, then round-trips
 all 28 tier-and-piece combinations. It also constructs a charged typed crossbow, checks its pure
-capabilities, and round-trips the full nested firework stack.
+capabilities, and round-trips the full nested firework stack. Empty, water, lava, and milk buckets
+exercise typed content queries, consumption flags, duration, max counts, and lava fuel residue.
 `/kitchen form` exercises reflected menu, custom, and modal forms, every built-in element,
 submitted values, closers, and nested sends. `/kitchen raw-form` exercises the open `Form.Value`
 contract plus public element/menu-element JSON marshalling.

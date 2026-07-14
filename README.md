@@ -69,7 +69,7 @@ var (mainHand, offHand) = player.HeldItems();
 player.SetHeldItems(sword, offHand);
 ```
 
-The current generated item slice contains 131 concrete Dragonfly item structs: stateless items,
+The current generated item slice contains 132 concrete Dragonfly item structs: stateless items,
 boolean variants, five tool types, the four tiered armour pieces, and the finite stateful families
 for colours, potions, banner patterns, smithing templates, suspicious stews, pottery sherds, goat
 horns, and music discs. `RedstoneWire` is also generated as a typed trim material even though it is
@@ -100,6 +100,9 @@ private recursive transport preserves charged item state, including typed item N
 and enchantments, without exposing disk NBT or an adapter type. Generated `Fuel`/`FuelInfo` also
 cover every fuel implementation in the current item slice, including zero-duration non-wood tool
 states whose concrete Dragonfly types still implement `Fuel`.
+`Bucket` and its private-state `BucketContent` mirror Dragonfly's empty, water, lava, and milk
+states through typed content factories. Pure count, consumption, duration, empty, and fuel behavior
+is preserved; lava burns for 1000 seconds and leaves a typed empty bucket residue.
 `Item.Stack` also exposes Dragonfly's generated max-count, durability, unbreakable, attack-damage,
 anvil-cost, comparison, equality, and stack-merging behavior. Capability tables are derived from
 the live item implementations; they are not duplicated in a public adapter model.

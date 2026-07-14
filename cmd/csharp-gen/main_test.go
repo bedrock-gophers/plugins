@@ -347,7 +347,7 @@ func (tx *Tx) AddParticle(pos mgl64.Vec3, p Particle) {}`
 		"public Block Block(Cube.Pos pos)",
 		"public (Block? Block, bool Ok) BlockLoaded(Cube.Pos pos)",
 		"public IEnumerable<Cube.Pos> BlocksWithin(Cube.Pos pos, int radius, params Block[] blocks)",
-		"public interface Liquid : Block { }",
+		"public interface Liquid : Block { string LiquidType(); }",
 		"public (Liquid? Liquid, bool Ok) Liquid(Cube.Pos pos)",
 		"public void SetLiquid(Cube.Pos pos, Liquid? b)",
 		"using System;",
@@ -391,11 +391,11 @@ func (tx *Tx) AddParticle(pos mgl64.Vec3, p Particle) {}`
 			{Name: "Sand", Identifier: "minecraft:red_sand", PropertiesNBT: []byte{10, 0, 0, 0}},
 		},
 		Liquids: []liquidSpec{
-			{Name: "Water", States: []encodedLiquid{{
+			{Name: "Water", LiquidType: "water", States: []encodedLiquid{{
 				encodedBlock: encodedBlock{Name: "Water", Identifier: "minecraft:water", PropertiesNBT: []byte{10, 1}},
 				Still:        true, Depth: 8,
 			}}},
-			{Name: "Lava", States: []encodedLiquid{{
+			{Name: "Lava", LiquidType: "lava", States: []encodedLiquid{{
 				encodedBlock: encodedBlock{Name: "Lava", Identifier: "minecraft:flowing_lava", PropertiesNBT: []byte{10, 2}},
 				Depth:        4, Falling: true,
 			}}},
@@ -404,14 +404,17 @@ func (tx *Tx) AddParticle(pos mgl64.Vec3, p Particle) {}`
 	for _, expected := range []string{
 		"public readonly record struct Air : World.Block;",
 		"public readonly record struct Sand(bool Red = false) : World.Block;",
-		"public readonly record struct Water(bool Still, int Depth, bool Falling) : World.Liquid;",
-		"public readonly record struct Lava(bool Still, int Depth, bool Falling) : World.Liquid;",
+		"public readonly record struct Water(bool Still, int Depth, bool Falling) : World.Liquid",
+		`public string LiquidType() => "water";`,
+		"public readonly record struct Lava(bool Still, int Depth, bool Falling) : World.Liquid",
+		`public string LiquidType() => "lava";`,
 		"internal static class BlockCodec",
 		"case Block.Sand { Red: true }:",
 		"case Block.Water { Still: true, Depth: 8, Falling: false }:",
 		"internal static World.Liquid DecodeLiquid",
 		"private sealed record EncodedBlock",
 		"private sealed record EncodedLiquid",
+		`public string LiquidType() => throw new InvalidOperationException("Opaque liquid type was not transported by the host.");`,
 	} {
 		if !strings.Contains(blockOutput, expected) {
 			t.Fatalf("generated block output missing %q:\n%s", expected, blockOutput)

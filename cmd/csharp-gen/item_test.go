@@ -19,8 +19,36 @@ func TestInspectItemsUsesASTAndRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.AirIdentifier != "minecraft:air" || len(spec.ToolTiers) != 7 || len(spec.ValueTypes) != 10 || len(spec.Types) != 131 {
+	if spec.AirIdentifier != "minecraft:air" || len(spec.ToolTiers) != 7 || len(spec.ValueTypes) != 10 || len(spec.Types) != 132 {
 		t.Fatalf("item spec has air=%q tiers=%d types=%d", spec.AirIdentifier, len(spec.ToolTiers), len(spec.Types))
+	}
+	if bucket := spec.Bucket; !bucket.Present || bucket.ConsumeDuration != 1610*time.Millisecond || bucket.EmptyMaxCount != 16 || bucket.FullMaxCount != 1 {
+		t.Fatalf("bucket spec = %#v", bucket)
+	}
+	bucket := itemTypeByName(spec.Types, "Bucket")
+	if bucket == nil || !bucket.Bucket || len(bucket.States) != 4 {
+		t.Fatalf("bucket item type = %#v", bucket)
+	}
+	wantBuckets := []struct {
+		identifier string
+		content    bucketContentKind
+		maxCount   int
+		duration   time.Duration
+		residue    string
+		count      int
+	}{
+		{"minecraft:bucket", bucketEmpty, 16, 0, "", 0},
+		{"minecraft:water_bucket", bucketWater, 1, 0, "", 0},
+		{"minecraft:lava_bucket", bucketLava, 1, 1000 * time.Second, "minecraft:bucket", 1},
+		{"minecraft:milk_bucket", bucketMilk, 1, 0, "", 0},
+	}
+	for index, want := range wantBuckets {
+		state := bucket.States[index]
+		if state.Identifier != want.identifier || state.Metadata != 0 || state.Bucket != want.content ||
+			state.Capability.MaxCount != want.maxCount || !state.Capability.Fuel || state.Capability.FuelDuration != want.duration ||
+			state.Capability.FuelIdentifier != want.residue || state.Capability.FuelMetadata != 0 || state.Capability.FuelCount != want.count {
+			t.Fatalf("bucket state %d = %#v", index, state)
+		}
 	}
 	if crossbow := spec.Crossbow; !crossbow.Present || crossbow.MaxCount != 1 || crossbow.MaxDurability != 464 ||
 		crossbow.EnchantmentValue != 1 || crossbow.FuelDuration != 15*time.Second {
@@ -39,13 +67,14 @@ func TestInspectItemsUsesASTAndRegistry(t *testing.T) {
 		for _, state := range definition.States {
 			if state.Capability.Fuel {
 				fuelStates++
-				if state.Capability.FuelIdentifier != "" || state.Capability.FuelMetadata != 0 || state.Capability.FuelCount != 0 {
+				lavaBucket := definition.Bucket && state.Bucket == bucketLava
+				if !lavaBucket && (state.Capability.FuelIdentifier != "" || state.Capability.FuelMetadata != 0 || state.Capability.FuelCount != 0) {
 					t.Fatalf("generated fuel %s unexpectedly has residue: %#v", definition.Name, state.Capability)
 				}
 			}
 		}
 	}
-	if fuelTypes != 12 || fuelStates != 42 {
+	if fuelTypes != 13 || fuelStates != 46 {
 		t.Fatalf("fuel spec has types=%d states=%d", fuelTypes, fuelStates)
 	}
 	for _, name := range []string{"Axe", "Hoe", "Pickaxe", "Shovel", "Sword"} {
@@ -128,9 +157,37 @@ func TestInspectItemsUsesASTAndRegistry(t *testing.T) {
 		}
 	}
 	for _, value := range []string{
+		"public readonly struct BucketContent",
+		"public (World.Liquid? Liquid, bool Ok) Liquid() => (_liquid, _liquid is not null)",
+		"public string String() => _milk ? \"milk\" : _liquid?.LiquidType() ?? string.Empty",
+		"public string LiquidType() => _liquid is null ? \"milk\" : String()",
+		"public override string ToString() => String()",
+		"public static BucketContent LiquidBucketContent(World.Liquid liquid)",
+		"public static BucketContent MilkBucketContent() => new(null, true)",
+		"public readonly record struct Bucket(BucketContent Content = default) : World.Item, MaxCounter, Fuel",
+		"public int MaxCount() => Empty() ? 16 : 1",
+		"public bool AlwaysConsumable() => Content.Milk",
+		"public bool CanConsume() => Content.Milk",
+		"public TimeSpan ConsumeDuration() => TimeSpan.FromTicks(16100000)",
+		"public bool Empty() => Content.RawLiquid is null && !Content.Milk",
+		"case Item.Bucket value when value.Empty():",
+		"case Item.Bucket value when value.Content.RawLiquid is Block.Water:",
+		"case Item.Bucket value when value.Content.RawLiquid is Block.Lava:",
+		"case Item.Bucket value when value.Content.Milk:",
+		"case Item.Bucket value when value.Content.RawLiquid is not null:",
+		`identifier = "minecraft:bucket"; metadata = 0`,
+		`identifier = "minecraft:water_bucket"; metadata = 0`,
+		`identifier = "minecraft:lava_bucket"; metadata = 0`,
+		`identifier = "minecraft:milk_bucket"; metadata = 0`,
+		`return new Item.Bucket(Item.LiquidBucketContent(new Block.Water(false, 0, false)))`,
+		`return new Item.Bucket(Item.LiquidBucketContent(new Block.Lava(false, 0, false)))`,
+		`return new Item.Bucket(Item.MilkBucketContent())`,
+		`Item.Bucket value => value.FuelInfo()`,
+		"Item.Bucket value => value.MaxCount()",
 		"public readonly record struct Sword(ToolTier Tier) : World.Item, Fuel",
 		"public readonly record struct Coal : World.Item, Fuel",
-		"public FuelInfo FuelInfo() => ItemCapabilities.FuelInfo(this)",
+		`public FuelInfo FuelInfo() => Content.RawLiquid?.LiquidType() == "lava"`,
+		`? new FuelInfo(TimeSpan.FromTicks(10000000000), NewStack(new Bucket(), 1))`,
 		"public interface Fuel { FuelInfo FuelInfo(); }",
 		"public readonly record struct FuelInfo(TimeSpan Duration = default, Stack Residue = default)",
 		"public FuelInfo WithResidue(Stack residue) => this with { Residue = residue }",
@@ -210,6 +267,17 @@ func TestInspectItemsUsesASTAndRegistry(t *testing.T) {
 	} {
 		if !strings.Contains(generated, value) {
 			t.Fatalf("generated items missing %q", value)
+		}
+	}
+	bucketSurfaceStart := strings.Index(generated, "public readonly struct BucketContent")
+	codecStart := strings.Index(generated, "internal static class ItemCodec")
+	if bucketSurfaceStart < 0 || codecStart < bucketSurfaceStart {
+		t.Fatal("generated bucket public surface boundaries missing")
+	}
+	bucketSurface := generated[bucketSurfaceStart:codecStart]
+	for _, forbidden := range []string{"minecraft:", "public Stack Consume(", "public bool UseOnBlock("} {
+		if strings.Contains(bucketSurface, forbidden) {
+			t.Fatalf("generated bucket public surface exposes %q", forbidden)
 		}
 	}
 }

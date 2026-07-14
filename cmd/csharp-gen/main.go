@@ -75,8 +75,9 @@ type encodedLiquid struct {
 }
 
 type liquidSpec struct {
-	Name   string
-	States []encodedLiquid
+	Name       string
+	LiquidType string
+	States     []encodedLiquid
 }
 
 type blockSpec struct {
@@ -139,6 +140,7 @@ type itemStateSpec struct {
 	Bools      []bool
 	ToolTier   int
 	ArmourTier int
+	Bucket     bucketContentKind
 	Values     []int
 	Capability itemCapabilitySpec
 }
@@ -165,6 +167,7 @@ type itemTypeSpec struct {
 	States []itemStateSpec
 	NBT    bool
 	Armour bool
+	Bucket bool
 }
 
 type toolTierSpec struct {
@@ -179,7 +182,28 @@ type itemSpec struct {
 	ValueTypes     []itemValueTypeSpec
 	Armour         armourSpec
 	Crossbow       crossbowSpec
+	Bucket         bucketSpec
 	AirIdentifier  string
+}
+
+type bucketContentKind uint8
+
+const (
+	bucketEmpty bucketContentKind = iota
+	bucketWater
+	bucketLava
+	bucketMilk
+)
+
+type bucketSpec struct {
+	Present               bool
+	ConsumeDuration       time.Duration
+	EmptyMaxCount         int
+	FullMaxCount          int
+	FuelDuration          time.Duration
+	FuelResidueIdentifier string
+	FuelResidueMetadata   int
+	FuelResidueCount      int
 }
 
 type crossbowSpec struct {
@@ -1479,8 +1503,14 @@ func inspectBlocks(directory string) (blockSpec, error) {
 		}
 		liquid := liquidSpec{Name: name, States: make([]encodedLiquid, 0, len(liquidStates))}
 		for _, state := range liquidStates {
-			if _, ok := state.(world.Liquid); !ok {
+			worldLiquid, ok := state.(world.Liquid)
+			if !ok {
 				return blockSpec{}, fmt.Errorf("registered block.%s state does not implement world.Liquid", name)
+			}
+			if liquid.LiquidType == "" {
+				liquid.LiquidType = worldLiquid.LiquidType()
+			} else if liquid.LiquidType != worldLiquid.LiquidType() {
+				return blockSpec{}, fmt.Errorf("registered block.%s states have inconsistent liquid types", name)
 			}
 			value := reflect.ValueOf(state)
 			if value.Kind() == reflect.Pointer {
@@ -1674,6 +1704,15 @@ func inspectItems(directory string) (itemSpec, error) {
 		if itemTypeByName(armourTypes, typeOf.Name()) != nil {
 			continue
 		}
+		if typeOf.Name() == "Bucket" {
+			definition, bucket, err := inspectBucketItem(typeOf, values, declaration, types, functions, methods, liveTiers, valueTypes)
+			if err != nil {
+				return itemSpec{}, err
+			}
+			result.Bucket = bucket
+			result.Types = append(result.Types, definition)
+			continue
+		}
 		if typeOf.Name() == "Crossbow" {
 			definition, crossbow, err := inspectCrossbowItem(typeOf, values, declaration, types, methods, liveTiers, valueTypes)
 			if err != nil {
@@ -1762,6 +1801,177 @@ func inspectItems(directory string) (itemSpec, error) {
 		return itemSpec{}, fmt.Errorf("no safely representable Dragonfly items found")
 	}
 	return result, nil
+}
+
+func inspectBucketItem(
+	typeOf reflect.Type,
+	values []world.Item,
+	declaration *ast.TypeSpec,
+	types map[string]*ast.TypeSpec,
+	functions map[string]*ast.FuncDecl,
+	methods map[string]map[string]*ast.FuncDecl,
+	toolTiers []dfitem.ToolTier,
+	valueTypes []itemValueTypeSpec,
+) (itemTypeSpec, bucketSpec, error) {
+	if fields := exportedItemFields(declaration); !reflect.DeepEqual(fields, []string{"Content BucketContent"}) {
+		return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket fields changed: %v", fields)
+	}
+	if fields := allItemFields(types["BucketContent"]); !reflect.DeepEqual(fields, []string{"liquid world.Liquid", "milk bool"}) {
+		return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.BucketContent fields changed: %v", fields)
+	}
+	for name, signature := range map[string]goSignature{
+		"LiquidBucketContent": {Parameters: "world.Liquid", Results: "BucketContent"},
+		"MilkBucketContent":   {Results: "BucketContent"},
+	} {
+		function := functions[name]
+		if function == nil || function.Recv != nil || rawParameterTypes(function.Type.Params) != signature.Parameters || rawResultTypes(function.Type.Results) != signature.Results {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.%s signature changed", name)
+		}
+	}
+	for name, signature := range map[string]goSignature{
+		"Liquid":     {Results: "world.Liquid,bool"},
+		"String":     {Results: "string"},
+		"LiquidType": {Results: "string"},
+	} {
+		method := methods["BucketContent"][name]
+		if method == nil || !valueReceiver(method, "BucketContent") || rawParameterTypes(method.Type.Params) != signature.Parameters || rawResultTypes(method.Type.Results) != signature.Results {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.BucketContent.%s signature changed", name)
+		}
+	}
+	for name, signature := range map[string]goSignature{
+		"MaxCount":         {Results: "int"},
+		"AlwaysConsumable": {Results: "bool"},
+		"CanConsume":       {Results: "bool"},
+		"ConsumeDuration":  {Results: "time.Duration"},
+		"Consume":          {Parameters: "*world.Tx,Consumer", Results: "Stack"},
+		"Empty":            {Results: "bool"},
+		"FuelInfo":         {Results: "FuelInfo"},
+		"UseOnBlock":       {Parameters: "cube.Pos,cube.Face,mgl64.Vec3,*world.Tx,User,*UseContext", Results: "bool"},
+		"EncodeItem":       {Results: "string,int16"},
+	} {
+		method := methods["Bucket"][name]
+		if method == nil || !valueReceiver(method, "Bucket") || rawParameterTypes(method.Type.Params) != signature.Parameters || rawResultTypes(method.Type.Results) != signature.Results {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket.%s signature changed", name)
+		}
+	}
+	for name, wanted := range map[string][]string{
+		"MaxCounter":    {"MaxCount()->int"},
+		"Fuel":          {"FuelInfo()->FuelInfo"},
+		"Consumable":    {"AlwaysConsumable()->bool", "ConsumeDuration()->time.Duration", "Consume(*world.Tx,Consumer)->Stack"},
+		"UsableOnBlock": {"UseOnBlock(cube.Pos,cube.Face,mgl64.Vec3,*world.Tx,User,*UseContext)->bool"},
+	} {
+		if err := validateItemInterface(types[name], name, wanted); err != nil {
+			return itemTypeSpec{}, bucketSpec{}, err
+		}
+	}
+
+	expected := []struct {
+		identifier string
+		kind       bucketContentKind
+	}{
+		{"minecraft:bucket", bucketEmpty},
+		{"minecraft:water_bucket", bucketWater},
+		{"minecraft:lava_bucket", bucketLava},
+		{"minecraft:milk_bucket", bucketMilk},
+	}
+	if len(values) != len(expected) {
+		return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket registry states changed: %d", len(values))
+	}
+	byIdentifier := make(map[string]dfitem.Bucket, len(values))
+	for _, raw := range values {
+		bucket, ok := raw.(dfitem.Bucket)
+		if !ok {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly registered Bucket has type %T", raw)
+		}
+		identifier, metadata := bucket.EncodeItem()
+		if _, exists := byIdentifier[identifier]; metadata != 0 || exists {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket registered duplicate/metadata state %s:%d", identifier, metadata)
+		}
+		byIdentifier[identifier] = bucket
+	}
+	definition := itemTypeSpec{Name: "Bucket", Bucket: true}
+	result := bucketSpec{Present: true, ConsumeDuration: dfitem.DefaultConsumeDuration}
+	for _, wanted := range expected {
+		bucket, ok := byIdentifier[wanted.identifier]
+		if !ok {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket state %s missing", wanted.identifier)
+		}
+		if _, ok := any(bucket).(dfitem.MaxCounter); !ok {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket no longer implements MaxCounter")
+		}
+		if _, ok := any(bucket).(dfitem.Fuel); !ok {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket no longer implements Fuel")
+		}
+		if _, ok := any(bucket).(dfitem.Consumable); !ok {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket no longer implements Consumable")
+		}
+		if _, ok := any(bucket).(dfitem.UsableOnBlock); !ok {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket no longer implements UsableOnBlock")
+		}
+		state, err := inspectItemState(typeOf, bucket, nil, toolTiers, valueTypes)
+		if err != nil {
+			return itemTypeSpec{}, bucketSpec{}, err
+		}
+		state.Bucket = wanted.kind
+		liquid, liquidOK := bucket.Content.Liquid()
+		liquidName := ""
+		if liquidOK {
+			liquidType := reflect.TypeOf(liquid)
+			if liquidType.Kind() == reflect.Pointer {
+				liquidType = liquidType.Elem()
+			}
+			liquidName = liquidType.PkgPath() + "." + liquidType.Name()
+		}
+		wantLiquid := map[bucketContentKind]string{
+			bucketWater: "github.com/df-mc/dragonfly/server/block.Water",
+			bucketLava:  "github.com/df-mc/dragonfly/server/block.Lava",
+		}[wanted.kind]
+		wantEmpty, wantMilk := wanted.kind == bucketEmpty, wanted.kind == bucketMilk
+		if bucket.Empty() != wantEmpty || bucket.AlwaysConsumable() != wantMilk || bucket.CanConsume() != wantMilk ||
+			bucket.ConsumeDuration() != dfitem.DefaultConsumeDuration || liquidOK != (wantLiquid != "") || liquidName != wantLiquid {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket state %s behaviour changed", wanted.identifier)
+		}
+		wantString := map[bucketContentKind]string{bucketEmpty: "", bucketWater: "water", bucketLava: "lava", bucketMilk: "milk"}[wanted.kind]
+		wantLiquidType := wantString
+		if wanted.kind == bucketEmpty {
+			wantLiquidType = "milk"
+		}
+		if bucket.Content.String() != wantString || bucket.Content.LiquidType() != wantLiquidType {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.BucketContent state %s behaviour changed", wanted.identifier)
+		}
+		if liquidOK {
+			created := dfitem.LiquidBucketContent(liquid)
+			createdLiquid, createdOK := created.Liquid()
+			if !createdOK || !reflect.DeepEqual(createdLiquid, liquid) || created.String() != wantString || created.LiquidType() != wantLiquidType {
+				return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.LiquidBucketContent state %s behaviour changed", wanted.identifier)
+			}
+		} else if wanted.kind == bucketMilk {
+			created := dfitem.MilkBucketContent()
+			if _, ok := created.Liquid(); ok || created.String() != "milk" || created.LiquidType() != "milk" {
+				return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.MilkBucketContent behaviour changed")
+			}
+		}
+		if wanted.kind == bucketLava {
+			if state.Capability.FuelDuration != 1000*time.Second || state.Capability.FuelIdentifier != "minecraft:bucket" || state.Capability.FuelMetadata != 0 || state.Capability.FuelCount != 1 {
+				return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket lava fuel changed: %#v", state.Capability)
+			}
+			result.FuelDuration = state.Capability.FuelDuration
+			result.FuelResidueIdentifier = state.Capability.FuelIdentifier
+			result.FuelResidueMetadata = state.Capability.FuelMetadata
+			result.FuelResidueCount = state.Capability.FuelCount
+		} else if state.Capability.FuelDuration != 0 || state.Capability.FuelIdentifier != "" || state.Capability.FuelCount != 0 {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly item.Bucket state %s fuel changed: %#v", wanted.identifier, state.Capability)
+		}
+		if wanted.kind == bucketEmpty {
+			result.EmptyMaxCount = state.Capability.MaxCount
+		} else if result.FullMaxCount == 0 {
+			result.FullMaxCount = state.Capability.MaxCount
+		} else if result.FullMaxCount != state.Capability.MaxCount {
+			return itemTypeSpec{}, bucketSpec{}, fmt.Errorf("Dragonfly filled Bucket max counts differ")
+		}
+		definition.States = append(definition.States, state)
+	}
+	return definition, result, nil
 }
 
 func inspectCrossbowItem(
@@ -2372,6 +2582,20 @@ func exportedItemFields(spec *ast.TypeSpec) []string {
 			if name.IsExported() {
 				fields = append(fields, name.Name+" "+formatGoExpression(field.Type))
 			}
+		}
+	}
+	return fields
+}
+
+func allItemFields(spec *ast.TypeSpec) []string {
+	structure, ok := biomeEmptyStruct(spec)
+	if !ok {
+		return nil
+	}
+	var fields []string
+	for _, field := range structure.Fields.List {
+		for _, name := range field.Names {
+			fields = append(fields, name.Name+" "+formatGoExpression(field.Type))
 		}
 	}
 	return fields
@@ -4204,7 +4428,7 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 	output.WriteString("    public interface Block { }\n\n")
 	output.WriteString("    public interface Biome { }\n\n")
 	output.WriteString("    public interface Particle { }\n\n")
-	output.WriteString("    public interface Liquid : Block { }\n\n")
+	output.WriteString("    public interface Liquid : Block { string LiquidType(); }\n\n")
 	output.WriteString("    public sealed class SetOpts\n    {\n")
 	for _, field := range setOpts {
 		fmt.Fprintf(&output, "        public bool %s;\n", field)
@@ -4295,7 +4519,8 @@ func generateBlocks(spec blockSpec) []byte {
 	}
 	output.WriteString("        public readonly record struct Sand(bool Red = false) : World.Block;\n")
 	for _, liquid := range spec.Liquids {
-		fmt.Fprintf(&output, "        public readonly record struct %s(bool Still, int Depth, bool Falling) : World.Liquid;\n", liquid.Name)
+		fmt.Fprintf(&output, "        public readonly record struct %s(bool Still, int Depth, bool Falling) : World.Liquid\n        {\n", liquid.Name)
+		fmt.Fprintf(&output, "            public string LiquidType() => %s;\n        }\n", strconv.Quote(liquid.LiquidType))
 	}
 	output.WriteString("    }\n\n")
 	output.WriteString("    internal static class BlockCodec\n    {\n")
@@ -4354,7 +4579,7 @@ func generateBlocks(spec blockSpec) []byte {
 	}
 	output.WriteString("            return new EncodedLiquid(identifier, properties.ToArray());\n        }\n\n")
 	output.WriteString("        private sealed record EncodedBlock(string Identifier, byte[] Properties) : World.Block;\n")
-	output.WriteString("        private sealed record EncodedLiquid(string Identifier, byte[] Properties) : World.Liquid;\n")
+	output.WriteString("        private sealed record EncodedLiquid(string Identifier, byte[] Properties) : World.Liquid\n        {\n            public string LiquidType() => throw new InvalidOperationException(\"Opaque liquid type was not transported by the host.\");\n        }\n")
 	output.WriteString("    }\n}\n")
 	return output.Bytes()
 }
@@ -4407,6 +4632,10 @@ func generateItems(spec itemSpec) []byte {
 		generateFireworkExplosionType(&output)
 	}
 	for _, definition := range spec.Types {
+		if definition.Bucket {
+			generateBucketType(&output, spec.Bucket)
+			continue
+		}
 		if definition.Armour {
 			generateArmourPieceType(&output, *armourPieceByName(spec.Armour.Pieces, definition.Name), spec.Armour)
 			continue
@@ -4463,6 +4692,9 @@ func generateItems(spec itemSpec) []byte {
 		for _, state := range definition.States {
 			fmt.Fprintf(&output, "                case Item.%s", definition.Name)
 			switch {
+			case definition.Bucket:
+				output.WriteString(strings.TrimPrefix(csharpBucketPattern(state.Bucket), "Item.Bucket"))
+				output.WriteString(":\n")
 			case definition.Armour:
 				fmt.Fprintf(&output, " value when value.Tier is Item.%s:\n", spec.Armour.Tiers[state.ArmourTier].Name)
 			case definition.Name == "FireworkStar":
@@ -4488,6 +4720,10 @@ func generateItems(spec itemSpec) []byte {
 			fmt.Fprintf(&output, "                    identifier = %s; metadata = %d; return true;\n", strconv.Quote(state.Identifier), state.Metadata)
 		}
 	}
+	if spec.Bucket.Present {
+		output.WriteString("                case Item.Bucket value when value.Content.RawLiquid is not null:\n")
+		output.WriteString("                    identifier = \"minecraft:\" + value.Content.String() + \"_bucket\"; metadata = 0; return true;\n")
+	}
 	output.WriteString("                case EncodedItem encoded:\n                    identifier = encoded.Identifier; metadata = encoded.Metadata; return true;\n")
 	output.WriteString("                default:\n                    identifier = string.Empty; metadata = 0; return false;\n            }\n        }\n\n")
 	output.WriteString("        internal static World.Item Decode(string identifier, int metadata)\n        {\n")
@@ -4495,6 +4731,8 @@ func generateItems(spec itemSpec) []byte {
 		for _, state := range definition.States {
 			fmt.Fprintf(&output, "            if (identifier == %s && metadata == %d) return new Item.%s(", strconv.Quote(state.Identifier), state.Metadata, definition.Name)
 			switch {
+			case definition.Bucket:
+				output.WriteString(csharpBucketContent(state.Bucket))
 			case definition.Armour:
 				fmt.Fprintf(&output, "new Item.%s()", spec.Armour.Tiers[state.ArmourTier].Name)
 			case definition.Name == "FireworkStar":
@@ -4525,6 +4763,92 @@ func generateItems(spec itemSpec) []byte {
 	generateItemCapabilities(&output, spec)
 	output.WriteString("}\n")
 	return output.Bytes()
+}
+
+func generateBucketType(output *bytes.Buffer, spec bucketSpec) {
+	if !spec.Present {
+		return
+	}
+	residue := "default"
+	if spec.FuelResidueIdentifier != "" && spec.FuelResidueCount > 0 {
+		if spec.FuelResidueIdentifier != "minecraft:bucket" || spec.FuelResidueMetadata != 0 {
+			panic("bucket fuel residue is not an empty bucket")
+		}
+		residue = fmt.Sprintf("NewStack(new Bucket(), %d)", spec.FuelResidueCount)
+	}
+	fmt.Fprintf(output, `        public readonly struct BucketContent
+        {
+            private readonly World.Liquid? _liquid;
+            private readonly bool _milk;
+
+            internal BucketContent(World.Liquid? liquid, bool milk)
+            {
+                _liquid = liquid;
+                _milk = milk;
+            }
+
+            internal World.Liquid? RawLiquid => _liquid;
+            internal bool Milk => _milk;
+
+            public (World.Liquid? Liquid, bool Ok) Liquid() => (_liquid, _liquid is not null);
+
+            public string String() => _milk ? "milk" : _liquid?.LiquidType() ?? string.Empty;
+
+            public string LiquidType() => _liquid is null ? "milk" : String();
+            public override string ToString() => String();
+        }
+
+        public static BucketContent LiquidBucketContent(World.Liquid liquid)
+        {
+            ArgumentNullException.ThrowIfNull(liquid);
+            return new BucketContent(liquid, false);
+        }
+
+        public static BucketContent MilkBucketContent() => new(null, true);
+
+        public readonly record struct Bucket(BucketContent Content = default) : World.Item, MaxCounter, Fuel
+        {
+            public int MaxCount() => Empty() ? %d : %d;
+            public bool AlwaysConsumable() => Content.Milk;
+            public bool CanConsume() => Content.Milk;
+            public TimeSpan ConsumeDuration() => TimeSpan.FromTicks(%d);
+            public bool Empty() => Content.RawLiquid is null && !Content.Milk;
+            public FuelInfo FuelInfo() => Content.RawLiquid?.LiquidType() == "lava"
+                ? new FuelInfo(TimeSpan.FromTicks(%d), %s)
+                : default;
+        }
+
+`, spec.EmptyMaxCount, spec.FullMaxCount, csharpDurationTicks(spec.ConsumeDuration), csharpDurationTicks(spec.FuelDuration), residue)
+}
+
+func csharpBucketPattern(content bucketContentKind) string {
+	switch content {
+	case bucketEmpty:
+		return "Item.Bucket value when value.Empty()"
+	case bucketWater:
+		return "Item.Bucket value when value.Content.RawLiquid is Block.Water"
+	case bucketLava:
+		return "Item.Bucket value when value.Content.RawLiquid is Block.Lava"
+	case bucketMilk:
+		return "Item.Bucket value when value.Content.Milk"
+	default:
+		panic("unsupported bucket content")
+	}
+}
+
+func csharpBucketContent(content bucketContentKind) string {
+	switch content {
+	case bucketEmpty:
+		return ""
+	case bucketWater:
+		return "Item.LiquidBucketContent(new Block.Water(false, 0, false))"
+	case bucketLava:
+		return "Item.LiquidBucketContent(new Block.Lava(false, 0, false))"
+	case bucketMilk:
+		return "Item.MilkBucketContent()"
+	default:
+		panic("unsupported bucket content")
+	}
 }
 
 func generateArmourTypes(output *bytes.Buffer, spec armourSpec) {
@@ -4852,7 +5176,13 @@ func generateItemCapabilities(output *bytes.Buffer, spec itemSpec) {
 	output.WriteString("    internal readonly record struct ItemDurability(int MaxDurability, bool Persistent, Item.Stack BrokenStack);\n\n")
 	output.WriteString("    internal static class ItemCapabilities\n    {\n")
 	output.WriteString("        internal static int MaxCount(World.Item? item) => item switch\n        {\n")
+	if spec.Bucket.Present {
+		output.WriteString("            Item.Bucket value => value.MaxCount(),\n")
+	}
 	for _, definition := range spec.Types {
+		if definition.Bucket {
+			continue
+		}
 		for _, state := range definition.States {
 			if state.Capability.MaxCount != 64 {
 				fmt.Fprintf(output, "            %s => %d,\n", csharpItemPattern(definition, state, spec), state.Capability.MaxCount)
@@ -4886,7 +5216,13 @@ func generateItemCapabilities(output *bytes.Buffer, spec itemSpec) {
 	}
 	output.WriteString("            _ => 1d,\n        };\n\n")
 	output.WriteString("        internal static Item.FuelInfo FuelInfo(World.Item? item) => item switch\n        {\n")
+	if spec.Bucket.Present {
+		output.WriteString("            Item.Bucket value => value.FuelInfo(),\n")
+	}
 	for _, definition := range spec.Types {
+		if definition.Bucket {
+			continue
+		}
 		for _, state := range definition.States {
 			capability := state.Capability
 			if !capability.Fuel {
@@ -4935,6 +5271,9 @@ func csharpDurationTicks(duration time.Duration) int64 {
 }
 
 func csharpItemPattern(definition itemTypeSpec, state itemStateSpec, spec itemSpec) string {
+	if definition.Bucket {
+		return csharpBucketPattern(state.Bucket)
+	}
 	if definition.Armour {
 		return fmt.Sprintf("Item.%s value when value.Tier is Item.%s", definition.Name, spec.Armour.Tiers[state.ArmourTier].Name)
 	}

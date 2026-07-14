@@ -12,7 +12,7 @@ public sealed partial class World
 
     public interface Particle { }
 
-    public interface Liquid : Block { }
+    public interface Liquid : Block { string LiquidType(); }
 
     public sealed class SetOpts
     {

@@ -740,6 +740,48 @@ namespace Dragonfly
         }
         public readonly record struct Bread : World.Item;
         public readonly record struct Brick : World.Item;
+        public readonly struct BucketContent
+        {
+            private readonly World.Liquid? _liquid;
+            private readonly bool _milk;
+
+            internal BucketContent(World.Liquid? liquid, bool milk)
+            {
+                _liquid = liquid;
+                _milk = milk;
+            }
+
+            internal World.Liquid? RawLiquid => _liquid;
+            internal bool Milk => _milk;
+
+            public (World.Liquid? Liquid, bool Ok) Liquid() => (_liquid, _liquid is not null);
+
+            public string String() => _milk ? "milk" : _liquid?.LiquidType() ?? string.Empty;
+
+            public string LiquidType() => _liquid is null ? "milk" : String();
+            public override string ToString() => String();
+        }
+
+        public static BucketContent LiquidBucketContent(World.Liquid liquid)
+        {
+            ArgumentNullException.ThrowIfNull(liquid);
+            return new BucketContent(liquid, false);
+        }
+
+        public static BucketContent MilkBucketContent() => new(null, true);
+
+        public readonly record struct Bucket(BucketContent Content = default) : World.Item, MaxCounter, Fuel
+        {
+            public int MaxCount() => Empty() ? 16 : 1;
+            public bool AlwaysConsumable() => Content.Milk;
+            public bool CanConsume() => Content.Milk;
+            public TimeSpan ConsumeDuration() => TimeSpan.FromTicks(16100000);
+            public bool Empty() => Content.RawLiquid is null && !Content.Milk;
+            public FuelInfo FuelInfo() => Content.RawLiquid?.LiquidType() == "lava"
+                ? new FuelInfo(TimeSpan.FromTicks(10000000000), NewStack(new Bucket(), 1))
+                : default;
+        }
+
         public readonly record struct CarrotOnAStick : World.Item;
         public readonly record struct Charcoal : World.Item, Fuel
         {
@@ -1548,6 +1590,14 @@ namespace Dragonfly
                     identifier = "minecraft:bread"; metadata = 0; return true;
                 case Item.Brick _:
                     identifier = "minecraft:brick"; metadata = 0; return true;
+                case Item.Bucket value when value.Empty():
+                    identifier = "minecraft:bucket"; metadata = 0; return true;
+                case Item.Bucket value when value.Content.RawLiquid is Block.Water:
+                    identifier = "minecraft:water_bucket"; metadata = 0; return true;
+                case Item.Bucket value when value.Content.RawLiquid is Block.Lava:
+                    identifier = "minecraft:lava_bucket"; metadata = 0; return true;
+                case Item.Bucket value when value.Content.Milk:
+                    identifier = "minecraft:milk_bucket"; metadata = 0; return true;
                 case Item.CarrotOnAStick _:
                     identifier = "minecraft:carrot_on_a_stick"; metadata = 0; return true;
                 case Item.Charcoal _:
@@ -2336,6 +2386,8 @@ namespace Dragonfly
                     identifier = "minecraft:wheat"; metadata = 0; return true;
                 case Item.WrittenBook _:
                     identifier = "minecraft:written_book"; metadata = 0; return true;
+                case Item.Bucket value when value.Content.RawLiquid is not null:
+                    identifier = "minecraft:" + value.Content.String() + "_bucket"; metadata = 0; return true;
                 case EncodedItem encoded:
                     identifier = encoded.Identifier; metadata = encoded.Metadata; return true;
                 default:
@@ -2430,6 +2482,10 @@ namespace Dragonfly
             if (identifier == "minecraft:bowl" && metadata == 0) return new Item.Bowl();
             if (identifier == "minecraft:bread" && metadata == 0) return new Item.Bread();
             if (identifier == "minecraft:brick" && metadata == 0) return new Item.Brick();
+            if (identifier == "minecraft:bucket" && metadata == 0) return new Item.Bucket();
+            if (identifier == "minecraft:water_bucket" && metadata == 0) return new Item.Bucket(Item.LiquidBucketContent(new Block.Water(false, 0, false)));
+            if (identifier == "minecraft:lava_bucket" && metadata == 0) return new Item.Bucket(Item.LiquidBucketContent(new Block.Lava(false, 0, false)));
+            if (identifier == "minecraft:milk_bucket" && metadata == 0) return new Item.Bucket(Item.MilkBucketContent());
             if (identifier == "minecraft:carrot_on_a_stick" && metadata == 0) return new Item.CarrotOnAStick();
             if (identifier == "minecraft:charcoal" && metadata == 0) return new Item.Charcoal();
             if (identifier == "minecraft:leather_chestplate" && metadata == 0) return new Item.Chestplate(new Item.ArmourTierLeather());
@@ -2888,6 +2944,7 @@ namespace Dragonfly
     {
         internal static int MaxCount(World.Item? item) => item switch
         {
+            Item.Bucket value => value.MaxCount(),
             Item.Axe value when value.Tier == Item.ToolTierWood => 1,
             Item.Axe value when value.Tier == Item.ToolTierGold => 1,
             Item.Axe value when value.Tier == Item.ToolTierStone => 1,
@@ -3344,6 +3401,7 @@ namespace Dragonfly
 
         internal static Item.FuelInfo FuelInfo(World.Item? item) => item switch
         {
+            Item.Bucket value => value.FuelInfo(),
             Item.Axe value when value.Tier == Item.ToolTierWood => new(TimeSpan.FromTicks(100000000), default),
             Item.Axe value when value.Tier == Item.ToolTierGold => new(TimeSpan.FromTicks(0), default),
             Item.Axe value when value.Tier == Item.ToolTierStone => new(TimeSpan.FromTicks(0), default),

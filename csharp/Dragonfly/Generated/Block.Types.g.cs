@@ -87,8 +87,14 @@ namespace Dragonfly
         public readonly record struct Terracotta : World.Block;
         public readonly record struct WheatSeeds : World.Block;
         public readonly record struct Sand(bool Red = false) : World.Block;
-        public readonly record struct Water(bool Still, int Depth, bool Falling) : World.Liquid;
-        public readonly record struct Lava(bool Still, int Depth, bool Falling) : World.Liquid;
+        public readonly record struct Water(bool Still, int Depth, bool Falling) : World.Liquid
+        {
+            public string LiquidType() => "water";
+        }
+        public readonly record struct Lava(bool Still, int Depth, bool Falling) : World.Liquid
+        {
+            public string LiquidType() => "lava";
+        }
     }
 
     internal static class BlockCodec
@@ -762,6 +768,9 @@ namespace Dragonfly
         }
 
         private sealed record EncodedBlock(string Identifier, byte[] Properties) : World.Block;
-        private sealed record EncodedLiquid(string Identifier, byte[] Properties) : World.Liquid;
+        private sealed record EncodedLiquid(string Identifier, byte[] Properties) : World.Liquid
+        {
+            public string LiquidType() => throw new InvalidOperationException("Opaque liquid type was not transported by the host.");
+        }
     }
 }

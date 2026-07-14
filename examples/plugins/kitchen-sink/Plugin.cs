@@ -419,6 +419,11 @@ public sealed class KitchenSink : Plugin
         }
     }
 
+    private sealed record KitchenLiquid(string Type = "kitchen") : World.Liquid
+    {
+        public string LiquidType() => Type;
+    }
+
     internal sealed class KitchenItem : Cmd.Runnable
     {
         public Cmd.SubCommand Item;
@@ -491,6 +496,36 @@ public sealed class KitchenSink : Plugin
                     return;
                 }
 
+                var emptyBucket = new Dragonfly.Item.Bucket();
+                var waterContent = Dragonfly.Item.LiquidBucketContent(new Dragonfly.Block.Water(false, 0, false));
+                var waterBucket = new Dragonfly.Item.Bucket(waterContent);
+                var lavaBucket = new Dragonfly.Item.Bucket(
+                    Dragonfly.Item.LiquidBucketContent(new Dragonfly.Block.Lava(false, 0, false)));
+                var milkBucket = new Dragonfly.Item.Bucket(Dragonfly.Item.MilkBucketContent());
+                var customBucket = new Dragonfly.Item.Bucket(
+                    Dragonfly.Item.LiquidBucketContent(new KitchenLiquid()));
+                var customLavaBucket = new Dragonfly.Item.Bucket(
+                    Dragonfly.Item.LiquidBucketContent(new KitchenLiquid("lava")));
+                var (bucketLiquid, bucketLiquidFound) = waterContent.Liquid();
+                var lavaFuel = lavaBucket.FuelInfo();
+                if (!emptyBucket.Empty() || emptyBucket.MaxCount() != 16 ||
+                    emptyBucket.Content.String() != "" || emptyBucket.Content.LiquidType() != "milk" ||
+                    !bucketLiquidFound || bucketLiquid is not Dragonfly.Block.Water ||
+                    waterContent.String() != "water" || waterContent.LiquidType() != "water" ||
+                    waterBucket.Empty() || waterBucket.MaxCount() != 1 || waterBucket.AlwaysConsumable() ||
+                    customBucket.Content.String() != "kitchen" ||
+                    Dragonfly.Item.NewStack(customBucket, 1).MaxCount() != 1 ||
+                    customLavaBucket.FuelInfo().Duration != TimeSpan.FromSeconds(1000) ||
+                    milkBucket.Empty() || !milkBucket.AlwaysConsumable() || !milkBucket.CanConsume() ||
+                    milkBucket.ConsumeDuration() != TimeSpan.FromMilliseconds(1610) ||
+                    lavaFuel.Duration != TimeSpan.FromSeconds(1000) ||
+                    lavaFuel.Residue.Count() != 1 || lavaFuel.Residue.Item() is not Dragonfly.Item.Bucket residue ||
+                    !residue.Empty())
+                {
+                    output.Error("Bucket behavior failed.");
+                    return;
+                }
+
                 Dragonfly.Item.Stack[] variants =
                 [
                     Dragonfly.Item.NewStack(new Dragonfly.Item.Arrow(Dragonfly.Potion.NightVision()), 1),
@@ -504,6 +539,10 @@ public sealed class KitchenSink : Plugin
                     Dragonfly.Item.NewStack(new Dragonfly.Item.PotterySherd(Dragonfly.Item.SherdTypeScrape()), 1),
                     Dragonfly.Item.NewStack(new Dragonfly.Item.SmithingTemplate(Dragonfly.Item.TemplateBolt()), 1),
                     Dragonfly.Item.NewStack(new Dragonfly.Item.SuspiciousStew(Dragonfly.Item.NauseaStew()), 1),
+                    Dragonfly.Item.NewStack(emptyBucket, 1),
+                    Dragonfly.Item.NewStack(waterBucket, 1),
+                    Dragonfly.Item.NewStack(lavaBucket, 1),
+                    Dragonfly.Item.NewStack(milkBucket, 1),
                 ];
                 foreach (var variant in variants)
                 {
