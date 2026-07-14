@@ -17,6 +17,8 @@ The kitchen-sink plugin includes `/kitchen block`, demonstrating generated `Worl
 loaded-block, lazy block-search, height/light, typed block, and typed liquid APIs. It probes an
 empty liquid result, places/reads/removes typed water, then leaves matching water present and
 schedules its update after 250 ms with `ScheduleBlockUpdate` and `TimeSpan`.
+Its `/kitchen crop` overload round-trips promoted Dragonfly crop state through
+`Block.WheatSeeds(Growth: 7)`.
 Its `/kitchen biome` overload uses the generated vanilla biome types and exercises biome,
 temperature, rain, snow, and thunder transaction queries before restoring the original biome.
 `/kitchen tick` reads the transaction owner's current tick, not the world's day-time.
