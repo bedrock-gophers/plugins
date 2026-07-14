@@ -129,14 +129,14 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 			Overload: uint64(overload), Arguments: []string{"item"},
 			OnlinePlayers: []CommandPlayer{{Player: player, Name: "ItemTester"}},
 		})
-		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, added_empty=0, variants=15" {
+		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, added_empty=0, variants=43" {
 			t.Fatalf("iteration %d: output=%#v error=%v", iteration, output, err)
 		}
 	}
 	if !reflect.DeepEqual(host.inventory, previous) || !reflect.DeepEqual(host.held, [2]ItemStack{mainHand, offHand}) {
 		t.Fatalf("command did not restore items: inventory=%#v held=%#v", host.inventory, host.held)
 	}
-	if len(host.sets) != 1190 || len(host.heldSets) != 140 {
+	if len(host.sets) != 3150 || len(host.heldSets) != 140 {
 		t.Fatalf("item writes=%d held writes=%d", len(host.sets), len(host.heldSets))
 	}
 	if len(host.armourSets) != 70 || len(host.adds) != 70 || host.adds[0].Identifier != "" || host.adds[0].Count != 0 {
@@ -211,6 +211,30 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 		starExplosion["FireworkFlicker"] != uint8(0) || starExplosion["FireworkTrail"] != uint8(0) ||
 		starNBT["customColor"] != int32(-15295332) {
 		t.Fatalf("typed firework star transport=%#v nbt=%#v", star, starNBT)
+	}
+	armourIndex := 16
+	for _, tier := range []string{"leather", "copper", "golden", "chainmail", "iron", "diamond", "netherite"} {
+		for _, piece := range []string{"helmet", "chestplate", "leggings", "boots"} {
+			got := host.sets[armourIndex]
+			wantIdentifier := "minecraft:" + tier + "_" + piece
+			if got.Identifier != wantIdentifier || got.Metadata != 0 || got.Count != 1 {
+				t.Fatalf("typed armour %d=%#v, want identifier %q", armourIndex-16, got, wantIdentifier)
+			}
+			armourNBT, ok := decodeTestItemNBT(got.NBT)
+			if !ok {
+				t.Fatalf("typed armour %s NBT invalid: %x", wantIdentifier, got.NBT)
+			}
+			if armourIndex == 16 {
+				trim, trimOK := armourNBT["Trim"].(map[string]any)
+				if armourNBT["customColor"] != int32(-16711165) || !trimOK ||
+					trim["Material"] != "redstone" || trim["Pattern"] != "flow" {
+					t.Fatalf("dyed trimmed leather helmet NBT=%#v", armourNBT)
+				}
+			} else if len(armourNBT) != 0 {
+				t.Fatalf("default armour %s NBT=%#v", wantIdentifier, armourNBT)
+			}
+			armourIndex++
+		}
 	}
 	host.failWrites = true
 	failed, err := runtime.HandleCommand(kitchen.Index, CommandInput{

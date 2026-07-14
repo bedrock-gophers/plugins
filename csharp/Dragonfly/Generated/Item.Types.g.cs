@@ -441,6 +441,147 @@ namespace Dragonfly
         public static WrittenBookGeneration CopyGeneration() => new(1);
         public static WrittenBookGeneration CopyOfCopyGeneration() => new(2);
 
+        public interface Armour
+        {
+            double DefencePoints();
+            double Toughness();
+            double KnockBackResistance();
+        }
+
+        public interface ArmourTier
+        {
+            double BaseDurability();
+            double Toughness();
+            double KnockBackResistance();
+            int EnchantmentValue();
+            string Name();
+        }
+
+        public interface HelmetType : Armour { bool Helmet(); }
+        public interface ChestplateType : Armour { bool Chestplate(); }
+        public interface LeggingsType : Armour { bool Leggings(); }
+        public interface BootsType : Armour { bool Boots(); }
+
+        public interface ArmourTrimMaterial
+        {
+            string TrimMaterial();
+            string MaterialColour();
+        }
+
+        public interface Trimmable { World.Item WithTrim(ArmourTrim trim); }
+        public interface MaxCounter { int MaxCount(); }
+        public interface Enchantable { int EnchantmentValue(); }
+        public interface Durable { DurabilityInfo DurabilityInfo(); }
+        public interface Repairable : Durable { bool RepairableBy(Stack stack); }
+        public interface Smeltable { SmeltInfo SmeltInfo(); }
+
+        public readonly record struct ArmourTrim(SmithingTemplateType Template, ArmourTrimMaterial? Material)
+        {
+            public bool Zero() => Material is null || Template == TemplateNetheriteUpgrade();
+        }
+
+        public readonly record struct DurabilityInfo(
+            int MaxDurability,
+            Func<Stack>? BrokenItem = null,
+            int AttackDurability = 0,
+            int BreakDurability = 0,
+            bool Persistent = false);
+
+        public readonly record struct SmeltInfo(
+            Stack Product = default,
+            double Experience = 0d,
+            bool Food = false,
+            bool Ores = false);
+
+        public readonly record struct ArmourTierLeather(global::Dragonfly.Color.RGBA Colour = default) : ArmourTier
+        {
+            public double BaseDurability() => 55d;
+            public double Toughness() => 0d;
+            public double KnockBackResistance() => 0d;
+            public int EnchantmentValue() => 15;
+            public string Name() => "leather";
+        }
+
+        public readonly record struct ArmourTierCopper : ArmourTier
+        {
+            public double BaseDurability() => 121d;
+            public double Toughness() => 0d;
+            public double KnockBackResistance() => 0d;
+            public int EnchantmentValue() => 8;
+            public string Name() => "copper";
+        }
+
+        public readonly record struct ArmourTierGold : ArmourTier
+        {
+            public double BaseDurability() => 77d;
+            public double Toughness() => 0d;
+            public double KnockBackResistance() => 0d;
+            public int EnchantmentValue() => 25;
+            public string Name() => "golden";
+        }
+
+        public readonly record struct ArmourTierChain : ArmourTier
+        {
+            public double BaseDurability() => 166d;
+            public double Toughness() => 0d;
+            public double KnockBackResistance() => 0d;
+            public int EnchantmentValue() => 12;
+            public string Name() => "chainmail";
+        }
+
+        public readonly record struct ArmourTierIron : ArmourTier
+        {
+            public double BaseDurability() => 165d;
+            public double Toughness() => 0d;
+            public double KnockBackResistance() => 0d;
+            public int EnchantmentValue() => 9;
+            public string Name() => "iron";
+        }
+
+        public readonly record struct ArmourTierDiamond : ArmourTier
+        {
+            public double BaseDurability() => 363d;
+            public double Toughness() => 2d;
+            public double KnockBackResistance() => 0d;
+            public int EnchantmentValue() => 10;
+            public string Name() => "diamond";
+        }
+
+        public readonly record struct ArmourTierNetherite : ArmourTier
+        {
+            public double BaseDurability() => 408d;
+            public double Toughness() => 3d;
+            public double KnockBackResistance() => 0.1d;
+            public int EnchantmentValue() => 15;
+            public string Name() => "netherite";
+        }
+
+        public static ArmourTier[] ArmourTiers() =>
+        [
+            new ArmourTierLeather(),
+            new ArmourTierCopper(),
+            new ArmourTierGold(),
+            new ArmourTierChain(),
+            new ArmourTierIron(),
+            new ArmourTierDiamond(),
+            new ArmourTierNetherite(),
+        ];
+
+        public static World.Item[] ArmourTrimMaterials() =>
+        [
+            new AmethystShard(),
+            new CopperIngot(),
+            new Diamond(),
+            new Emerald(),
+            new GoldIngot(),
+            new IronIngot(),
+            new LapisLazuli(),
+            new NetheriteIngot(),
+            new NetherQuartz(),
+            new ResinBrick(),
+            new RedstoneWire(),
+        ];
+
         public readonly record struct FireworkExplosion
         {
             public FireworkShape Shape { get; init; }
@@ -451,7 +592,11 @@ namespace Dragonfly
             public bool Trail { get; init; }
         }
 
-        public readonly record struct AmethystShard : World.Item;
+        public readonly record struct AmethystShard : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "amethyst";
+            public string MaterialColour() => "§u";
+        }
         public readonly record struct Apple : World.Item;
         public readonly record struct Arrow(global::Dragonfly.Potion.Value Tip) : World.Item;
         public readonly record struct Axe(ToolTier Tier) : World.Item;
@@ -527,6 +672,51 @@ namespace Dragonfly
             }
         }
 
+        public readonly record struct Boots(ArmourTier Tier, ArmourTrim Trim = default) : World.Item, BootsType, Trimmable, MaxCounter, Enchantable, Repairable, Smeltable
+        {
+            public int MaxCount() => 1;
+            public double DefencePoints() => Tier.Name() switch
+            {
+                "leather" => 1d,
+                "copper" => 1d,
+                "golden" => 1d,
+                "chainmail" => 1d,
+                "iron" => 2d,
+                "diamond" => 3d,
+                "netherite" => 3d,
+                _ => throw new InvalidOperationException("invalid boots tier"),
+            };
+            public double Toughness() => Tier.Toughness();
+            public double KnockBackResistance() => Tier.KnockBackResistance();
+            public int EnchantmentValue() => Tier.EnchantmentValue();
+            public DurabilityInfo DurabilityInfo()
+            {
+                var value = Tier.BaseDurability();
+                return new((int)(value + value / 5.5d), static () => default);
+            }
+            public SmeltInfo SmeltInfo() => Tier switch
+            {
+                ArmourTierCopper => new(NewStack(new CopperNugget(), 1), 0.1d, false, true),
+                ArmourTierGold => new(NewStack(new GoldNugget(), 1), 0.1d, false, true),
+                ArmourTierChain => new(NewStack(new IronNugget(), 1), 0.1d, false, true),
+                ArmourTierIron => new(NewStack(new IronNugget(), 1), 0.1d, false, true),
+                _ => default,
+            };
+            public bool RepairableBy(Stack stack) => Tier switch
+            {
+                ArmourTierLeather => stack.Item() is Leather,
+                ArmourTierCopper => stack.Item() is CopperIngot,
+                ArmourTierGold => stack.Item() is GoldIngot,
+                ArmourTierChain => stack.Item() is IronIngot,
+                ArmourTierIron => stack.Item() is IronIngot,
+                ArmourTierDiamond => stack.Item() is Diamond,
+                ArmourTierNetherite => stack.Item() is NetheriteIngot,
+                _ => false,
+            };
+            bool BootsType.Boots() => true;
+            public World.Item WithTrim(ArmourTrim trim) => new Boots(Tier, trim);
+        }
+
         public readonly record struct BottleOfEnchanting : World.Item;
         public readonly record struct Bow : World.Item;
         public readonly record struct Bowl : World.Item;
@@ -534,6 +724,51 @@ namespace Dragonfly
         public readonly record struct Brick : World.Item;
         public readonly record struct CarrotOnAStick : World.Item;
         public readonly record struct Charcoal : World.Item;
+        public readonly record struct Chestplate(ArmourTier Tier, ArmourTrim Trim = default) : World.Item, ChestplateType, Trimmable, MaxCounter, Enchantable, Repairable, Smeltable
+        {
+            public int MaxCount() => 1;
+            public double DefencePoints() => Tier.Name() switch
+            {
+                "leather" => 3d,
+                "copper" => 4d,
+                "golden" => 5d,
+                "chainmail" => 5d,
+                "iron" => 6d,
+                "diamond" => 8d,
+                "netherite" => 8d,
+                _ => throw new InvalidOperationException("invalid chestplate tier"),
+            };
+            public double Toughness() => Tier.Toughness();
+            public double KnockBackResistance() => Tier.KnockBackResistance();
+            public int EnchantmentValue() => Tier.EnchantmentValue();
+            public DurabilityInfo DurabilityInfo()
+            {
+                var value = Tier.BaseDurability();
+                return new((int)(value + value / 2.2d), static () => default);
+            }
+            public SmeltInfo SmeltInfo() => Tier switch
+            {
+                ArmourTierCopper => new(NewStack(new CopperNugget(), 1), 0.1d, false, true),
+                ArmourTierGold => new(NewStack(new GoldNugget(), 1), 0.1d, false, true),
+                ArmourTierChain => new(NewStack(new IronNugget(), 1), 0.1d, false, true),
+                ArmourTierIron => new(NewStack(new IronNugget(), 1), 0.1d, false, true),
+                _ => default,
+            };
+            public bool RepairableBy(Stack stack) => Tier switch
+            {
+                ArmourTierLeather => stack.Item() is Leather,
+                ArmourTierCopper => stack.Item() is CopperIngot,
+                ArmourTierGold => stack.Item() is GoldIngot,
+                ArmourTierChain => stack.Item() is IronIngot,
+                ArmourTierIron => stack.Item() is IronIngot,
+                ArmourTierDiamond => stack.Item() is Diamond,
+                ArmourTierNetherite => stack.Item() is NetheriteIngot,
+                _ => false,
+            };
+            bool ChestplateType.Chestplate() => true;
+            public World.Item WithTrim(ArmourTrim trim) => new Chestplate(Tier, trim);
+        }
+
         public readonly record struct Chicken(bool Cooked) : World.Item;
         public readonly record struct ClayBall : World.Item;
         public readonly record struct Clock : World.Item;
@@ -541,9 +776,17 @@ namespace Dragonfly
         public readonly record struct Cod(bool Cooked) : World.Item;
         public readonly record struct Compass : World.Item;
         public readonly record struct Cookie : World.Item;
-        public readonly record struct CopperIngot : World.Item;
+        public readonly record struct CopperIngot : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "copper";
+            public string MaterialColour() => "§n";
+        }
         public readonly record struct CopperNugget : World.Item;
-        public readonly record struct Diamond : World.Item;
+        public readonly record struct Diamond : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "diamond";
+            public string MaterialColour() => "§s";
+        }
         public readonly record struct DiscFragment : World.Item;
         public readonly record struct DragonBreath : World.Item;
         public readonly record struct DriedKelp : World.Item;
@@ -551,7 +794,11 @@ namespace Dragonfly
         public readonly record struct EchoShard : World.Item;
         public readonly record struct Egg : World.Item;
         public readonly record struct Elytra : World.Item;
-        public readonly record struct Emerald : World.Item;
+        public readonly record struct Emerald : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "emerald";
+            public string MaterialColour() => "§q";
+        }
         public readonly record struct EnchantedApple : World.Item;
         public readonly record struct EnchantedBook : World.Item;
         public readonly record struct EnderEye : World.Item;
@@ -584,20 +831,118 @@ namespace Dragonfly
         public readonly record struct GlisteringMelonSlice : World.Item;
         public readonly record struct GlowstoneDust : World.Item;
         public readonly record struct GoatHorn(Sound.Horn Type) : World.Item;
-        public readonly record struct GoldIngot : World.Item;
+        public readonly record struct GoldIngot : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "gold";
+            public string MaterialColour() => "§p";
+        }
         public readonly record struct GoldNugget : World.Item;
         public readonly record struct GoldenApple : World.Item;
         public readonly record struct GoldenCarrot : World.Item;
         public readonly record struct Gunpowder : World.Item;
         public readonly record struct HeartOfTheSea : World.Item;
+        public readonly record struct Helmet(ArmourTier Tier, ArmourTrim Trim = default) : World.Item, HelmetType, Trimmable, MaxCounter, Enchantable, Repairable, Smeltable
+        {
+            public int MaxCount() => 1;
+            public double DefencePoints() => Tier.Name() switch
+            {
+                "leather" => 1d,
+                "copper" => 2d,
+                "golden" => 2d,
+                "chainmail" => 2d,
+                "iron" => 2d,
+                "diamond" => 3d,
+                "netherite" => 3d,
+                _ => throw new InvalidOperationException("invalid helmet tier"),
+            };
+            public double Toughness() => Tier.Toughness();
+            public double KnockBackResistance() => Tier.KnockBackResistance();
+            public int EnchantmentValue() => Tier.EnchantmentValue();
+            public DurabilityInfo DurabilityInfo() => new((int)Tier.BaseDurability(), static () => default);
+            public SmeltInfo SmeltInfo() => Tier switch
+            {
+                ArmourTierCopper => new(NewStack(new CopperNugget(), 1), 0.1d, false, true),
+                ArmourTierGold => new(NewStack(new GoldNugget(), 1), 0.1d, false, true),
+                ArmourTierChain => new(NewStack(new IronNugget(), 1), 0.1d, false, true),
+                ArmourTierIron => new(NewStack(new IronNugget(), 1), 0.1d, false, true),
+                _ => default,
+            };
+            public bool RepairableBy(Stack stack) => Tier switch
+            {
+                ArmourTierLeather => stack.Item() is Leather,
+                ArmourTierCopper => stack.Item() is CopperIngot,
+                ArmourTierGold => stack.Item() is GoldIngot,
+                ArmourTierChain => stack.Item() is IronIngot,
+                ArmourTierIron => stack.Item() is IronIngot,
+                ArmourTierDiamond => stack.Item() is Diamond,
+                ArmourTierNetherite => stack.Item() is NetheriteIngot,
+                _ => false,
+            };
+            bool HelmetType.Helmet() => true;
+            public World.Item WithTrim(ArmourTrim trim) => new Helmet(Tier, trim);
+        }
+
         public readonly record struct Hoe(ToolTier Tier) : World.Item;
         public readonly record struct HoneyBottle : World.Item;
         public readonly record struct Honeycomb : World.Item;
         public readonly record struct InkSac(bool Glowing) : World.Item;
-        public readonly record struct IronIngot : World.Item;
+        public readonly record struct IronIngot : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "iron";
+            public string MaterialColour() => "§i";
+        }
         public readonly record struct IronNugget : World.Item;
-        public readonly record struct LapisLazuli : World.Item;
+        public readonly record struct LapisLazuli : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "lapis";
+            public string MaterialColour() => "§t";
+        }
         public readonly record struct Leather : World.Item;
+        public readonly record struct Leggings(ArmourTier Tier, ArmourTrim Trim = default) : World.Item, LeggingsType, Trimmable, MaxCounter, Enchantable, Repairable, Smeltable
+        {
+            public int MaxCount() => 1;
+            public double DefencePoints() => Tier.Name() switch
+            {
+                "leather" => 2d,
+                "copper" => 3d,
+                "golden" => 3d,
+                "chainmail" => 4d,
+                "iron" => 5d,
+                "diamond" => 6d,
+                "netherite" => 6d,
+                _ => throw new InvalidOperationException("invalid leggings tier"),
+            };
+            public double Toughness() => Tier.Toughness();
+            public double KnockBackResistance() => Tier.KnockBackResistance();
+            public int EnchantmentValue() => Tier.EnchantmentValue();
+            public DurabilityInfo DurabilityInfo()
+            {
+                var value = Tier.BaseDurability();
+                return new((int)(value + value / 2.5d), static () => default);
+            }
+            public SmeltInfo SmeltInfo() => Tier switch
+            {
+                ArmourTierCopper => new(NewStack(new CopperNugget(), 1), 0.1d, false, true),
+                ArmourTierGold => new(NewStack(new GoldNugget(), 1), 0.1d, false, true),
+                ArmourTierChain => new(NewStack(new IronNugget(), 1), 0.1d, false, true),
+                ArmourTierIron => new(NewStack(new IronNugget(), 1), 0.1d, false, true),
+                _ => default,
+            };
+            public bool RepairableBy(Stack stack) => Tier switch
+            {
+                ArmourTierLeather => stack.Item() is Leather,
+                ArmourTierCopper => stack.Item() is CopperIngot,
+                ArmourTierGold => stack.Item() is GoldIngot,
+                ArmourTierChain => stack.Item() is IronIngot,
+                ArmourTierIron => stack.Item() is IronIngot,
+                ArmourTierDiamond => stack.Item() is Diamond,
+                ArmourTierNetherite => stack.Item() is NetheriteIngot,
+                _ => false,
+            };
+            bool LeggingsType.Leggings() => true;
+            public World.Item WithTrim(ArmourTrim trim) => new Leggings(Tier, trim);
+        }
+
         public readonly record struct LingeringPotion(global::Dragonfly.Potion.Value Type) : World.Item;
         public readonly record struct MagmaCream : World.Item;
         public readonly record struct MelonSlice : World.Item;
@@ -606,9 +951,17 @@ namespace Dragonfly
         public readonly record struct Mutton(bool Cooked) : World.Item;
         public readonly record struct NautilusShell : World.Item;
         public readonly record struct NetherBrick : World.Item;
-        public readonly record struct NetherQuartz : World.Item;
+        public readonly record struct NetherQuartz : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "quartz";
+            public string MaterialColour() => "§h";
+        }
         public readonly record struct NetherStar : World.Item;
-        public readonly record struct NetheriteIngot : World.Item;
+        public readonly record struct NetheriteIngot : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "netherite";
+            public string MaterialColour() => "§j";
+        }
         public readonly record struct NetheriteScrap : World.Item;
         public readonly record struct Paper : World.Item;
         public readonly record struct PhantomMembrane : World.Item;
@@ -630,7 +983,16 @@ namespace Dragonfly
         public readonly record struct RawGold : World.Item;
         public readonly record struct RawIron : World.Item;
         public readonly record struct RecoveryCompass : World.Item;
-        public readonly record struct ResinBrick : World.Item;
+        public readonly record struct RedstoneWire : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "redstone";
+            public string MaterialColour() => "§m";
+        }
+        public readonly record struct ResinBrick : World.Item, ArmourTrimMaterial
+        {
+            public string TrimMaterial() => "resin";
+            public string MaterialColour() => "§v";
+        }
         public readonly record struct RottenFlesh : World.Item;
         public readonly record struct Salmon(bool Cooked) : World.Item;
         public readonly record struct Scute : World.Item;
@@ -1115,6 +1477,20 @@ namespace Dragonfly
                     identifier = "minecraft:book"; metadata = 0; return true;
                 case Item.BookAndQuill _:
                     identifier = "minecraft:writable_book"; metadata = 0; return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierLeather:
+                    identifier = "minecraft:leather_boots"; metadata = 0; return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierCopper:
+                    identifier = "minecraft:copper_boots"; metadata = 0; return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierGold:
+                    identifier = "minecraft:golden_boots"; metadata = 0; return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierChain:
+                    identifier = "minecraft:chainmail_boots"; metadata = 0; return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierIron:
+                    identifier = "minecraft:iron_boots"; metadata = 0; return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierDiamond:
+                    identifier = "minecraft:diamond_boots"; metadata = 0; return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierNetherite:
+                    identifier = "minecraft:netherite_boots"; metadata = 0; return true;
                 case Item.BottleOfEnchanting _:
                     identifier = "minecraft:experience_bottle"; metadata = 0; return true;
                 case Item.Bow _:
@@ -1129,6 +1505,20 @@ namespace Dragonfly
                     identifier = "minecraft:carrot_on_a_stick"; metadata = 0; return true;
                 case Item.Charcoal _:
                     identifier = "minecraft:charcoal"; metadata = 0; return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierLeather:
+                    identifier = "minecraft:leather_chestplate"; metadata = 0; return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierCopper:
+                    identifier = "minecraft:copper_chestplate"; metadata = 0; return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierGold:
+                    identifier = "minecraft:golden_chestplate"; metadata = 0; return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierChain:
+                    identifier = "minecraft:chainmail_chestplate"; metadata = 0; return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierIron:
+                    identifier = "minecraft:iron_chestplate"; metadata = 0; return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierDiamond:
+                    identifier = "minecraft:diamond_chestplate"; metadata = 0; return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierNetherite:
+                    identifier = "minecraft:netherite_chestplate"; metadata = 0; return true;
                 case Item.Chicken { Cooked: false }:
                     identifier = "minecraft:chicken"; metadata = 0; return true;
                 case Item.Chicken { Cooked: true }:
@@ -1287,6 +1677,20 @@ namespace Dragonfly
                     identifier = "minecraft:gunpowder"; metadata = 0; return true;
                 case Item.HeartOfTheSea _:
                     identifier = "minecraft:heart_of_the_sea"; metadata = 0; return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierLeather:
+                    identifier = "minecraft:leather_helmet"; metadata = 0; return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierCopper:
+                    identifier = "minecraft:copper_helmet"; metadata = 0; return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierGold:
+                    identifier = "minecraft:golden_helmet"; metadata = 0; return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierChain:
+                    identifier = "minecraft:chainmail_helmet"; metadata = 0; return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierIron:
+                    identifier = "minecraft:iron_helmet"; metadata = 0; return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierDiamond:
+                    identifier = "minecraft:diamond_helmet"; metadata = 0; return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierNetherite:
+                    identifier = "minecraft:netherite_helmet"; metadata = 0; return true;
                 case Item.Hoe value when value.Tier == Item.ToolTierWood:
                     identifier = "minecraft:wooden_hoe"; metadata = 0; return true;
                 case Item.Hoe value when value.Tier == Item.ToolTierGold:
@@ -1317,6 +1721,20 @@ namespace Dragonfly
                     identifier = "minecraft:lapis_lazuli"; metadata = 0; return true;
                 case Item.Leather _:
                     identifier = "minecraft:leather"; metadata = 0; return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierLeather:
+                    identifier = "minecraft:leather_leggings"; metadata = 0; return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierCopper:
+                    identifier = "minecraft:copper_leggings"; metadata = 0; return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierGold:
+                    identifier = "minecraft:golden_leggings"; metadata = 0; return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierChain:
+                    identifier = "minecraft:chainmail_leggings"; metadata = 0; return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierIron:
+                    identifier = "minecraft:iron_leggings"; metadata = 0; return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierDiamond:
+                    identifier = "minecraft:diamond_leggings"; metadata = 0; return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierNetherite:
+                    identifier = "minecraft:netherite_leggings"; metadata = 0; return true;
                 case Item.LingeringPotion value when value.Type == Potion.Water():
                     identifier = "minecraft:lingering_potion"; metadata = 0; return true;
                 case Item.LingeringPotion value when value.Type == Potion.Mundane():
@@ -1651,6 +2069,8 @@ namespace Dragonfly
                     identifier = "minecraft:raw_iron"; metadata = 0; return true;
                 case Item.RecoveryCompass _:
                     identifier = "minecraft:recovery_compass"; metadata = 0; return true;
+                case Item.RedstoneWire _:
+                    identifier = "minecraft:redstone"; metadata = 0; return true;
                 case Item.ResinBrick _:
                     identifier = "minecraft:resin_brick"; metadata = 0; return true;
                 case Item.RottenFlesh _:
@@ -1949,6 +2369,13 @@ namespace Dragonfly
             if (identifier == "minecraft:bone_meal" && metadata == 0) return new Item.BoneMeal();
             if (identifier == "minecraft:book" && metadata == 0) return new Item.Book();
             if (identifier == "minecraft:writable_book" && metadata == 0) return new Item.BookAndQuill();
+            if (identifier == "minecraft:leather_boots" && metadata == 0) return new Item.Boots(new Item.ArmourTierLeather());
+            if (identifier == "minecraft:copper_boots" && metadata == 0) return new Item.Boots(new Item.ArmourTierCopper());
+            if (identifier == "minecraft:golden_boots" && metadata == 0) return new Item.Boots(new Item.ArmourTierGold());
+            if (identifier == "minecraft:chainmail_boots" && metadata == 0) return new Item.Boots(new Item.ArmourTierChain());
+            if (identifier == "minecraft:iron_boots" && metadata == 0) return new Item.Boots(new Item.ArmourTierIron());
+            if (identifier == "minecraft:diamond_boots" && metadata == 0) return new Item.Boots(new Item.ArmourTierDiamond());
+            if (identifier == "minecraft:netherite_boots" && metadata == 0) return new Item.Boots(new Item.ArmourTierNetherite());
             if (identifier == "minecraft:experience_bottle" && metadata == 0) return new Item.BottleOfEnchanting();
             if (identifier == "minecraft:bow" && metadata == 0) return new Item.Bow();
             if (identifier == "minecraft:bowl" && metadata == 0) return new Item.Bowl();
@@ -1956,6 +2383,13 @@ namespace Dragonfly
             if (identifier == "minecraft:brick" && metadata == 0) return new Item.Brick();
             if (identifier == "minecraft:carrot_on_a_stick" && metadata == 0) return new Item.CarrotOnAStick();
             if (identifier == "minecraft:charcoal" && metadata == 0) return new Item.Charcoal();
+            if (identifier == "minecraft:leather_chestplate" && metadata == 0) return new Item.Chestplate(new Item.ArmourTierLeather());
+            if (identifier == "minecraft:copper_chestplate" && metadata == 0) return new Item.Chestplate(new Item.ArmourTierCopper());
+            if (identifier == "minecraft:golden_chestplate" && metadata == 0) return new Item.Chestplate(new Item.ArmourTierGold());
+            if (identifier == "minecraft:chainmail_chestplate" && metadata == 0) return new Item.Chestplate(new Item.ArmourTierChain());
+            if (identifier == "minecraft:iron_chestplate" && metadata == 0) return new Item.Chestplate(new Item.ArmourTierIron());
+            if (identifier == "minecraft:diamond_chestplate" && metadata == 0) return new Item.Chestplate(new Item.ArmourTierDiamond());
+            if (identifier == "minecraft:netherite_chestplate" && metadata == 0) return new Item.Chestplate(new Item.ArmourTierNetherite());
             if (identifier == "minecraft:chicken" && metadata == 0) return new Item.Chicken(false);
             if (identifier == "minecraft:cooked_chicken" && metadata == 0) return new Item.Chicken(true);
             if (identifier == "minecraft:clay_ball" && metadata == 0) return new Item.ClayBall();
@@ -2035,6 +2469,13 @@ namespace Dragonfly
             if (identifier == "minecraft:golden_carrot" && metadata == 0) return new Item.GoldenCarrot();
             if (identifier == "minecraft:gunpowder" && metadata == 0) return new Item.Gunpowder();
             if (identifier == "minecraft:heart_of_the_sea" && metadata == 0) return new Item.HeartOfTheSea();
+            if (identifier == "minecraft:leather_helmet" && metadata == 0) return new Item.Helmet(new Item.ArmourTierLeather());
+            if (identifier == "minecraft:copper_helmet" && metadata == 0) return new Item.Helmet(new Item.ArmourTierCopper());
+            if (identifier == "minecraft:golden_helmet" && metadata == 0) return new Item.Helmet(new Item.ArmourTierGold());
+            if (identifier == "minecraft:chainmail_helmet" && metadata == 0) return new Item.Helmet(new Item.ArmourTierChain());
+            if (identifier == "minecraft:iron_helmet" && metadata == 0) return new Item.Helmet(new Item.ArmourTierIron());
+            if (identifier == "minecraft:diamond_helmet" && metadata == 0) return new Item.Helmet(new Item.ArmourTierDiamond());
+            if (identifier == "minecraft:netherite_helmet" && metadata == 0) return new Item.Helmet(new Item.ArmourTierNetherite());
             if (identifier == "minecraft:wooden_hoe" && metadata == 0) return new Item.Hoe(Item.ToolTierWood);
             if (identifier == "minecraft:golden_hoe" && metadata == 0) return new Item.Hoe(Item.ToolTierGold);
             if (identifier == "minecraft:stone_hoe" && metadata == 0) return new Item.Hoe(Item.ToolTierStone);
@@ -2050,6 +2491,13 @@ namespace Dragonfly
             if (identifier == "minecraft:iron_nugget" && metadata == 0) return new Item.IronNugget();
             if (identifier == "minecraft:lapis_lazuli" && metadata == 0) return new Item.LapisLazuli();
             if (identifier == "minecraft:leather" && metadata == 0) return new Item.Leather();
+            if (identifier == "minecraft:leather_leggings" && metadata == 0) return new Item.Leggings(new Item.ArmourTierLeather());
+            if (identifier == "minecraft:copper_leggings" && metadata == 0) return new Item.Leggings(new Item.ArmourTierCopper());
+            if (identifier == "minecraft:golden_leggings" && metadata == 0) return new Item.Leggings(new Item.ArmourTierGold());
+            if (identifier == "minecraft:chainmail_leggings" && metadata == 0) return new Item.Leggings(new Item.ArmourTierChain());
+            if (identifier == "minecraft:iron_leggings" && metadata == 0) return new Item.Leggings(new Item.ArmourTierIron());
+            if (identifier == "minecraft:diamond_leggings" && metadata == 0) return new Item.Leggings(new Item.ArmourTierDiamond());
+            if (identifier == "minecraft:netherite_leggings" && metadata == 0) return new Item.Leggings(new Item.ArmourTierNetherite());
             if (identifier == "minecraft:lingering_potion" && metadata == 0) return new Item.LingeringPotion(Potion.Water());
             if (identifier == "minecraft:lingering_potion" && metadata == 1) return new Item.LingeringPotion(Potion.Mundane());
             if (identifier == "minecraft:lingering_potion" && metadata == 2) return new Item.LingeringPotion(Potion.LongMundane());
@@ -2217,6 +2665,7 @@ namespace Dragonfly
             if (identifier == "minecraft:raw_gold" && metadata == 0) return new Item.RawGold();
             if (identifier == "minecraft:raw_iron" && metadata == 0) return new Item.RawIron();
             if (identifier == "minecraft:recovery_compass" && metadata == 0) return new Item.RecoveryCompass();
+            if (identifier == "minecraft:redstone" && metadata == 0) return new Item.RedstoneWire();
             if (identifier == "minecraft:resin_brick" && metadata == 0) return new Item.ResinBrick();
             if (identifier == "minecraft:rotten_flesh" && metadata == 0) return new Item.RottenFlesh();
             if (identifier == "minecraft:salmon" && metadata == 0) return new Item.Salmon(false);
@@ -2334,6 +2783,55 @@ namespace Dragonfly
         private sealed record EncodedItem(string Identifier, int Metadata) : World.Item;
     }
 
+    internal static class ArmourCodec
+    {
+        internal static bool TryTrimMaterial(string name, out Item.ArmourTrimMaterial? material)
+        {
+            switch (name)
+            {
+                case "amethyst": material = new Item.AmethystShard(); return true;
+                case "copper": material = new Item.CopperIngot(); return true;
+                case "diamond": material = new Item.Diamond(); return true;
+                case "emerald": material = new Item.Emerald(); return true;
+                case "gold": material = new Item.GoldIngot(); return true;
+                case "iron": material = new Item.IronIngot(); return true;
+                case "lapis": material = new Item.LapisLazuli(); return true;
+                case "netherite": material = new Item.NetheriteIngot(); return true;
+                case "quartz": material = new Item.NetherQuartz(); return true;
+                case "resin": material = new Item.ResinBrick(); return true;
+                case "redstone": material = new Item.RedstoneWire(); return true;
+                default: material = null; return false;
+            }
+        }
+
+        internal static bool TryTemplate(string name, out Item.SmithingTemplateType template)
+        {
+            switch (name)
+            {
+                case "netherite_upgrade": template = Item.TemplateNetheriteUpgrade(); return true;
+                case "sentry": template = Item.TemplateSentry(); return true;
+                case "vex": template = Item.TemplateVex(); return true;
+                case "wild": template = Item.TemplateWild(); return true;
+                case "coast": template = Item.TemplateCoast(); return true;
+                case "dune": template = Item.TemplateDune(); return true;
+                case "wayfinder": template = Item.TemplateWayFinder(); return true;
+                case "raiser": template = Item.TemplateRaiser(); return true;
+                case "shaper": template = Item.TemplateShaper(); return true;
+                case "host": template = Item.TemplateHost(); return true;
+                case "ward": template = Item.TemplateWard(); return true;
+                case "silence": template = Item.TemplateSilence(); return true;
+                case "tide": template = Item.TemplateTide(); return true;
+                case "snout": template = Item.TemplateSnout(); return true;
+                case "rib": template = Item.TemplateRib(); return true;
+                case "eye": template = Item.TemplateEye(); return true;
+                case "spire": template = Item.TemplateSpire(); return true;
+                case "flow": template = Item.TemplateFlow(); return true;
+                case "bolt": template = Item.TemplateBolt(); return true;
+                default: template = default; return false;
+            }
+        }
+    }
+
     internal readonly record struct ItemDurability(int MaxDurability, bool Persistent, Item.Stack BrokenStack);
 
     internal static class ItemCapabilities
@@ -2359,8 +2857,22 @@ namespace Dragonfly
             Item.BannerPattern value when value.Type == Item.GusterBannerPattern() => 1,
             Item.BeetrootSoup _ => 1,
             Item.BookAndQuill _ => 1,
+            Item.Boots value when value.Tier is Item.ArmourTierLeather => 1,
+            Item.Boots value when value.Tier is Item.ArmourTierCopper => 1,
+            Item.Boots value when value.Tier is Item.ArmourTierGold => 1,
+            Item.Boots value when value.Tier is Item.ArmourTierChain => 1,
+            Item.Boots value when value.Tier is Item.ArmourTierIron => 1,
+            Item.Boots value when value.Tier is Item.ArmourTierDiamond => 1,
+            Item.Boots value when value.Tier is Item.ArmourTierNetherite => 1,
             Item.Bow _ => 1,
             Item.CarrotOnAStick _ => 1,
+            Item.Chestplate value when value.Tier is Item.ArmourTierLeather => 1,
+            Item.Chestplate value when value.Tier is Item.ArmourTierCopper => 1,
+            Item.Chestplate value when value.Tier is Item.ArmourTierGold => 1,
+            Item.Chestplate value when value.Tier is Item.ArmourTierChain => 1,
+            Item.Chestplate value when value.Tier is Item.ArmourTierIron => 1,
+            Item.Chestplate value when value.Tier is Item.ArmourTierDiamond => 1,
+            Item.Chestplate value when value.Tier is Item.ArmourTierNetherite => 1,
             Item.Egg _ => 16,
             Item.Elytra _ => 1,
             Item.EnchantedBook _ => 1,
@@ -2374,6 +2886,13 @@ namespace Dragonfly
             Item.GoatHorn value when value.Type == Sound.Call() => 1,
             Item.GoatHorn value when value.Type == Sound.Yearn() => 1,
             Item.GoatHorn value when value.Type == Sound.Dream() => 1,
+            Item.Helmet value when value.Tier is Item.ArmourTierLeather => 1,
+            Item.Helmet value when value.Tier is Item.ArmourTierCopper => 1,
+            Item.Helmet value when value.Tier is Item.ArmourTierGold => 1,
+            Item.Helmet value when value.Tier is Item.ArmourTierChain => 1,
+            Item.Helmet value when value.Tier is Item.ArmourTierIron => 1,
+            Item.Helmet value when value.Tier is Item.ArmourTierDiamond => 1,
+            Item.Helmet value when value.Tier is Item.ArmourTierNetherite => 1,
             Item.Hoe value when value.Tier == Item.ToolTierWood => 1,
             Item.Hoe value when value.Tier == Item.ToolTierGold => 1,
             Item.Hoe value when value.Tier == Item.ToolTierStone => 1,
@@ -2382,6 +2901,13 @@ namespace Dragonfly
             Item.Hoe value when value.Tier == Item.ToolTierDiamond => 1,
             Item.Hoe value when value.Tier == Item.ToolTierNetherite => 1,
             Item.HoneyBottle _ => 16,
+            Item.Leggings value when value.Tier is Item.ArmourTierLeather => 1,
+            Item.Leggings value when value.Tier is Item.ArmourTierCopper => 1,
+            Item.Leggings value when value.Tier is Item.ArmourTierGold => 1,
+            Item.Leggings value when value.Tier is Item.ArmourTierChain => 1,
+            Item.Leggings value when value.Tier is Item.ArmourTierIron => 1,
+            Item.Leggings value when value.Tier is Item.ArmourTierDiamond => 1,
+            Item.Leggings value when value.Tier is Item.ArmourTierNetherite => 1,
             Item.LingeringPotion value when value.Type == Potion.Water() => 1,
             Item.LingeringPotion value when value.Type == Potion.Mundane() => 1,
             Item.LingeringPotion value when value.Type == Potion.LongMundane() => 1,
@@ -2596,12 +3122,54 @@ namespace Dragonfly
                     durability = new(1561, false, default); return true;
                 case Item.Axe value when value.Tier == Item.ToolTierNetherite:
                     durability = new(2031, false, default); return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierLeather:
+                    durability = new(65, false, default); return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierCopper:
+                    durability = new(143, false, default); return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierGold:
+                    durability = new(91, false, default); return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierChain:
+                    durability = new(196, false, default); return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierIron:
+                    durability = new(195, false, default); return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierDiamond:
+                    durability = new(429, false, default); return true;
+                case Item.Boots value when value.Tier is Item.ArmourTierNetherite:
+                    durability = new(482, false, default); return true;
                 case Item.Bow _:
                     durability = new(385, false, default); return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierLeather:
+                    durability = new(80, false, default); return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierCopper:
+                    durability = new(176, false, default); return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierGold:
+                    durability = new(112, false, default); return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierChain:
+                    durability = new(241, false, default); return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierIron:
+                    durability = new(240, false, default); return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierDiamond:
+                    durability = new(528, false, default); return true;
+                case Item.Chestplate value when value.Tier is Item.ArmourTierNetherite:
+                    durability = new(593, false, default); return true;
                 case Item.Elytra _:
                     durability = new(433, true, default); return true;
                 case Item.FlintAndSteel _:
                     durability = new(65, false, default); return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierLeather:
+                    durability = new(55, false, default); return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierCopper:
+                    durability = new(121, false, default); return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierGold:
+                    durability = new(77, false, default); return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierChain:
+                    durability = new(166, false, default); return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierIron:
+                    durability = new(165, false, default); return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierDiamond:
+                    durability = new(363, false, default); return true;
+                case Item.Helmet value when value.Tier is Item.ArmourTierNetherite:
+                    durability = new(408, false, default); return true;
                 case Item.Hoe value when value.Tier == Item.ToolTierWood:
                     durability = new(59, false, default); return true;
                 case Item.Hoe value when value.Tier == Item.ToolTierGold:
@@ -2616,6 +3184,20 @@ namespace Dragonfly
                     durability = new(1561, false, default); return true;
                 case Item.Hoe value when value.Tier == Item.ToolTierNetherite:
                     durability = new(2031, false, default); return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierLeather:
+                    durability = new(77, false, default); return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierCopper:
+                    durability = new(169, false, default); return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierGold:
+                    durability = new(107, false, default); return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierChain:
+                    durability = new(232, false, default); return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierIron:
+                    durability = new(231, false, default); return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierDiamond:
+                    durability = new(508, false, default); return true;
+                case Item.Leggings value when value.Tier is Item.ArmourTierNetherite:
+                    durability = new(571, false, default); return true;
                 case Item.Pickaxe value when value.Tier == Item.ToolTierWood:
                     durability = new(59, false, default); return true;
                 case Item.Pickaxe value when value.Tier == Item.ToolTierGold:
@@ -2716,8 +3298,29 @@ namespace Dragonfly
             Item.Axe value when value.Tier == Item.ToolTierIron => true,
             Item.Axe value when value.Tier == Item.ToolTierDiamond => true,
             Item.Axe value when value.Tier == Item.ToolTierNetherite => true,
+            Item.Boots value when value.Tier is Item.ArmourTierLeather => true,
+            Item.Boots value when value.Tier is Item.ArmourTierCopper => true,
+            Item.Boots value when value.Tier is Item.ArmourTierGold => true,
+            Item.Boots value when value.Tier is Item.ArmourTierChain => true,
+            Item.Boots value when value.Tier is Item.ArmourTierIron => true,
+            Item.Boots value when value.Tier is Item.ArmourTierDiamond => true,
+            Item.Boots value when value.Tier is Item.ArmourTierNetherite => true,
+            Item.Chestplate value when value.Tier is Item.ArmourTierLeather => true,
+            Item.Chestplate value when value.Tier is Item.ArmourTierCopper => true,
+            Item.Chestplate value when value.Tier is Item.ArmourTierGold => true,
+            Item.Chestplate value when value.Tier is Item.ArmourTierChain => true,
+            Item.Chestplate value when value.Tier is Item.ArmourTierIron => true,
+            Item.Chestplate value when value.Tier is Item.ArmourTierDiamond => true,
+            Item.Chestplate value when value.Tier is Item.ArmourTierNetherite => true,
             Item.Elytra _ => true,
             Item.EnchantedBook _ => true,
+            Item.Helmet value when value.Tier is Item.ArmourTierLeather => true,
+            Item.Helmet value when value.Tier is Item.ArmourTierCopper => true,
+            Item.Helmet value when value.Tier is Item.ArmourTierGold => true,
+            Item.Helmet value when value.Tier is Item.ArmourTierChain => true,
+            Item.Helmet value when value.Tier is Item.ArmourTierIron => true,
+            Item.Helmet value when value.Tier is Item.ArmourTierDiamond => true,
+            Item.Helmet value when value.Tier is Item.ArmourTierNetherite => true,
             Item.Hoe value when value.Tier == Item.ToolTierWood => true,
             Item.Hoe value when value.Tier == Item.ToolTierGold => true,
             Item.Hoe value when value.Tier == Item.ToolTierStone => true,
@@ -2725,6 +3328,13 @@ namespace Dragonfly
             Item.Hoe value when value.Tier == Item.ToolTierIron => true,
             Item.Hoe value when value.Tier == Item.ToolTierDiamond => true,
             Item.Hoe value when value.Tier == Item.ToolTierNetherite => true,
+            Item.Leggings value when value.Tier is Item.ArmourTierLeather => true,
+            Item.Leggings value when value.Tier is Item.ArmourTierCopper => true,
+            Item.Leggings value when value.Tier is Item.ArmourTierGold => true,
+            Item.Leggings value when value.Tier is Item.ArmourTierChain => true,
+            Item.Leggings value when value.Tier is Item.ArmourTierIron => true,
+            Item.Leggings value when value.Tier is Item.ArmourTierDiamond => true,
+            Item.Leggings value when value.Tier is Item.ArmourTierNetherite => true,
             Item.Pickaxe value when value.Tier == Item.ToolTierWood => true,
             Item.Pickaxe value when value.Tier == Item.ToolTierGold => true,
             Item.Pickaxe value when value.Tier == Item.ToolTierStone => true,

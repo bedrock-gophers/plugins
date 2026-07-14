@@ -8,6 +8,18 @@ internal static class ItemNbtCodec
     {
         switch (item)
         {
+            case Item.Helmet armour:
+                data = EncodeArmour(armour.Tier, armour.Trim);
+                return true;
+            case Item.Chestplate armour:
+                data = EncodeArmour(armour.Tier, armour.Trim);
+                return true;
+            case Item.Leggings armour:
+                data = EncodeArmour(armour.Tier, armour.Trim);
+                return true;
+            case Item.Boots armour:
+                data = EncodeArmour(armour.Tier, armour.Trim);
+                return true;
             case Item.Firework firework:
                 data = EncodeFirework(firework);
                 return true;
@@ -30,6 +42,22 @@ internal static class ItemNbtCodec
     {
         switch (item)
         {
+            case Item.Helmet armour:
+                consumed = true;
+                var (helmetTier, helmetTrim) = DecodeArmour(armour.Tier, data);
+                return new Item.Helmet(helmetTier, helmetTrim);
+            case Item.Chestplate armour:
+                consumed = true;
+                var (chestplateTier, chestplateTrim) = DecodeArmour(armour.Tier, data);
+                return new Item.Chestplate(chestplateTier, chestplateTrim);
+            case Item.Leggings armour:
+                consumed = true;
+                var (leggingsTier, leggingsTrim) = DecodeArmour(armour.Tier, data);
+                return new Item.Leggings(leggingsTier, leggingsTrim);
+            case Item.Boots armour:
+                consumed = true;
+                var (bootsTier, bootsTrim) = DecodeArmour(armour.Tier, data);
+                return new Item.Boots(bootsTier, bootsTrim);
             case Item.Firework firework:
                 consumed = true;
                 return DecodeFirework(firework, data);
@@ -46,6 +74,63 @@ internal static class ItemNbtCodec
                 consumed = false;
                 return item;
         }
+    }
+
+    private static byte[] EncodeArmour(Item.ArmourTier tier, Item.ArmourTrim trim)
+    {
+        var root = new Nbt.Compound();
+        if (tier is Item.ArmourTierLeather leather && leather.Colour != default)
+            root["customColor"] = Nbt.Value.Int(ColourARGB(leather.Colour));
+        if (!trim.Zero())
+        {
+            root["Trim"] = Nbt.Value.Compound(new Nbt.Compound
+            {
+                ["Material"] = Nbt.Value.String(trim.Material!.TrimMaterial()),
+                ["Pattern"] = Nbt.Value.String(trim.Template.String()),
+            });
+        }
+        return Nbt.Encode(root);
+    }
+
+    private static (Item.ArmourTier Tier, Item.ArmourTrim Trim) DecodeArmour(
+        Item.ArmourTier tier,
+        ReadOnlySpan<byte> data)
+    {
+        if (data.IsEmpty) return (tier, default);
+        var root = Nbt.Decode(data);
+        if (tier is Item.ArmourTierLeather && root.TryGetValue("customColor", out var encodedColour) &&
+            encodedColour.Type == Nbt.TagType.Int)
+            tier = new Item.ArmourTierLeather(ColourFromARGB(encodedColour.AsInt()));
+        return (tier, DecodeArmourTrim(root));
+    }
+
+    private static Item.ArmourTrim DecodeArmourTrim(Nbt.Compound root)
+    {
+        if (!root.TryGetValue("Trim", out var encoded) || encoded.Type != Nbt.TagType.Compound)
+            return default;
+        var trim = encoded.AsCompound();
+        if (!trim.TryGetValue("Material", out var encodedMaterial) || encodedMaterial.Type != Nbt.TagType.String ||
+            !trim.TryGetValue("Pattern", out var encodedPattern) || encodedPattern.Type != Nbt.TagType.String ||
+            !ArmourCodec.TryTrimMaterial(encodedMaterial.AsString(), out var material) ||
+            !ArmourCodec.TryTemplate(encodedPattern.AsString(), out var template))
+            return default;
+        return new Item.ArmourTrim(template, material);
+    }
+
+    private static Color.RGBA ColourFromARGB(int colour)
+    {
+        var value = unchecked((uint)colour);
+        return new Color.RGBA(
+            (byte)(value >> 16),
+            (byte)(value >> 8),
+            (byte)value,
+            (byte)(value >> 24));
+    }
+
+    private static int ColourARGB(Color.RGBA value)
+    {
+        if (value.R == 0 && value.G == 0 && value.B == 0) return unchecked((int)0xff000000);
+        return unchecked((int)((uint)value.A << 24 | (uint)value.R << 16 | (uint)value.G << 8 | value.B));
     }
 
     private static byte[] EncodeFirework(Item.Firework firework)

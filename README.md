@@ -69,9 +69,11 @@ var (mainHand, offHand) = player.HeldItems();
 player.SetHeldItems(sword, offHand);
 ```
 
-The current generated item slice contains 125 concrete Dragonfly item structs: stateless items,
-boolean variants, five tool types, and the finite stateful families for colours, potions, banner
-patterns, smithing templates, suspicious stews, pottery sherds, goat horns, and music discs.
+The current generated item slice contains 130 concrete Dragonfly item structs: stateless items,
+boolean variants, five tool types, the four tiered armour pieces, and the finite stateful families
+for colours, potions, banner patterns, smithing templates, suspicious stews, pottery sherds, goat
+horns, and music discs. `RedstoneWire` is also generated as a typed trim material even though it is
+not directly registered as an item implementation.
 Their exact factory values come from Dragonfly's Go AST and live registries. NBT-backed item
 families that have not landed remain opaque during transport; raw identifiers,
 metadata, NBT, enchantment IDs, snapshots, and host statuses stay private.
@@ -84,6 +86,14 @@ generation without exposing NBT to plugins.
 `Firework`, `FireworkStar`, `FireworkExplosion`, and `FireworkShape` likewise expose Dragonfly's
 typed duration, explosions, colours, fades, effects, and shape behavior. The same private NBT
 transport preserves rocket and star state without exposing identifiers or encoded tags.
+`Armour`, `ArmourTier`, `Helmet`, `Chestplate`, `Leggings`, and `Boots` mirror Dragonfly's concrete
+`ArmourTierLeather`, `ArmourTierCopper`, `ArmourTierGold`, `ArmourTierChain`, `ArmourTierIron`,
+`ArmourTierDiamond`, and `ArmourTierNetherite` tiers and all 28 registered armour states.
+`ArmourTrim` and `ArmourTrimMaterial` cover typed amethyst, copper, diamond, emerald, gold, iron,
+lapis, netherite, quartz, resin, and redstone materials. Generated pieces expose
+`DefencePoints`, `Toughness`, `KnockBackResistance`, `EnchantmentValue`, `DurabilityInfo`,
+`RepairableBy`, `SmeltInfo`, and `WithTrim`. Private NBT preserves leather dye and trim state
+without exposing encoded tags.
 `Item.Stack` also exposes Dragonfly's generated max-count, durability, unbreakable, attack-damage,
 anvil-cost, comparison, equality, and stack-merging behavior. Capability tables are derived from
 the live item implementations; they are not duplicated in a public adapter model.

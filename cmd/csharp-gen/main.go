@@ -137,6 +137,7 @@ type itemStateSpec struct {
 	Metadata   int
 	Bools      []bool
 	ToolTier   int
+	ArmourTier int
 	Values     []int
 	Capability itemCapabilitySpec
 }
@@ -157,6 +158,7 @@ type itemTypeSpec struct {
 	Fields []itemFieldSpec
 	States []itemStateSpec
 	NBT    bool
+	Armour bool
 }
 
 type toolTierSpec struct {
@@ -169,7 +171,47 @@ type itemSpec struct {
 	ToolTiers      []toolTierSpec
 	ToolTierFields []parameter
 	ValueTypes     []itemValueTypeSpec
+	Armour         armourSpec
 	AirIdentifier  string
+}
+
+type armourSpec struct {
+	Tiers         []armourTierSpec
+	Pieces        []armourPieceSpec
+	TrimMaterials []armourTrimMaterialSpec
+}
+
+type armourTierSpec struct {
+	Name                string
+	BaseDurability      float64
+	Toughness           float64
+	KnockBackResistance float64
+	EnchantmentValue    int
+	IdentifierName      string
+	Colour              bool
+}
+
+type armourPieceSpec struct {
+	Name              string
+	SlotMethod        string
+	DurabilityDivisor float64
+	DefencePoints     []float64
+	RepairItems       []string
+	Smelts            []armourSmeltSpec
+}
+
+type armourSmeltSpec struct {
+	Product    string
+	Count      int
+	Experience float64
+	Food       bool
+	Ores       bool
+}
+
+type armourTrimMaterialSpec struct {
+	ItemName       string
+	Material       string
+	MaterialColour string
 }
 
 type itemValueTypeSpec struct {
@@ -1605,9 +1647,18 @@ func inspectItems(directory string) (itemSpec, error) {
 	if result.AirIdentifier == "" {
 		return itemSpec{}, fmt.Errorf("Dragonfly registered block.Air item not found")
 	}
+	armour, armourTypes, err := inspectArmourItems(types, functions, methods, registered, liveTiers, valueTypes)
+	if err != nil {
+		return itemSpec{}, err
+	}
+	result.Armour = armour
+	result.Types = append(result.Types, armourTypes...)
 
 	for typeOf, values := range registered {
 		declaration := types[typeOf.Name()]
+		if itemTypeByName(armourTypes, typeOf.Name()) != nil {
+			continue
+		}
 		if typeOf.Name() == "BookAndQuill" || typeOf.Name() == "WrittenBook" {
 			if len(values) != 1 {
 				return itemSpec{}, fmt.Errorf("Dragonfly item.%s registry states changed: %d", typeOf.Name(), len(values))
@@ -1687,6 +1738,425 @@ func inspectItems(directory string) (itemSpec, error) {
 		return itemSpec{}, fmt.Errorf("no safely representable Dragonfly items found")
 	}
 	return result, nil
+}
+
+func inspectArmourItems(
+	types map[string]*ast.TypeSpec,
+	functions map[string]*ast.FuncDecl,
+	methods map[string]map[string]*ast.FuncDecl,
+	registered map[reflect.Type][]world.Item,
+	toolTiers []dfitem.ToolTier,
+	valueTypes []itemValueTypeSpec,
+) (armourSpec, []itemTypeSpec, error) {
+	for name, wanted := range map[string][]string{
+		"Armour":             {"DefencePoints()->float64", "Toughness()->float64", "KnockBackResistance()->float64"},
+		"ArmourTier":         {"BaseDurability()->float64", "Toughness()->float64", "KnockBackResistance()->float64", "EnchantmentValue()->int", "Name()->string"},
+		"HelmetType":         {"embed:Armour", "Helmet()->bool"},
+		"ChestplateType":     {"embed:Armour", "Chestplate()->bool"},
+		"LeggingsType":       {"embed:Armour", "Leggings()->bool"},
+		"BootsType":          {"embed:Armour", "Boots()->bool"},
+		"ArmourTrimMaterial": {"TrimMaterial()->string", "MaterialColour()->string"},
+		"Trimmable":          {"WithTrim(ArmourTrim)->world.Item"},
+		"MaxCounter":         {"MaxCount()->int"},
+		"Enchantable":        {"EnchantmentValue()->int"},
+		"Durable":            {"DurabilityInfo()->DurabilityInfo"},
+		"Repairable":         {"embed:Durable", "RepairableBy(Stack)->bool"},
+		"Smeltable":          {"SmeltInfo()->SmeltInfo"},
+	} {
+		if err := validateItemInterface(types[name], name, wanted); err != nil {
+			return armourSpec{}, nil, err
+		}
+	}
+	if fields := exportedItemFields(types["ArmourTrim"]); !reflect.DeepEqual(fields, []string{"Template SmithingTemplateType", "Material ArmourTrimMaterial"}) {
+		return armourSpec{}, nil, fmt.Errorf("Dragonfly item.ArmourTrim fields changed: %v", fields)
+	}
+	if fields := exportedItemFields(types["DurabilityInfo"]); !reflect.DeepEqual(fields, []string{
+		"MaxDurability int", "BrokenItem func() Stack", "AttackDurability int", "BreakDurability int", "Persistent bool",
+	}) {
+		return armourSpec{}, nil, fmt.Errorf("Dragonfly item.DurabilityInfo fields changed: %v", fields)
+	}
+	if fields := exportedItemFields(types["SmeltInfo"]); !reflect.DeepEqual(fields, []string{
+		"Product Stack", "Experience float64", "Food bool", "Ores bool",
+	}) {
+		return armourSpec{}, nil, fmt.Errorf("Dragonfly item.SmeltInfo fields changed: %v", fields)
+	}
+	zeroMethod := methods["ArmourTrim"]["Zero"]
+	if zeroMethod == nil || !valueReceiver(zeroMethod, "ArmourTrim") || rawParameterTypes(zeroMethod.Type.Params) != "" || rawResultTypes(zeroMethod.Type.Results) != "bool" {
+		return armourSpec{}, nil, fmt.Errorf("Dragonfly item.ArmourTrim.Zero signature changed")
+	}
+	liveTiers := dfitem.ArmourTiers()
+	tierNames, err := inspectArmourTierNames(functions["ArmourTiers"])
+	if err != nil {
+		return armourSpec{}, nil, err
+	}
+	if len(tierNames) != len(liveTiers) {
+		return armourSpec{}, nil, fmt.Errorf("Dragonfly item.ArmourTiers AST/live lengths differ: %d/%d", len(tierNames), len(liveTiers))
+	}
+	result := armourSpec{Tiers: make([]armourTierSpec, len(liveTiers))}
+	for index, tier := range liveTiers {
+		typeOf := reflect.TypeOf(tier)
+		if typeOf.Name() != tierNames[index] {
+			return armourSpec{}, nil, fmt.Errorf("Dragonfly item.ArmourTiers AST/live order differs at %d: %s/%s", index, tierNames[index], typeOf.Name())
+		}
+		if err := validateArmourTierType(types[typeOf.Name()], typeOf, methods[typeOf.Name()]); err != nil {
+			return armourSpec{}, nil, err
+		}
+		result.Tiers[index] = armourTierSpec{
+			Name:                typeOf.Name(),
+			BaseDurability:      tier.BaseDurability(),
+			Toughness:           tier.Toughness(),
+			KnockBackResistance: tier.KnockBackResistance(),
+			EnchantmentValue:    tier.EnchantmentValue(),
+			IdentifierName:      tier.Name(),
+			Colour:              typeOf.NumField() == 1,
+		}
+	}
+
+	var definitions []itemTypeSpec
+	for typeOf, values := range registered {
+		if len(values) == 0 {
+			continue
+		}
+		if _, ok := values[0].(dfitem.Armour); !ok {
+			continue
+		}
+		if !reflect.DeepEqual(exportedItemFields(types[typeOf.Name()]), []string{"Tier ArmourTier", "Trim ArmourTrim"}) {
+			continue
+		}
+		piece, definition, err := inspectArmourPiece(typeOf, values, types[typeOf.Name()], methods[typeOf.Name()], liveTiers, toolTiers, valueTypes)
+		if err != nil {
+			return armourSpec{}, nil, err
+		}
+		result.Pieces = append(result.Pieces, piece)
+		definitions = append(definitions, definition)
+	}
+	if len(result.Pieces) != 4 {
+		return armourSpec{}, nil, fmt.Errorf("Dragonfly armour piece count changed: %d", len(result.Pieces))
+	}
+	sort.Slice(result.Pieces, func(i, j int) bool { return result.Pieces[i].Name < result.Pieces[j].Name })
+	sort.Slice(definitions, func(i, j int) bool { return definitions[i].Name < definitions[j].Name })
+
+	for _, value := range dfitem.ArmourTrimMaterials() {
+		material, ok := value.(dfitem.ArmourTrimMaterial)
+		if !ok {
+			return armourSpec{}, nil, fmt.Errorf("Dragonfly armour trim material %T does not implement item.ArmourTrimMaterial", value)
+		}
+		typeOf := reflect.TypeOf(value)
+		if typeOf.Kind() == reflect.Pointer {
+			typeOf = typeOf.Elem()
+		}
+		if typeOf.PkgPath() != "github.com/df-mc/dragonfly/server/item" || typeOf.Name() == "" || types[typeOf.Name()] == nil {
+			return armourSpec{}, nil, fmt.Errorf("Dragonfly armour trim material %T is unsupported", value)
+		}
+		for methodName := range map[string]bool{"TrimMaterial": true, "MaterialColour": true} {
+			method := methods[typeOf.Name()][methodName]
+			if method == nil || !valueReceiver(method, typeOf.Name()) || rawParameterTypes(method.Type.Params) != "" || rawResultTypes(method.Type.Results) != "string" {
+				return armourSpec{}, nil, fmt.Errorf("Dragonfly item.%s.%s signature changed", typeOf.Name(), methodName)
+			}
+		}
+		result.TrimMaterials = append(result.TrimMaterials, armourTrimMaterialSpec{
+			ItemName: typeOf.Name(), Material: material.TrimMaterial(), MaterialColour: material.MaterialColour(),
+		})
+		if _, registeredDirectly := registered[typeOf]; !registeredDirectly {
+			if fields := exportedItemFields(types[typeOf.Name()]); len(fields) != 0 {
+				return armourSpec{}, nil, fmt.Errorf("Dragonfly unregistered armour trim material %s has fields: %v", typeOf.Name(), fields)
+			}
+			state, err := inspectItemState(typeOf, value, nil, toolTiers, valueTypes)
+			if err != nil {
+				return armourSpec{}, nil, err
+			}
+			definitions = append(definitions, itemTypeSpec{Name: typeOf.Name(), States: []itemStateSpec{state}})
+		}
+	}
+	if len(result.TrimMaterials) != 11 {
+		return armourSpec{}, nil, fmt.Errorf("Dragonfly armour trim material count changed: %d", len(result.TrimMaterials))
+	}
+	sort.Slice(definitions, func(i, j int) bool { return definitions[i].Name < definitions[j].Name })
+	return result, definitions, nil
+}
+
+func validateItemInterface(spec *ast.TypeSpec, name string, wanted []string) error {
+	if spec == nil {
+		return fmt.Errorf("Dragonfly item.%s interface missing", name)
+	}
+	interfaceType, ok := spec.Type.(*ast.InterfaceType)
+	if !ok {
+		return fmt.Errorf("Dragonfly item.%s is not an interface", name)
+	}
+	var members []string
+	for _, field := range interfaceType.Methods.List {
+		if len(field.Names) == 0 {
+			members = append(members, "embed:"+formatGoExpression(field.Type))
+			continue
+		}
+		method, ok := field.Type.(*ast.FuncType)
+		if !ok || len(field.Names) != 1 {
+			return fmt.Errorf("Dragonfly item.%s contains unsupported member", name)
+		}
+		members = append(members, field.Names[0].Name+"("+rawParameterTypes(method.Params)+")->"+rawResultTypes(method.Results))
+	}
+	if !reflect.DeepEqual(members, wanted) {
+		return fmt.Errorf("Dragonfly item.%s interface changed: %v", name, members)
+	}
+	return nil
+}
+
+func inspectArmourTierNames(function *ast.FuncDecl) ([]string, error) {
+	if function == nil || function.Type.Params == nil || function.Type.Params.NumFields() != 0 ||
+		function.Type.Results == nil || len(function.Type.Results.List) != 1 ||
+		formatGoExpression(function.Type.Results.List[0].Type) != "[]ArmourTier" || function.Body == nil || len(function.Body.List) != 1 {
+		return nil, fmt.Errorf("Dragonfly item.ArmourTiers signature/body changed")
+	}
+	statement, ok := function.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(statement.Results) != 1 {
+		return nil, fmt.Errorf("Dragonfly item.ArmourTiers body changed")
+	}
+	literal, ok := statement.Results[0].(*ast.CompositeLit)
+	if !ok || formatGoExpression(literal.Type) != "[]ArmourTier" {
+		return nil, fmt.Errorf("Dragonfly item.ArmourTiers body changed")
+	}
+	names := make([]string, 0, len(literal.Elts))
+	for _, raw := range literal.Elts {
+		value, ok := raw.(*ast.CompositeLit)
+		if !ok {
+			return nil, fmt.Errorf("Dragonfly item.ArmourTiers contains unsupported value")
+		}
+		name := formatGoExpression(value.Type)
+		if !strings.HasPrefix(name, "ArmourTier") {
+			return nil, fmt.Errorf("Dragonfly item.ArmourTiers contains unsupported type %s", name)
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func validateArmourTierType(spec *ast.TypeSpec, typeOf reflect.Type, methods map[string]*ast.FuncDecl) error {
+	fields := exportedItemFields(spec)
+	wantFields := []string(nil)
+	if typeOf.Name() == "ArmourTierLeather" {
+		wantFields = []string{"Colour color.RGBA"}
+	}
+	if !reflect.DeepEqual(fields, wantFields) {
+		return fmt.Errorf("Dragonfly item.%s fields changed: %v", typeOf.Name(), fields)
+	}
+	for name, signature := range map[string]goSignature{
+		"BaseDurability":      {Results: "float64"},
+		"Toughness":           {Results: "float64"},
+		"KnockBackResistance": {Results: "float64"},
+		"EnchantmentValue":    {Results: "int"},
+		"Name":                {Results: "string"},
+	} {
+		method := methods[name]
+		if method == nil || !valueReceiver(method, typeOf.Name()) || rawParameterTypes(method.Type.Params) != signature.Parameters || rawResultTypes(method.Type.Results) != signature.Results {
+			return fmt.Errorf("Dragonfly item.%s.%s signature changed", typeOf.Name(), name)
+		}
+	}
+	return nil
+}
+
+func inspectArmourPiece(
+	typeOf reflect.Type,
+	values []world.Item,
+	declaration *ast.TypeSpec,
+	methods map[string]*ast.FuncDecl,
+	armourTiers []dfitem.ArmourTier,
+	toolTiers []dfitem.ToolTier,
+	valueTypes []itemValueTypeSpec,
+) (armourPieceSpec, itemTypeSpec, error) {
+	if fields := exportedItemFields(declaration); !reflect.DeepEqual(fields, []string{"Tier ArmourTier", "Trim ArmourTrim"}) {
+		return armourPieceSpec{}, itemTypeSpec{}, fmt.Errorf("Dragonfly item.%s fields changed: %v", typeOf.Name(), fields)
+	}
+	slotMethod, err := armourSlotMethod(values[0])
+	if err != nil {
+		return armourPieceSpec{}, itemTypeSpec{}, err
+	}
+	if err := validateArmourPieceMethods(typeOf.Name(), slotMethod, methods); err != nil {
+		return armourPieceSpec{}, itemTypeSpec{}, err
+	}
+	divisor, err := inspectArmourDurabilityDivisor(methods["DurabilityInfo"])
+	if err != nil {
+		return armourPieceSpec{}, itemTypeSpec{}, fmt.Errorf("Dragonfly item.%s.DurabilityInfo: %w", typeOf.Name(), err)
+	}
+	piece := armourPieceSpec{
+		Name: typeOf.Name(), SlotMethod: slotMethod, DurabilityDivisor: divisor,
+		DefencePoints: make([]float64, len(armourTiers)), RepairItems: make([]string, len(armourTiers)), Smelts: make([]armourSmeltSpec, len(armourTiers)),
+	}
+	definition := itemTypeSpec{Name: typeOf.Name(), NBT: true, Armour: true}
+	byTier := map[reflect.Type]world.Item{}
+	for _, value := range values {
+		reflected := reflect.ValueOf(value)
+		if reflected.Kind() == reflect.Pointer {
+			reflected = reflected.Elem()
+		}
+		tier, ok := reflected.FieldByName("Tier").Interface().(dfitem.ArmourTier)
+		if !ok {
+			return armourPieceSpec{}, itemTypeSpec{}, fmt.Errorf("Dragonfly item.%s.Tier is not item.ArmourTier", typeOf.Name())
+		}
+		byTier[reflect.TypeOf(tier)] = value
+	}
+	for tierIndex, tier := range armourTiers {
+		value := byTier[reflect.TypeOf(tier)]
+		if value == nil {
+			return armourPieceSpec{}, itemTypeSpec{}, fmt.Errorf("Dragonfly item.%s has no %T registry state", typeOf.Name(), tier)
+		}
+		state, err := inspectItemState(typeOf, value, nil, toolTiers, valueTypes)
+		if err != nil {
+			return armourPieceSpec{}, itemTypeSpec{}, err
+		}
+		state.ArmourTier = tierIndex
+		definition.States = append(definition.States, state)
+		piece.DefencePoints[tierIndex] = value.(dfitem.Armour).DefencePoints()
+		repairItem, err := inspectArmourRepairItem(value)
+		if err != nil {
+			return armourPieceSpec{}, itemTypeSpec{}, err
+		}
+		piece.RepairItems[tierIndex] = repairItem
+		if smeltable, ok := value.(dfitem.Smeltable); ok {
+			info := smeltable.SmeltInfo()
+			if !info.Product.Empty() {
+				product := info.Product.Item()
+				productType := reflect.TypeOf(product)
+				if productType.Kind() == reflect.Pointer {
+					productType = productType.Elem()
+				}
+				if productType.PkgPath() != "github.com/df-mc/dragonfly/server/item" || productType.Name() == "" {
+					return armourPieceSpec{}, itemTypeSpec{}, fmt.Errorf("Dragonfly item.%s tier %T has unsupported smelt product %T", typeOf.Name(), tier, product)
+				}
+				piece.Smelts[tierIndex] = armourSmeltSpec{
+					Product: productType.Name(), Count: info.Product.Count(), Experience: info.Experience, Food: info.Food, Ores: info.Ores,
+				}
+			}
+		}
+	}
+	return piece, definition, nil
+}
+
+func armourSlotMethod(value world.Item) (string, error) {
+	switch value.(type) {
+	case dfitem.HelmetType:
+		return "Helmet", nil
+	case dfitem.ChestplateType:
+		return "Chestplate", nil
+	case dfitem.LeggingsType:
+		return "Leggings", nil
+	case dfitem.BootsType:
+		return "Boots", nil
+	default:
+		return "", fmt.Errorf("Dragonfly armour item %T has no supported slot interface", value)
+	}
+}
+
+func validateArmourPieceMethods(name, slotMethod string, methods map[string]*ast.FuncDecl) error {
+	wanted := map[string]goSignature{
+		"MaxCount":            {Results: "int"},
+		"DefencePoints":       {Results: "float64"},
+		"Toughness":           {Results: "float64"},
+		"KnockBackResistance": {Results: "float64"},
+		"EnchantmentValue":    {Results: "int"},
+		"DurabilityInfo":      {Results: "DurabilityInfo"},
+		"SmeltInfo":           {Results: "SmeltInfo"},
+		"RepairableBy":        {Parameters: "Stack", Results: "bool"},
+		slotMethod:            {Results: "bool"},
+		"WithTrim":            {Parameters: "ArmourTrim", Results: "world.Item"},
+		"EncodeItem":          {Results: "string,int16"},
+		"DecodeNBT":           {Parameters: "map[string]any", Results: "any"},
+		"EncodeNBT":           {Results: "map[string]any"},
+	}
+	for methodName, signature := range wanted {
+		method := methods[methodName]
+		if method == nil || !valueReceiver(method, name) || rawParameterTypes(method.Type.Params) != signature.Parameters || rawResultTypes(method.Type.Results) != signature.Results {
+			return fmt.Errorf("Dragonfly item.%s.%s signature changed", name, methodName)
+		}
+	}
+	return nil
+}
+
+func inspectArmourDurabilityDivisor(method *ast.FuncDecl) (float64, error) {
+	if method == nil || method.Body == nil || len(method.Body.List) != 1 {
+		return 0, fmt.Errorf("body changed")
+	}
+	statement, ok := method.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(statement.Results) != 1 {
+		return 0, fmt.Errorf("return changed")
+	}
+	literal, ok := statement.Results[0].(*ast.CompositeLit)
+	if !ok || formatGoExpression(literal.Type) != "DurabilityInfo" {
+		return 0, fmt.Errorf("return value changed")
+	}
+	var maximum ast.Expr
+	for _, raw := range literal.Elts {
+		pair, ok := raw.(*ast.KeyValueExpr)
+		if ok && formatGoExpression(pair.Key) == "MaxDurability" {
+			maximum = pair.Value
+			break
+		}
+	}
+	call, ok := maximum.(*ast.CallExpr)
+	if !ok || formatGoExpression(call.Fun) != "int" || len(call.Args) != 1 {
+		return 0, fmt.Errorf("maximum durability changed")
+	}
+	if isArmourBaseDurability(call.Args[0]) {
+		return 0, nil
+	}
+	addition, ok := call.Args[0].(*ast.BinaryExpr)
+	if !ok || addition.Op != token.ADD || !isArmourBaseDurability(addition.X) {
+		return 0, fmt.Errorf("maximum durability formula changed: %s", formatGoExpression(call.Args[0]))
+	}
+	division, ok := addition.Y.(*ast.BinaryExpr)
+	if !ok || division.Op != token.QUO || !isArmourBaseDurability(division.X) {
+		return 0, fmt.Errorf("maximum durability formula changed: %s", formatGoExpression(addition.Y))
+	}
+	literalDivisor, ok := division.Y.(*ast.BasicLit)
+	if !ok || literalDivisor.Kind != token.FLOAT {
+		return 0, fmt.Errorf("maximum durability divisor changed")
+	}
+	divisor, err := strconv.ParseFloat(literalDivisor.Value, 64)
+	if err != nil || divisor <= 0 {
+		return 0, fmt.Errorf("invalid maximum durability divisor %q", literalDivisor.Value)
+	}
+	return divisor, nil
+}
+
+func isArmourBaseDurability(expression ast.Expr) bool {
+	call, ok := expression.(*ast.CallExpr)
+	if !ok || len(call.Args) != 0 {
+		return false
+	}
+	method, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || method.Sel.Name != "BaseDurability" {
+		return false
+	}
+	tier, ok := method.X.(*ast.SelectorExpr)
+	if !ok || tier.Sel.Name != "Tier" {
+		return false
+	}
+	_, ok = tier.X.(*ast.Ident)
+	return ok
+}
+
+func inspectArmourRepairItem(value world.Item) (string, error) {
+	repairable, ok := value.(dfitem.Repairable)
+	if !ok {
+		return "", fmt.Errorf("Dragonfly armour item %T is not repairable", value)
+	}
+	seen := map[string]bool{}
+	for _, candidate := range world.Items() {
+		typeOf := reflect.TypeOf(candidate)
+		if typeOf == nil {
+			continue
+		}
+		if typeOf.Kind() == reflect.Pointer {
+			typeOf = typeOf.Elem()
+		}
+		if typeOf.PkgPath() != "github.com/df-mc/dragonfly/server/item" || typeOf.Name() == "" || seen[typeOf.Name()] {
+			continue
+		}
+		seen[typeOf.Name()] = true
+		if repairable.RepairableBy(dfitem.NewStack(candidate, 1)) {
+			return typeOf.Name(), nil
+		}
+	}
+	return "", fmt.Errorf("Dragonfly armour item %T has no registered repair item", value)
 }
 
 func inspectFireworkItemType(
@@ -2231,7 +2701,7 @@ func inspectItemState(typeOf reflect.Type, value world.Item, fields []itemFieldS
 	_, repairable := value.(dfitem.Repairable)
 	_, enchantedBook := value.(dfitem.EnchantedBook)
 	capability.AllowsAnvilCost = repairable || enchantedBook
-	state := itemStateSpec{Identifier: identifier, Metadata: int(metadata), ToolTier: -1, Capability: capability}
+	state := itemStateSpec{Identifier: identifier, Metadata: int(metadata), ToolTier: -1, ArmourTier: -1, Capability: capability}
 	reflected := reflect.ValueOf(value)
 	if reflected.Kind() == reflect.Pointer {
 		reflected = reflected.Elem()
@@ -3200,6 +3670,12 @@ func formatGoExpression(expression ast.Expr) string {
 		return "..." + formatGoExpression(value.Elt)
 	case *ast.MapType:
 		return "map[" + formatGoExpression(value.Key) + "]" + formatGoExpression(value.Value)
+	case *ast.FuncType:
+		result := "func(" + rawParameterTypes(value.Params) + ")"
+		if returns := rawResultTypes(value.Results); returns != "" {
+			result += " " + returns
+		}
+		return result
 	default:
 		return fmt.Sprintf("%T", expression)
 	}
@@ -3818,16 +4294,27 @@ func generateItems(spec itemSpec) []byte {
 		}
 		generateItemValueType(&output, valueType, "        ")
 	}
+	generateArmourTypes(&output, spec.Armour)
 	if itemTypeByName(spec.Types, "Firework") != nil {
 		generateFireworkExplosionType(&output)
 	}
 	for _, definition := range spec.Types {
+		if definition.Armour {
+			generateArmourPieceType(&output, *armourPieceByName(spec.Armour.Pieces, definition.Name), spec.Armour)
+			continue
+		}
 		if definition.NBT {
 			generateNBTItemType(&output, definition.Name)
 			continue
 		}
 		if len(definition.Fields) == 0 {
-			fmt.Fprintf(&output, "        public readonly record struct %s : World.Item;\n", definition.Name)
+			if material := armourTrimMaterialByName(spec.Armour.TrimMaterials, definition.Name); material != nil {
+				fmt.Fprintf(&output, "        public readonly record struct %s : World.Item, ArmourTrimMaterial\n        {\n", definition.Name)
+				fmt.Fprintf(&output, "            public string TrimMaterial() => %s;\n", strconv.Quote(material.Material))
+				fmt.Fprintf(&output, "            public string MaterialColour() => %s;\n        }\n", strconv.Quote(material.MaterialColour))
+			} else {
+				fmt.Fprintf(&output, "        public readonly record struct %s : World.Item;\n", definition.Name)
+			}
 			continue
 		}
 		parameters := make([]parameter, len(definition.Fields))
@@ -3860,6 +4347,8 @@ func generateItems(spec itemSpec) []byte {
 		for _, state := range definition.States {
 			fmt.Fprintf(&output, "                case Item.%s", definition.Name)
 			switch {
+			case definition.Armour:
+				fmt.Fprintf(&output, " value when value.Tier is Item.%s:\n", spec.Armour.Tiers[state.ArmourTier].Name)
 			case definition.Name == "FireworkStar":
 				valueType := findItemValueType(spec.ValueTypes, "Colour")
 				fmt.Fprintf(&output, " value when value.FireworkExplosion.Colour == %s:\n", itemValueFactory(*valueType, state.Values[0]))
@@ -3890,6 +4379,8 @@ func generateItems(spec itemSpec) []byte {
 		for _, state := range definition.States {
 			fmt.Fprintf(&output, "            if (identifier == %s && metadata == %d) return new Item.%s(", strconv.Quote(state.Identifier), state.Metadata, definition.Name)
 			switch {
+			case definition.Armour:
+				fmt.Fprintf(&output, "new Item.%s()", spec.Armour.Tiers[state.ArmourTier].Name)
 			case definition.Name == "FireworkStar":
 				valueType := findItemValueType(spec.ValueTypes, "Colour")
 				fmt.Fprintf(&output, "new Item.FireworkExplosion { Colour = %s }", itemValueFactory(*valueType, state.Values[0]))
@@ -3914,9 +4405,167 @@ func generateItems(spec itemSpec) []byte {
 	fmt.Fprintf(&output, "        internal static bool IsAir(World.Item item) =>\n            TryEncode(item, out var identifier, out _) && identifier == %s;\n\n", strconv.Quote(spec.AirIdentifier))
 	output.WriteString("        private sealed record EncodedItem(string Identifier, int Metadata) : World.Item;\n")
 	output.WriteString("    }\n\n")
+	generateArmourCodec(&output, spec)
 	generateItemCapabilities(&output, spec)
 	output.WriteString("}\n")
 	return output.Bytes()
+}
+
+func generateArmourTypes(output *bytes.Buffer, spec armourSpec) {
+	if len(spec.Tiers) == 0 {
+		return
+	}
+	output.WriteString(`        public interface Armour
+        {
+            double DefencePoints();
+            double Toughness();
+            double KnockBackResistance();
+        }
+
+        public interface ArmourTier
+        {
+            double BaseDurability();
+            double Toughness();
+            double KnockBackResistance();
+            int EnchantmentValue();
+            string Name();
+        }
+
+        public interface HelmetType : Armour { bool Helmet(); }
+        public interface ChestplateType : Armour { bool Chestplate(); }
+        public interface LeggingsType : Armour { bool Leggings(); }
+        public interface BootsType : Armour { bool Boots(); }
+
+        public interface ArmourTrimMaterial
+        {
+            string TrimMaterial();
+            string MaterialColour();
+        }
+
+        public interface Trimmable { World.Item WithTrim(ArmourTrim trim); }
+        public interface MaxCounter { int MaxCount(); }
+        public interface Enchantable { int EnchantmentValue(); }
+        public interface Durable { DurabilityInfo DurabilityInfo(); }
+        public interface Repairable : Durable { bool RepairableBy(Stack stack); }
+        public interface Smeltable { SmeltInfo SmeltInfo(); }
+
+        public readonly record struct ArmourTrim(SmithingTemplateType Template, ArmourTrimMaterial? Material)
+        {
+            public bool Zero() => Material is null || Template == TemplateNetheriteUpgrade();
+        }
+
+        public readonly record struct DurabilityInfo(
+            int MaxDurability,
+            Func<Stack>? BrokenItem = null,
+            int AttackDurability = 0,
+            int BreakDurability = 0,
+            bool Persistent = false);
+
+        public readonly record struct SmeltInfo(
+            Stack Product = default,
+            double Experience = 0d,
+            bool Food = false,
+            bool Ores = false);
+
+`)
+	for _, tier := range spec.Tiers {
+		if tier.Colour {
+			fmt.Fprintf(output, "        public readonly record struct %s(global::Dragonfly.Color.RGBA Colour = default) : ArmourTier\n", tier.Name)
+		} else {
+			fmt.Fprintf(output, "        public readonly record struct %s : ArmourTier\n", tier.Name)
+		}
+		output.WriteString("        {\n")
+		fmt.Fprintf(output, "            public double BaseDurability() => %s;\n", csharpDouble(tier.BaseDurability))
+		fmt.Fprintf(output, "            public double Toughness() => %s;\n", csharpDouble(tier.Toughness))
+		fmt.Fprintf(output, "            public double KnockBackResistance() => %s;\n", csharpDouble(tier.KnockBackResistance))
+		fmt.Fprintf(output, "            public int EnchantmentValue() => %d;\n", tier.EnchantmentValue)
+		fmt.Fprintf(output, "            public string Name() => %s;\n        }\n\n", strconv.Quote(tier.IdentifierName))
+	}
+	output.WriteString("        public static ArmourTier[] ArmourTiers() =>\n        [\n")
+	for _, tier := range spec.Tiers {
+		fmt.Fprintf(output, "            new %s(),\n", tier.Name)
+	}
+	output.WriteString("        ];\n\n        public static World.Item[] ArmourTrimMaterials() =>\n        [\n")
+	for _, material := range spec.TrimMaterials {
+		fmt.Fprintf(output, "            new %s(),\n", material.ItemName)
+	}
+	output.WriteString("        ];\n\n")
+}
+
+func generateArmourPieceType(output *bytes.Buffer, piece armourPieceSpec, spec armourSpec) {
+	fmt.Fprintf(output, "        public readonly record struct %s(ArmourTier Tier, ArmourTrim Trim = default) : World.Item, %sType, Trimmable, MaxCounter, Enchantable, Repairable, Smeltable\n        {\n", piece.Name, piece.SlotMethod)
+	output.WriteString("            public int MaxCount() => 1;\n")
+	output.WriteString("            public double DefencePoints() => Tier.Name() switch\n            {\n")
+	for tierIndex, tier := range spec.Tiers {
+		fmt.Fprintf(output, "                %s => %s,\n", strconv.Quote(tier.IdentifierName), csharpDouble(piece.DefencePoints[tierIndex]))
+	}
+	fmt.Fprintf(output, "                _ => throw new InvalidOperationException(%s),\n            };\n", strconv.Quote("invalid "+strings.ToLower(piece.Name)+" tier"))
+	output.WriteString("            public double Toughness() => Tier.Toughness();\n")
+	output.WriteString("            public double KnockBackResistance() => Tier.KnockBackResistance();\n")
+	output.WriteString("            public int EnchantmentValue() => Tier.EnchantmentValue();\n")
+	if piece.DurabilityDivisor == 0 {
+		output.WriteString("            public DurabilityInfo DurabilityInfo() => new((int)Tier.BaseDurability(), static () => default);\n")
+	} else {
+		fmt.Fprintf(output, "            public DurabilityInfo DurabilityInfo()\n            {\n                var value = Tier.BaseDurability();\n                return new((int)(value + value / %s), static () => default);\n            }\n", csharpDouble(piece.DurabilityDivisor))
+	}
+	output.WriteString("            public SmeltInfo SmeltInfo() => Tier switch\n            {\n")
+	for tierIndex, tier := range spec.Tiers {
+		smelt := piece.Smelts[tierIndex]
+		if smelt.Product == "" {
+			continue
+		}
+		fmt.Fprintf(output, "                %s => new(NewStack(new %s(), %d), %s, %s, %s),\n",
+			tier.Name, smelt.Product, smelt.Count, csharpDouble(smelt.Experience), strconv.FormatBool(smelt.Food), strconv.FormatBool(smelt.Ores))
+	}
+	output.WriteString("                _ => default,\n            };\n")
+	output.WriteString("            public bool RepairableBy(Stack stack) => Tier switch\n            {\n")
+	for tierIndex, tier := range spec.Tiers {
+		fmt.Fprintf(output, "                %s => stack.Item() is %s,\n", tier.Name, piece.RepairItems[tierIndex])
+	}
+	output.WriteString("                _ => false,\n            };\n")
+	fmt.Fprintf(output, "            bool %sType.%s() => true;\n", piece.SlotMethod, piece.SlotMethod)
+	fmt.Fprintf(output, "            public World.Item WithTrim(ArmourTrim trim) => new %s(Tier, trim);\n", piece.Name)
+	output.WriteString("        }\n\n")
+}
+
+func generateArmourCodec(output *bytes.Buffer, spec itemSpec) {
+	if len(spec.Armour.Tiers) == 0 {
+		return
+	}
+	output.WriteString("    internal static class ArmourCodec\n    {\n")
+	output.WriteString("        internal static bool TryTrimMaterial(string name, out Item.ArmourTrimMaterial? material)\n        {\n            switch (name)\n            {\n")
+	for _, material := range spec.Armour.TrimMaterials {
+		fmt.Fprintf(output, "                case %s: material = new Item.%s(); return true;\n", strconv.Quote(material.Material), material.ItemName)
+	}
+	output.WriteString("                default: material = null; return false;\n            }\n        }\n\n")
+	templates := findItemValueType(spec.ValueTypes, "SmithingTemplateType")
+	output.WriteString("        internal static bool TryTemplate(string name, out Item.SmithingTemplateType template)\n        {\n            switch (name)\n            {\n")
+	for index, value := range templates.Values {
+		stringer, ok := value.(interface{ String() string })
+		if !ok {
+			panic(fmt.Sprintf("item.SmithingTemplateType value %T has no String method", value))
+		}
+		fmt.Fprintf(output, "                case %s: template = %s; return true;\n", strconv.Quote(stringer.String()), itemValueFactory(*templates, index))
+	}
+	output.WriteString("                default: template = default; return false;\n            }\n        }\n    }\n\n")
+}
+
+func armourPieceByName(pieces []armourPieceSpec, name string) *armourPieceSpec {
+	for index := range pieces {
+		if pieces[index].Name == name {
+			return &pieces[index]
+		}
+	}
+	return nil
+}
+
+func armourTrimMaterialByName(materials []armourTrimMaterialSpec, name string) *armourTrimMaterialSpec {
+	for index := range materials {
+		if materials[index].ItemName == name {
+			return &materials[index]
+		}
+	}
+	return nil
 }
 
 func itemTypeByName(types []itemTypeSpec, name string) *itemTypeSpec {
@@ -4115,6 +4764,9 @@ func generateItemCapabilities(output *bytes.Buffer, spec itemSpec) {
 }
 
 func csharpItemPattern(definition itemTypeSpec, state itemStateSpec, spec itemSpec) string {
+	if definition.Armour {
+		return fmt.Sprintf("Item.%s value when value.Tier is Item.%s", definition.Name, spec.Armour.Tiers[state.ArmourTier].Name)
+	}
 	if definition.Name == "FireworkStar" {
 		valueType := findItemValueType(spec.ValueTypes, "Colour")
 		return fmt.Sprintf("Item.FireworkStar value when value.FireworkExplosion.Colour == %s", itemValueFactory(*valueType, state.Values[0]))

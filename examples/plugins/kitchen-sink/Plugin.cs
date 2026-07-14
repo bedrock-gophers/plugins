@@ -596,6 +596,56 @@ public sealed class KitchenSink : Plugin
                     output.Error("Firework star round-trip failed.");
                     return;
                 }
+
+                var armourTrim = new Dragonfly.Item.ArmourTrim(
+                    Dragonfly.Item.TemplateFlow(),
+                    new Dragonfly.Item.RedstoneWire());
+                var dyedLeather = new Dragonfly.Item.ArmourTierLeather(
+                    new Dragonfly.Color.RGBA(1, 2, 3, 255));
+                var dyedHelmet = new Dragonfly.Item.Helmet(dyedLeather, armourTrim);
+                var helmetDurability = dyedHelmet.DurabilityInfo();
+                var copperChestplate = new Dragonfly.Item.Chestplate(new Dragonfly.Item.ArmourTierCopper());
+                var copperSmelt = copperChestplate.SmeltInfo();
+                var redstoneMaterial = new Dragonfly.Item.RedstoneWire();
+                if (Dragonfly.Item.ArmourTiers().Length != 7 ||
+                    Dragonfly.Item.ArmourTrimMaterials().Length != 11 ||
+                    dyedLeather.BaseDurability() != 55d || dyedLeather.Name() != "leather" ||
+                    dyedHelmet.MaxCount() != 1 || dyedHelmet.DefencePoints() != 1d ||
+                    dyedHelmet.Toughness() != 0d || dyedHelmet.KnockBackResistance() != 0d ||
+                    dyedHelmet.EnchantmentValue() != 15 || helmetDurability.MaxDurability != 55 ||
+                    helmetDurability.BrokenItem is null || !helmetDurability.BrokenItem().Empty() ||
+                    !((Dragonfly.Item.HelmetType)dyedHelmet).Helmet() ||
+                    !dyedHelmet.RepairableBy(Dragonfly.Item.NewStack(new Dragonfly.Item.Leather(), 1)) ||
+                    dyedHelmet.RepairableBy(Dragonfly.Item.NewStack(new Dragonfly.Item.Diamond(), 1)) ||
+                    copperSmelt.Product.Item() is not Dragonfly.Item.CopperNugget ||
+                    copperSmelt.Product.Count() != 1 || copperSmelt.Experience != 0.1d ||
+                    copperSmelt.Food || !copperSmelt.Ores ||
+                    redstoneMaterial.TrimMaterial() != "redstone" || redstoneMaterial.MaterialColour() != "§m" ||
+                    dyedHelmet.WithTrim(default) is not Dragonfly.Item.Helmet untrimmed || !untrimmed.Trim.Zero() ||
+                    Dragonfly.Item.NewStack(dyedHelmet, 1).Comparable(Dragonfly.Item.NewStack(untrimmed, 1)))
+                {
+                    output.Error("Armour behavior failed.");
+                    return;
+                }
+
+                var armourItems = new List<World.Item>();
+                foreach (var tier in Dragonfly.Item.ArmourTiers())
+                {
+                    armourItems.Add(tier is Dragonfly.Item.ArmourTierLeather ? dyedHelmet : new Dragonfly.Item.Helmet(tier));
+                    armourItems.Add(new Dragonfly.Item.Chestplate(tier));
+                    armourItems.Add(new Dragonfly.Item.Leggings(tier));
+                    armourItems.Add(new Dragonfly.Item.Boots(tier));
+                }
+                foreach (var armourItem in armourItems)
+                {
+                    inventory.SetItem(0, Dragonfly.Item.NewStack(armourItem, 1));
+                    var storedArmour = inventory.Item(0).Item();
+                    if (storedArmour?.GetType() != armourItem.GetType() || !storedArmour.Equals(armourItem))
+                    {
+                        output.Error("Armour round-trip failed.");
+                        return;
+                    }
+                }
                 output.Printf(
                     "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, added_empty={4}, variants={5}",
                     typed.Tier.Name,
@@ -603,7 +653,7 @@ public sealed class KitchenSink : Plugin
                     held.Item() is Dragonfly.Item.Sword ? "true" : "false",
                     armour.Inventory().Size(),
                     addedEmpty,
-                    variants.Length + 4);
+                    variants.Length + 32);
             }
             finally
             {
