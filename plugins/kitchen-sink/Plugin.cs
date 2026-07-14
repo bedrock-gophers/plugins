@@ -40,13 +40,23 @@ public sealed class KitchenSink : Plugin
             new KitchenForm(),
             new KitchenRawFormCommand(),
             new KitchenEffect(),
-            new KitchenCrop()));
+            new KitchenCrop(),
+            new KitchenKinematics(),
+            new KitchenHeal(),
+            new KitchenWorld(),
+            new KitchenEntities(),
+            new KitchenHandle()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
     public override void OnDisable() => Console.WriteLine(
         $"kitchen-sink disabled: jumps={_jumps}, punches={_punches}, " +
         $"sprints={_sprints}, sneaks={_sneaks}, quits={_quits}");
+
+    public override void OnJoin(Player.Context ctx)
+    {
+        if (string.IsNullOrWhiteSpace(ctx.Player().Name())) ctx.Cancel();
+    }
 
     public override void HandleMove(Player.Context ctx, Vector3 newPos, Rotation newRot)
     {
@@ -137,7 +147,16 @@ public sealed class KitchenSink : Plugin
         Cube.Face face,
         Vector3 clickPos) => _ = (pos, face, clickPos);
 
-    public override void HandleItemUseOnEntity(Player.Context ctx, World.Entity entity) => _ = entity;
+    public override void HandleItemUseOnEntity(Player.Context ctx, World.Entity entity)
+    {
+        if (entity is Player target) _ = target.Name();
+        if (!Finite(entity.Position()) || !Finite(entity.Rotation()))
+        {
+            entity.Close();
+            ctx.Cancel();
+        }
+        _ = entity.H();
+    }
 
     public override void HandleItemRelease(Player.Context ctx, Item.Stack item, TimeSpan duration) =>
         _ = (item, duration);
@@ -153,7 +172,8 @@ public sealed class KitchenSink : Plugin
     {
         force = Math.Max(0, force);
         height = Math.Max(0, height);
-        _ = (entity, critical);
+        if (entity is Player target) _ = target.Name();
+        _ = critical;
     }
     public override void HandleExperienceGain(Player.Context ctx, ref int amount) => amount = Math.Max(0, amount);
 
@@ -210,6 +230,9 @@ public sealed class KitchenSink : Plugin
 
     private static bool Finite(Vector3 value) =>
         double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
+
+    private static bool Finite(Rotation value) =>
+        double.IsFinite(value.Yaw) && double.IsFinite(value.Pitch);
 
     internal sealed class KitchenStatus(KitchenSink plugin) : Cmd.Runnable
     {
@@ -271,6 +294,75 @@ public sealed class KitchenSink : Plugin
 
         public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx) =>
             output.Printf("position={0},{1},{2}", Value.X, Value.Y, Value.Z);
+    }
+
+    internal sealed class KitchenKinematics : Cmd.Runnable
+    {
+        public Cmd.SubCommand Kinematics;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var position = player.Position();
+            var velocity = player.Velocity();
+            var rotation = player.Rotation();
+            player.Teleport(position);
+            player.Move(default, 0, 0);
+            player.Displace(default);
+            player.SetVelocity(velocity);
+            output.Printf(
+                "position={0},{1},{2}, velocity={3},{4},{5}, rotation={6},{7}",
+                position.X, position.Y, position.Z,
+                velocity.X, velocity.Y, velocity.Z,
+                rotation.Yaw, rotation.Pitch);
+        }
+    }
+
+    internal sealed class KitchenHeal : Cmd.Runnable
+    {
+        public Cmd.SubCommand Heal;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var healed = player.Heal(player.MaxHealth(), new World.InstantHealingSource());
+            output.Printf("healed={0}, health={1}", healed, player.Health());
+        }
+    }
+
+    internal sealed class KitchenWorld : Cmd.Runnable
+    {
+        public Cmd.SubCommand World;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var arena = Dragonfly.World.OpenManaged(
+                "kitchen:arena",
+                new Dragonfly.World.ManagedOpenSpec("kitchen/arena"));
+            if (arena is null)
+            {
+                output.Error("Could not open the managed arena world.");
+                return;
+            }
+            var spawn = arena.Spawn();
+            arena.SetSpawn(spawn);
+            arena.Save();
+            player.ChangeWorld(arena, spawn.Vec3Middle());
+            output.Printf("world={0}, spawn={1},{2},{3}", arena.Name(), spawn.X(), spawn.Y(), spawn.Z());
+        }
     }
 
     internal sealed class KitchenDestination : Cmd.Runnable
@@ -487,6 +579,60 @@ public sealed class KitchenSink : Plugin
         }
     }
 
+    internal sealed class KitchenEntities : Cmd.Runnable
+    {
+        public Cmd.SubCommand Entities;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (tx is null)
+            {
+                output.Error("A world transaction is required.");
+                return;
+            }
+            var world = tx.World();
+            var entityCount = tx.Entities().Count();
+            var players = tx.Players().OfType<Player>().ToArray();
+            foreach (var player in players) player.Message("Kitchen entity iteration is live.");
+            output.Printf("world={0}, entities={1}, players={2}", world.Name(), entityCount, players.Length);
+        }
+    }
+
+    internal sealed class KitchenHandle : Cmd.Runnable
+    {
+        public Cmd.SubCommand Handle;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (tx is null)
+            {
+                output.Error("A world transaction is required.");
+                return;
+            }
+            var entity = tx.Entities().FirstOrDefault(candidate => candidate is not Player);
+            if (entity is null)
+            {
+                output.Error("A non-player entity is required.");
+                return;
+            }
+            var before = entity.H();
+            var uuid = before.UUID();
+            var (resolvedBefore, foundBefore) = before.Entity(tx);
+            var removed = tx.RemoveEntity(entity);
+            var (_, foundDetached) = removed.Entity(tx);
+            var added = tx.AddEntityAt(removed, source.Position());
+            var (resolvedAfter, foundAfter) = removed.Entity(tx);
+            output.Printf(
+                "same={0}, uuid={1}, before={2}, detached={3}, after={4}, closed={5}",
+                before.Equals(removed) && removed.Equals(added.H()) ? "true" : "false",
+                uuid,
+                foundBefore && resolvedBefore is not null ? "true" : "false",
+                foundDetached ? "true" : "false",
+                foundAfter && resolvedAfter is not null ? "true" : "false",
+                removed.Closed() ? "true" : "false");
+        }
+    }
+
     internal sealed class KitchenParticle : Cmd.Runnable
     {
         public Cmd.SubCommand Particle;
@@ -635,11 +781,15 @@ public sealed class KitchenSink : Plugin
             var enderChest = player.EnderChestInventory();
             var previousEnderItem = enderChest.Item(0);
             var (mainHand, offHand) = player.HeldItems();
+            var armour = player.Armour();
+            var helmet = armour.Helmet();
             var sword = Dragonfly.Item.NewStack(
                     new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond),
                     1)
                 .WithCustomName("Kitchen sword")
-                .WithLore("Generated from Dragonfly", "Restored after this command");
+                .WithLore("Generated from Dragonfly", "Restored after this command")
+                .WithValue("practice:item", "lobby_ffa_selector")
+                .WithEnchantments(Dragonfly.Item.NewEnchantment(Dragonfly.Item.Unbreaking, 1));
             try
             {
                 inventory.SetItem(0, sword);
@@ -648,14 +798,26 @@ public sealed class KitchenSink : Plugin
                 var stored = inventory.Item(0);
                 var enderStored = enderChest.Item(0);
                 var (held, _) = player.HeldItems();
-                var armour = player.Armour();
-                var helmet = armour.Helmet();
-                armour.SetHelmet(helmet);
+                var protectedHelmet = Dragonfly.Item.NewStack(
+                        new Dragonfly.Item.Helmet(new Dragonfly.Item.ArmourTierDiamond()),
+                        1)
+                    .WithEnchantments(Dragonfly.Item.NewEnchantment(Dragonfly.Item.Protection, 1));
+                armour.SetHelmet(protectedHelmet);
                 var addedEmpty = inventory.AddItem(default);
                 if (stored.Item() is not Dragonfly.Item.Sword typed ||
                     enderStored.Item() is not Dragonfly.Item.Sword || enderChest.Size() != 27)
                 {
                     output.Error("Typed item round-trip failed.");
+                    return;
+                }
+                var (selector, selectorFound) = stored.Value("practice:item");
+                var (unbreaking, unbreakingFound) = stored.Enchantment(Dragonfly.Item.Unbreaking);
+                var (protection, protectionFound) = armour.Helmet().Enchantment(Dragonfly.Item.Protection);
+                if (!selectorFound || selector is not string selectorName || selectorName != "lobby_ffa_selector" ||
+                    !unbreakingFound || unbreaking.Level() != 1 ||
+                    !protectionFound || protection.Level() != 1)
+                {
+                    output.Error("Stack metadata or enchantment round-trip failed.");
                     return;
                 }
 
@@ -925,6 +1087,7 @@ public sealed class KitchenSink : Plugin
             {
                 inventory.SetItem(0, previous);
                 enderChest.SetItem(0, previousEnderItem);
+                player.Armour().SetHelmet(helmet);
                 player.SetHeldItems(mainHand, offHand);
             }
         }

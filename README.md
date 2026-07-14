@@ -22,6 +22,8 @@ Its `/kitchen crop` overload round-trips promoted Dragonfly crop state through
 Its `/kitchen biome` overload uses the generated vanilla biome types and exercises biome,
 temperature, rain, snow, and thunder transaction queries before restoring the original biome.
 `/kitchen tick` reads the transaction owner's current tick, not the world's day-time.
+`/kitchen handle` exercises AST-generated `EntityHandle`, `RemoveEntity`, and `AddEntityAt`
+through the command transaction while preserving handle identity.
 `/kitchen particle` emits every typed Dragonfly particle and exercises all typed note instruments.
 `/kitchen game-mode` exercises registered lookup, player reads, and a custom game mode without
 leaving the player changed.
