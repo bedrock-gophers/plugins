@@ -186,6 +186,10 @@ type BlockIteratorID uint64
 // entities in the current Dragonfly transaction.
 type EntityIteratorID uint64
 
+// PlayerIteratorID identifies one pull iterator over the players connected to
+// the Dragonfly server.
+type PlayerIteratorID uint64
+
 type WorldSetOpts struct {
 	DisableBlockUpdates       bool
 	DisableLiquidDisplacement bool
@@ -462,6 +466,11 @@ type Host interface {
 	OpenWorldEntityIterator(InvocationID, WorldID, bool) (EntityIteratorID, bool)
 	NextWorldEntity(InvocationID, EntityIteratorID) (EntityID, bool, bool)
 	CloseWorldEntities(InvocationID, EntityIteratorID)
+	OpenServerPlayerIterator(InvocationID) (PlayerIteratorID, bool)
+	NextServerPlayer(InvocationID, PlayerIteratorID) (InvocationID, PlayerSnapshot, bool, bool)
+	CloseServerPlayers(InvocationID, PlayerIteratorID)
+	ServerPlayer([16]byte) (EntityHandleID, bool, bool)
+	ServerPlayerByName(string) (EntityHandleID, bool, bool)
 	EntityHandle(InvocationID, EntityID) (EntityHandleID, bool)
 	EntityHandleEntity(InvocationID, EntityHandleID) (EntityID, bool, bool)
 	EntityHandleUUID(EntityHandleID) ([16]byte, bool)
@@ -608,6 +617,19 @@ func (noopHost) NextWorldEntity(InvocationID, EntityIteratorID) (EntityID, bool,
 	return EntityID{}, false, false
 }
 func (noopHost) CloseWorldEntities(InvocationID, EntityIteratorID) {}
+func (noopHost) OpenServerPlayerIterator(InvocationID) (PlayerIteratorID, bool) {
+	return 0, false
+}
+func (noopHost) NextServerPlayer(InvocationID, PlayerIteratorID) (InvocationID, PlayerSnapshot, bool, bool) {
+	return 0, PlayerSnapshot{}, false, false
+}
+func (noopHost) CloseServerPlayers(InvocationID, PlayerIteratorID) {}
+func (noopHost) ServerPlayer([16]byte) (EntityHandleID, bool, bool) {
+	return EntityHandleID{}, false, false
+}
+func (noopHost) ServerPlayerByName(string) (EntityHandleID, bool, bool) {
+	return EntityHandleID{}, false, false
+}
 func (noopHost) EntityHandle(InvocationID, EntityID) (EntityHandleID, bool) {
 	return EntityHandleID{}, false
 }

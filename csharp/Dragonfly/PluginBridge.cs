@@ -1890,6 +1890,150 @@ internal static unsafe class PluginBridge
             }
         }
 
+        internal static IEnumerable<Player> ServerPlayers(ulong invocation) =>
+            new ServerPlayerEnumerable(invocation);
+
+        internal static (World.EntityHandle? Player, bool Ok) ServerPlayer(Guid uuid)
+        {
+            var api = Api;
+            if (api is null || api->ServerPlayer == null)
+                throw new InvalidOperationException("server is unavailable");
+            NativeUuid native = default;
+            if (!uuid.TryWriteBytes(new Span<byte>(native.Bytes, 16), bigEndian: true, out var written) || written != 16)
+                throw new InvalidOperationException("could not encode player UUID");
+            EntityHandleId player;
+            byte found;
+            if (api->ServerPlayer(api->Context, native, &player, &found) != Abi.Ok || found > 1)
+                throw new InvalidOperationException("server player lookup failed");
+            if (found == 0) return (null, false);
+            if (player.Value == 0 || player.Generation == 0)
+                throw new InvalidOperationException("server returned an invalid player handle");
+            return (new World.EntityHandle(player), true);
+        }
+
+        internal static (World.EntityHandle? Player, bool Ok) ServerPlayerByName(string name)
+        {
+            ArgumentNullException.ThrowIfNull(name);
+            var api = Api;
+            if (api is null || api->ServerPlayerByName == null)
+                throw new InvalidOperationException("server is unavailable");
+            var bytes = Encoding.UTF8.GetBytes(name);
+            if (bytes.Length > 256)
+                return (null, false);
+            fixed (byte* data = bytes)
+            {
+                EntityHandleId player;
+                byte found;
+                if (api->ServerPlayerByName(
+                        api->Context,
+                        new StringView { Data = data, Length = (ulong)bytes.Length },
+                        &player,
+                        &found) != Abi.Ok || found > 1)
+                    throw new InvalidOperationException("server player lookup failed");
+                if (found == 0) return (null, false);
+                if (player.Value == 0 || player.Generation == 0)
+                    throw new InvalidOperationException("server returned an invalid player handle");
+                return (new World.EntityHandle(player), true);
+            }
+        }
+
+        private sealed class ServerPlayerEnumerable(ulong invocation) : IEnumerable<Player>
+        {
+            public IEnumerator<Player> GetEnumerator() => new ServerPlayerEnumerator(invocation);
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ServerPlayerEnumerator : IEnumerator<Player>
+        {
+            private readonly HostApi* _api;
+            private readonly ulong _invocation;
+            private ulong _iterator;
+            private bool _disposed;
+
+            internal ServerPlayerEnumerator(ulong invocation)
+            {
+                _api = Api;
+                if (_api is null || _api->ServerPlayersOpen == null ||
+                    _api->ServerPlayersNext == null || _api->ServerPlayersClose == null)
+                    throw new InvalidOperationException("server is unavailable");
+                _invocation = invocation;
+                ulong iterator = 0;
+                if (_api->ServerPlayersOpen(_api->Context, invocation, &iterator) != Abi.Ok || iterator == 0)
+                {
+                    if (iterator != 0)
+                        _api->ServerPlayersClose(_api->Context, invocation, iterator);
+                    throw new InvalidOperationException("server player iteration failed");
+                }
+                _iterator = iterator;
+            }
+
+            public Player Current { get; private set; } = null!;
+            object System.Collections.IEnumerator.Current => Current;
+
+            public bool MoveNext()
+            {
+                if (_disposed) return false;
+                const int maxPlayerNameBytes = 256;
+                byte* name = stackalloc byte[maxPlayerNameBytes];
+                PlayerSnapshotBuffer snapshot = new()
+                {
+                    Name = new StringBuffer { Data = name, Capacity = maxPlayerNameBytes },
+                };
+                ulong playerInvocation;
+                byte found;
+                if (_api->ServerPlayersNext(
+                        _api->Context,
+                        _invocation,
+                        _iterator,
+                        &playerInvocation,
+                        &snapshot,
+                        &found) != Abi.Ok || found > 1)
+                {
+                    Dispose();
+                    throw new InvalidOperationException("server player iteration failed");
+                }
+                if (found == 0)
+                {
+                    if (playerInvocation != 0)
+                    {
+                        Dispose();
+                        throw new InvalidOperationException("server returned an invalid player invocation");
+                    }
+                    Dispose();
+                    return false;
+                }
+                if (playerInvocation == 0 || snapshot.Player.Generation == 0 ||
+                    snapshot.Name.Data != name || snapshot.Name.Capacity != maxPlayerNameBytes ||
+                    snapshot.Name.Length == 0 || snapshot.Name.Length > maxPlayerNameBytes ||
+                    !double.IsFinite(snapshot.Position.X) || !double.IsFinite(snapshot.Position.Y) ||
+                    !double.IsFinite(snapshot.Position.Z))
+                {
+                    Dispose();
+                    throw new InvalidOperationException("server returned an invalid player");
+                }
+                Current = new Player(
+                    snapshot.Player,
+                    Utf8(snapshot.Name),
+                    TimeSpan.FromMilliseconds(Math.Min(
+                        (double)snapshot.LatencyMilliseconds,
+                        TimeSpan.MaxValue.TotalMilliseconds)),
+                    new Vector3(snapshot.Position.X, snapshot.Position.Y, snapshot.Position.Z),
+                    invocation: playerInvocation);
+                return true;
+            }
+
+            public void Reset() => throw new NotSupportedException();
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _api->ServerPlayersClose(_api->Context, _invocation, _iterator);
+                _iterator = 0;
+            }
+        }
+
         internal static IEnumerable<Cube.Pos> WorldBlocksWithin(
             ulong invocation,
             Cube.Pos position,
@@ -2148,7 +2292,7 @@ internal static unsafe class PluginBridge
     {
         if (host is null) return Abi.Error;
         var header = (HostHeader*)host;
-        if (header->Version != Abi.HostVersion || header->Size < 744) return Abi.Error;
+        if (header->Version != Abi.HostVersion || header->Size < 784) return Abi.Error;
         Host.Api = (HostApi*)host;
         return Abi.Ok;
     }

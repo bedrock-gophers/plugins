@@ -49,14 +49,16 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		return err
 	}
 	players := host.NewPlayers()
+	serverHost := host.NewServer(players)
 	worlds, err := NewPersistentWorldManager(config.Worlds.Directory, log, players)
 	if err != nil {
 		return err
 	}
 	pluginRuntime, err := native.OpenWithHost(config.Plugins.RuntimeLibrary, config.Plugins.Directory, struct {
 		*host.Players
+		*host.Server
 		*WorldManager
-	}{players, worlds})
+	}{players, serverHost, worlds})
 	if err != nil {
 		return err
 	}
@@ -114,10 +116,14 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 				}
 			}
 		},
-		closeRuntime: pluginRuntime.Close,
+		closeRuntime: func() {
+			serverHost.Close()
+			pluginRuntime.Close()
+		},
 	}
 	defer cleanup.close()
 	srv = dragonflyConfig.New()
+	serverHost.Attach(srv)
 	if err := worlds.RegisterCore(OverworldID, srv.World()); err != nil {
 		return err
 	}

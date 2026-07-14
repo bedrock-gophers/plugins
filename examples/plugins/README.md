@@ -15,5 +15,7 @@ identifiers or NBT. Its `crop` overload round-trips the promoted `Growth` field 
 `Block.WheatSeeds`. Its `item` overload round-trips typed finite-state items, books, fireworks,
 and all 28 tiered armour states through player inventory while the private transport keeps item
 identifiers and NBT out of plugin code, including dyed leather and armour trims.
+Its `server` overload uses direct lazy server-wide player iteration, broadcasts inside each borrowed
+player lifetime, and verifies stable UUID/name handle lookup.
 
 `vanilla-commands` keeps each command in its own file and grows as more of Dragonfly's gameplay API is exposed.

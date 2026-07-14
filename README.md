@@ -186,6 +186,31 @@ materialised as concrete `Player` objects. `EntityHandle.Entity`, `UUID`, `Close
 while the world-bound entity ID changes on remove/re-add. Generic player removal remains blocked;
 use `Player.ChangeWorld` so Dragonfly's session transfer completes safely.
 
+Server-wide player access follows Dragonfly's `Server` directly:
+
+```csharp
+var server = Server();
+foreach (var player in server.Players(tx))
+{
+    player.Message("Hello, server!");
+    var stable = player.H(); // Safe to retain after this iteration.
+}
+var (byName, found) = server.PlayerByName("Steve");
+if (found && byName is not null)
+{
+    var (byUuid, foundUuid) = server.Player(byName.UUID());
+}
+```
+
+Pass the current `World.Tx` when iterating from a callback or command, and pass `null` outside a
+transaction. Iteration is deliberately lazy: a yielded `Player` is valid only inside its current
+`foreach` body and expires on the next `MoveNext`, disposal, or callback completion. Do not collect
+the players or retain them; retain `Player.H()` values when stable identity is needed. Each body
+runs on that player's world owner, matching Dragonfly, so blocking or re-entering the same owner can
+deadlock and mirrored scans from different world handlers can deadlock each other. Keep the body
+short and avoid nested world-owner calls. `Player` and `PlayerByName` return stable
+`World.EntityHandle` values and do not borrow a player transaction.
+
 `World.Handler` is generated from Dragonfly's Go AST and installed on every framework-managed
 world. Cancellable callbacks remain allowed by default. `HandleExplosion` may resize, reorder, or
 replace both entity and block lists and mutate item-drop chance and fire spawning. Entity callback
@@ -194,7 +219,7 @@ Dragonfly field and cause.
 
 Public block, liquid, biome, particle, colour, instrument, sound, and item types come from Dragonfly's Go AST.
 Live registries feed internal generated codecs, so Minecraft identifiers, state NBT, numeric biome
-IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 36 preserves the
+IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 37 preserves the
 separate “no liquid” result, nullable liquid removal, signed nanosecond scheduling delays,
 biome/weather queries, particle payloads, registered/custom game-mode capabilities, and full
 callback-scoped player snapshots for form responses. Structurally valid form contexts receive
@@ -207,7 +232,7 @@ instruments, music discs, goat horns, crossbow stages, and scalar values.
 
 The generated effect slice exposes all 28 registered Dragonfly effects, `Effect.Value`, the five
 constructors, value methods, colour mixing, registry lookup, and `Player.AddEffect`, `RemoveEffect`,
-`Effect`, and `Effects`. ABI 36 carries effect duration, potency, ambient/particle/infinite flags,
+`Effect`, and `Effects`. ABI 37 carries effect duration, potency, ambient/particle/infinite flags,
 and the current tick; C# exposes duration at `TimeSpan`'s 100 ns precision. Custom effect callbacks,
 registration, and concrete effect-specific multiplier methods wait for the entity and damage-source
 slices; no identifier-based fallback is exposed.

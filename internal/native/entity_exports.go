@@ -263,19 +263,29 @@ func bg_go_entity_player(context C.uint64_t, invocation C.DfInvocationId, id C.D
 		return C.DF_STATUS_ERROR
 	}
 	snapshot, ok := host.EntityPlayer(InvocationID(invocation), entityID(id))
-	name := []byte(snapshot.Name)
-	if !ok || len(name) == 0 || len(name) > maxPlayerNameBytes || !utf8.Valid(name) {
+	if !ok || !writePlayerSnapshotBuffer(output, snapshot) {
 		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+func writePlayerSnapshotBuffer(output *C.DfPlayerSnapshotBuffer, snapshot PlayerSnapshot) bool {
+	if output == nil {
+		return false
+	}
+	name := []byte(snapshot.Name)
+	if len(name) == 0 || len(name) > maxPlayerNameBytes || !utf8.Valid(name) {
+		return false
 	}
 	output.name.len = C.uint64_t(len(name))
 	if !canWriteSkinBuffer(&output.name, name) {
-		return C.DF_STATUS_ERROR
+		return false
 	}
 	output.player = cPlayerID(snapshot.Player)
 	output.latency_milliseconds = C.uint64_t(snapshot.LatencyMilliseconds)
 	output.position = cEntityVec3(snapshot.Position)
 	writeSkinBuffer(&output.name, name)
-	return C.DF_STATUS_OK
+	return true
 }
 
 //export bg_go_entity_teleport

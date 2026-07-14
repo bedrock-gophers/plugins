@@ -72,7 +72,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    plugins never handle identifiers, NBT, numeric biome IDs, world handles, iterator handles, or
    host errors. `Liquid` preserves Dragonfly's `(Liquid, bool)` result, and passing `null` to
    `SetLiquid` removes the liquid. Host
-   ABI 36 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
+   ABI 37 transports that distinction, signed `time.Duration` nanoseconds, private biome IDs,
    particles, registered/custom game-mode capabilities, and the transaction owner's current tick
    without exposing them publicly. Form response callbacks additionally receive a borrowed full
    player snapshot, and ownership transfer guarantees exactly one response or drop callback.
@@ -129,7 +129,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `SetHeldItems`, and `SetHeldSlot`; `Inventory.Value` exposes `Size`, `Item`, `SetItem`, and
    `AddItem`. C# setters return `void` as the chosen language adaptation, and invalid slots
    throw `ArgumentOutOfRangeException`; host statuses never enter the public API. The existing
-   ABI 36 includes one atomic held-item pair snapshot, so `HeldItems` observes the same player state
+   ABI 37 includes one atomic held-item pair snapshot, so `HeldItems` observes the same player state
    with one host read. Main and ender-chest inventory sizes are read from the live Dragonfly
    inventory, preserving custom `player.Config` sizes. Bounded open/read/close item snapshots preserve damage, unbreakable state, anvil cost, custom
    names, lore, item NBT, plugin values, and enchantments internally. `Stack.WithValue`, `Value`,
@@ -144,7 +144,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    value methods, and player method signatures from Dragonfly's Go AST, then validates all 28
    built-ins against the live registry. C# exposes `Effect.Value`, registered `Type`/`LastingType`
    values, all five constructors, `ResultingColour`, `ByID`/`ID`, and the four player effect methods.
-   ABI 36 transports signed nanosecond duration, level, potency, ambient/particle/infinite flags, and
+   ABI 37 transports signed nanosecond duration, level, potency, ambient/particle/infinite flags, and
    tick. C# `TimeSpan` has 100 ns precision and rejects snapshots outside that precision instead of
    truncating them. Re-adding a snapshot is bounded to one million elapsed ticks because Dragonfly
    exposes `Tick` but no constructor or setter for it. Pending initial instant-effect potency is
@@ -161,13 +161,23 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    host status codes remain private. AST-generated `Tx.World`, `Tx.Entities`, and `Tx.Players`
    preserve Dragonfly's exact signatures; entity/player iteration is lazy, reads the live world,
    and is closed on exhaustion, early disposal, or invocation end. The replaced eager private
-   entity/player snapshots have been removed. ABI 36 adds stable private handle identities and the
+   entity/player snapshots have been removed. ABI 37 adds stable private handle identities and the
    AST-generated `EntityHandle.Entity`, `UUID`, `Closed`, and `Close` methods plus exact public
    `Tx.AddEntity`, `AddEntityAt`, and `RemoveEntity` signatures. Removing an entity expires its
    world-bound identity; adding the same handle creates a fresh identity while preserving handle
    equality. Abandoned detached custom entities are closed before plugin runtime shutdown.
    Generic player removal is intentionally rejected for now because Dragonfly's connected session
    must complete its coordinated world transfer; `Player.ChangeWorld` is the safe current path.
+   The AST-generated public `Server` surface adds direct `Plugin.Server()`, lazy
+   `Server.Players(World.Tx?)`, and stable-handle `Server.Player(Guid)`/`PlayerByName(string)`
+   lookups. A non-null current transaction must be passed when iteration begins in a callback or
+   command; `null` remains valid outside a transaction and is never replaced with an inferred one.
+   Every `foreach` body runs synchronously on the yielded player's world owner. Advancing or
+   disposing the enumerator expires the prior borrowed `Player`, so players must not be collected
+   or retained; only `Player.H()` is stable beyond that body. Re-entering the same world owner from
+   the body can deadlock, and mirrored server scans in handlers on different worlds can deadlock
+   each other, exactly as in Dragonfly. The private iterator closes on exhaustion, early disposal,
+   callback completion, or runtime shutdown.
    The sound slice AST-generates all 87 concrete `server/world/sound` structs as `Sound.*` values
    implementing `World.Sound`. `HandleSound` materialises their exported bool, scalar, block, item,
    liquid, instrument, disc, horn, pitch, and stage fields. Bucket sounds preserve the exact typed
@@ -184,6 +194,10 @@ teleportation and healing. `OnJoin` supplies the missing lobby-entry lifecycle w
 be an upstream handler method. The host's explicit managed-MCDB extension now covers lookup/open,
 world spawn, save/close, and safe `Player.ChangeWorld`; exact `World` instance methods remain
 AST-generated. Stack values and typed enchantments cover selector metadata and Protection kits.
+Direct server-wide lazy player iteration and UUID/name lookup now make global broadcasts and
+online-player resolution possible without a public manager abstraction. Player-backed attack and
+entity-use targets are concrete `Player` values, so killer inventory inspection and refill are
+available too. Functional Nodebuff and Sumo FFA are therefore implementable with the current API.
 
 Remaining raw-Dragonfly parity work is concentrated in world construction and the rest of the
 entity transaction slice:
@@ -215,6 +229,9 @@ temperature and weather query in this slice.
 `/kitchen handle` resolves a live non-player handle, checks its UUID and transaction lookup,
 removes it, proves the worldless lookup fails, then re-adds it at the command source while preserving
 handle identity.
+`/kitchen server` iterates all online players through the direct Dragonfly `Server` surface,
+messages them inside their borrowed loop bodies, retains only a stable handle, and verifies UUID
+and exact-name lookup resolve to the same handle.
 `/kitchen particle` emits all 20 particle types and exercises every one of Dragonfly's 16 note
 instruments through the transaction-owned `AddParticle` call.
 `/kitchen game-mode` exercises registered lookup, player reads, and a custom capability-backed

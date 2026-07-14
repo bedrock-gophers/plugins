@@ -678,7 +678,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 23 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 24 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -806,7 +806,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	host.entityHandleAdded = EntityID{UUID: nonPlayerEntity.UUID, Generation: 6}
 	host.entityIteratorEntities = []EntityID{playerEntity, nonPlayerEntity}
 	handle := base
-	handle.Overload = 22
+	handle.Overload = 23
 	handle.Arguments = []string{"handle"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, handle)
 	if err != nil || output.Failed || output.Message !=
