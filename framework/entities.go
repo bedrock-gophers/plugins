@@ -115,6 +115,31 @@ func (m *WorldManager) OpenWorldEntityIterator(invocation native.InvocationID, i
 	if playersOnly {
 		sequence = tx.Players()
 	}
+	return m.openWorldEntityIterator(invocation, sequence)
+}
+
+// OpenWorldEntitiesWithin opens a lazy pull iterator matching
+// world.Tx.EntitiesWithin on the invocation's exact transaction.
+func (m *WorldManager) OpenWorldEntitiesWithin(invocation native.InvocationID, id native.WorldID, box native.BBox) (native.EntityIteratorID, bool) {
+	currentID, ok := m.CurrentWorld(invocation)
+	if !ok || id == 0 || id != currentID || m.players == nil {
+		return 0, false
+	}
+	tx, ok := m.invocationTx(invocation)
+	if !ok {
+		return 0, false
+	}
+	var sequence iter.Seq[world.Entity] = func(func(world.Entity) bool) {}
+	if box.Min.X < box.Max.X && box.Min.Y < box.Max.Y && box.Min.Z < box.Max.Z {
+		sequence = tx.EntitiesWithin(cube.Box(
+			box.Min.X, box.Min.Y, box.Min.Z,
+			box.Max.X, box.Max.Y, box.Max.Z,
+		))
+	}
+	return m.openWorldEntityIterator(invocation, sequence)
+}
+
+func (m *WorldManager) openWorldEntityIterator(invocation native.InvocationID, sequence iter.Seq[world.Entity]) (native.EntityIteratorID, bool) {
 	next, stop := iter.Pull(sequence)
 	iterator := &worldEntityIterator{invocation: invocation, next: next, stop: stop}
 	m.entityIteratorMu.Lock()

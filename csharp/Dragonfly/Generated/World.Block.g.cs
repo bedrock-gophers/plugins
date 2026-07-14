@@ -104,6 +104,9 @@ public sealed partial class World
         public IEnumerable<Entity> Entities() =>
             PluginBridge.Host.TransactionEntities(Invocation, playersOnly: false);
 
+        public IEnumerable<Entity> EntitiesWithin(Cube.BBox box) =>
+            PluginBridge.Host.TransactionEntitiesWithin(Invocation, box);
+
         public IEnumerable<Entity> Players() =>
             PluginBridge.Host.TransactionEntities(Invocation, playersOnly: true);
     }

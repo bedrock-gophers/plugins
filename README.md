@@ -173,6 +173,7 @@ var tick = tx.CurrentTick();
 var currentWorld = tx.World();
 foreach (var entity in tx.Entities()) { /* live World.Entity */ }
 foreach (var player in tx.Players().OfType<Player>()) player.Message("Hello, world!");
+foreach (var entity in tx.EntitiesWithin(Cube.Box(-16, -16, -16, 16, 16, 16))) { /* nearby */ }
 var entity = tx.Entities().First(value => value is not Player);
 var handle = tx.RemoveEntity(entity);
 var moved = tx.AddEntityAt(handle, source.Position());
@@ -180,7 +181,7 @@ tx.AddParticle(source.Position(), new Particle.Flame(new Color.RGBA(255, 96, 32,
 tx.AddParticle(source.Position(), new Particle.Note(Sound.Piano(), 12));
 ```
 
-`BlocksWithin`, `Entities`, and `Players` stay lazy across the private ABI: each C# enumerator owns
+`BlocksWithin`, `Entities`, `EntitiesWithin`, and `Players` stay lazy across the private ABI: each C# enumerator owns
 a transaction-scoped Dragonfly iterator and closes it on exhaustion, early exit, or callback
 completion. `Players` keeps Dragonfly's `IEnumerable<World.Entity>` shape, with player values
 materialised as concrete `Player` objects. `EntityHandle.Entity`, `UUID`, `Closed`, and `Close`, plus
@@ -252,7 +253,7 @@ Dragonfly field and cause.
 
 Public block, liquid, biome, particle, colour, instrument, sound, and item types come from Dragonfly's Go AST.
 Live registries feed internal generated codecs, so Minecraft identifiers, state NBT, numeric biome
-IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 41 preserves the
+IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 42 preserves the
 separate “no liquid” result, nullable liquid removal, signed nanosecond scheduling delays,
 biome/weather queries, particle payloads, registered/custom game-mode capabilities, and full
 callback-scoped player snapshots for form responses. Structurally valid form contexts receive

@@ -442,6 +442,7 @@ func (tx *Tx) AddEntity(e *EntityHandle) Entity { return nil }
 func (tx *Tx) AddEntityAt(e *EntityHandle, pos mgl64.Vec3) Entity { return nil }
 func (tx *Tx) RemoveEntity(e Entity) *EntityHandle { return nil }
 func (tx *Tx) Entities() iter.Seq[Entity] { return nil }
+func (tx *Tx) EntitiesWithin(box cube.BBox) iter.Seq[Entity] { return nil }
 func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
@@ -493,6 +494,8 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 		"PluginBridge.Host.TransactionRemoveEntity(Invocation, e)",
 		"public IEnumerable<Entity> Entities()",
 		"PluginBridge.Host.TransactionEntities(Invocation, playersOnly: false)",
+		"public IEnumerable<Entity> EntitiesWithin(Cube.BBox box)",
+		"PluginBridge.Host.TransactionEntitiesWithin(Invocation, box)",
 		"public IEnumerable<Entity> Players()",
 		"PluginBridge.Host.TransactionEntities(Invocation, playersOnly: true)",
 		"public bool DisableRedstoneUpdates;",

@@ -501,6 +501,7 @@ var selectedWorldTxMethods = []string{
 	"AddEntityAt",
 	"RemoveEntity",
 	"Entities",
+	"EntitiesWithin",
 	"Players",
 }
 
@@ -601,6 +602,13 @@ func main() {
 		fatal(err)
 	}
 	cube, err := inspectCube(filepath.Join(directory, "server", "block", "cube"))
+	if err != nil {
+		fatal(err)
+	}
+	bbox, err := inspectBBox(
+		filepath.Join(directory, "server", "block", "cube", "bbox.go"),
+		filepath.Join(directory, "server", "block", "cube", "axis.go"),
+	)
 	if err != nil {
 		fatal(err)
 	}
@@ -720,6 +728,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Cube.g.cs"),
 			Content: generateCube(cube),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Cube.BBox.g.cs"),
+			Content: generateBBox(bbox),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Block.g.cs"),
@@ -1447,7 +1459,10 @@ func validateWorldTxMethod(method commandMethod) error {
 			{Name: "e", Type: "Entity"},
 		}},
 		"Entities": {Name: "Entities", ReturnType: "IEnumerable<Entity>"},
-		"Players":  {Name: "Players", ReturnType: "IEnumerable<Entity>"},
+		"EntitiesWithin": {Name: "EntitiesWithin", ReturnType: "IEnumerable<Entity>", Parameters: []parameter{
+			{Name: "box", Type: "Cube.BBox"},
+		}},
+		"Players": {Name: "Players", ReturnType: "IEnumerable<Entity>"},
 	}[method.Name]
 	if !reflect.DeepEqual(method, expected) {
 		return fmt.Errorf("signature changed: got %s %s(%s)", method.ReturnType, method.Name, formatParameters(method.Parameters))
@@ -1583,6 +1598,7 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 			return "", false
 		}
 		typeName, ok := map[string]string{
+			"cube.BBox":     "Cube.BBox",
 			"cube.Pos":      "Cube.Pos",
 			"cube.Range":    "Cube.Range",
 			"mgl64.Vec3":    "Vector3",
@@ -5042,6 +5058,8 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 			fmt.Fprintf(&output, "            PluginBridge.Host.TransactionRemoveEntity(Invocation, %s);\n", method.Parameters[0].Name)
 		case "Entities":
 			output.WriteString("            PluginBridge.Host.TransactionEntities(Invocation, playersOnly: false);\n")
+		case "EntitiesWithin":
+			fmt.Fprintf(&output, "            PluginBridge.Host.TransactionEntitiesWithin(Invocation, %s);\n", method.Parameters[0].Name)
 		case "Players":
 			output.WriteString("            PluginBridge.Host.TransactionEntities(Invocation, playersOnly: true);\n")
 		default:

@@ -676,9 +676,19 @@ public sealed class KitchenSink : Plugin
             }
             var world = tx.World();
             var entityCount = tx.Entities().Count();
+            var position = source.Position();
+            var nearby = tx.EntitiesWithin(Cube.Box(
+                position.X - 16,
+                position.Y - 16,
+                position.Z - 16,
+                position.X + 16,
+                position.Y + 16,
+                position.Z + 16)).Count();
             var players = tx.Players().OfType<Player>().ToArray();
             foreach (var player in players) player.Message("Kitchen entity iteration is live.");
-            output.Printf("world={0}, entities={1}, players={2}", world.Name(), entityCount, players.Length);
+            output.Printf(
+                "world={0}, entities={1}, nearby={2}, players={3}",
+                world.Name(), entityCount, nearby, players.Length);
         }
     }
 

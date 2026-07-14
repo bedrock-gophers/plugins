@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 8u
-// Version 41 adds atomic world.Config construction.
-#define DF_HOST_ABI_VERSION 41u
+// Version 42 adds world.Tx.EntitiesWithin.
+#define DF_HOST_ABI_VERSION 42u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -26,6 +26,7 @@ typedef uint64_t DfBlockIteratorId;
 typedef uint64_t DfEntityIteratorId;
 typedef uint64_t DfPlayerIteratorId;
 typedef struct { double x; double y; double z; } DfVec3;
+typedef struct { DfVec3 min; DfVec3 max; } DfBBox;
 typedef struct { double yaw; double pitch; } DfRotation;
 typedef struct { DfVec3 position; DfVec3 velocity; DfRotation rotation; } DfPlayerKinematics;
 typedef struct { int32_t x; int32_t y; int32_t z; } DfBlockPos;
@@ -416,6 +417,7 @@ typedef DfStatus (*DfHostWorldSoundPlayFn)(uint64_t context, DfInvocationId invo
 typedef DfStatus (*DfHostPlayerSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV1 *sound);
 typedef DfStatus (*DfHostWorldCurrentFn)(uint64_t context, DfInvocationId invocation, DfWorldId *world);
 typedef DfStatus (*DfHostWorldEntityIteratorOpenFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t players_only, DfEntityIteratorId *iterator);
+typedef DfStatus (*DfHostWorldEntitiesWithinOpenFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBBox box, DfEntityIteratorId *iterator);
 typedef DfStatus (*DfHostWorldEntityIteratorNextFn)(uint64_t context, DfInvocationId invocation, DfEntityIteratorId iterator, DfEntityId *entity, uint8_t *found);
 typedef void (*DfHostWorldEntityIteratorCloseFn)(uint64_t context, DfInvocationId invocation, DfEntityIteratorId iterator);
 typedef DfStatus (*DfHostServerPlayersOpenFn)(uint64_t context, DfInvocationId invocation, DfPlayerIteratorId *iterator);
@@ -540,6 +542,7 @@ typedef struct {
     DfHostServerWorldFn server_world;
     DfHostWorldScheduleFn world_schedule;
     DfHostWorldNewFn world_new;
+    DfHostWorldEntitiesWithinOpenFn world_entities_within_open;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u

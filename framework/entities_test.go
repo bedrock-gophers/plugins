@@ -220,6 +220,46 @@ func TestWorldManagerEntityIteratorsStayInsideInvocation(t *testing.T) {
 			t.Fatal("finished entity iterator remained live")
 		}
 
+		bounds := native.BBox{
+			Min: native.Vec3{X: -1, Y: 63, Z: -1},
+			Max: native.Vec3{X: 1, Y: 65, Z: 1},
+		}
+		if _, ok := manager.OpenWorldEntitiesWithin(0, worldID, bounds); ok {
+			t.Fatal("context-free bounded entity iterator opened")
+		}
+		if _, ok := manager.OpenWorldEntitiesWithin(invocation, worldID+1, bounds); ok {
+			t.Fatal("bounded entity iterator opened for a non-current world")
+		}
+		within, ok := manager.OpenWorldEntitiesWithin(invocation, worldID, bounds)
+		if !ok {
+			t.Fatal("bounded entity iterator open failed")
+		}
+		gotWithin, found, valid := manager.NextWorldEntity(invocation, within)
+		if !valid || !found || gotWithin != textID {
+			t.Fatalf("bounded entity iterator = %#v, %v, %v; want %#v", gotWithin, found, valid, textID)
+		}
+		if _, found, valid := manager.NextWorldEntity(invocation, within); !valid || found {
+			t.Fatalf("bounded entity iterator end = found %v, valid %v", found, valid)
+		}
+		for name, emptyBounds := range map[string]native.BBox{
+			"reversed": {
+				Min: native.Vec3{X: 1, Y: 65, Z: 1},
+				Max: native.Vec3{X: -1, Y: 63, Z: -1},
+			},
+			"strict boundary": {
+				Min: native.Vec3{X: 0, Y: 63, Z: -1},
+				Max: native.Vec3{X: 1, Y: 65, Z: 1},
+			},
+		} {
+			empty, ok := manager.OpenWorldEntitiesWithin(invocation, worldID, emptyBounds)
+			if !ok {
+				t.Fatalf("%s entity iterator open failed", name)
+			}
+			if _, found, valid := manager.NextWorldEntity(invocation, empty); !valid || found {
+				t.Fatalf("%s entity iterator = found %v, valid %v", name, found, valid)
+			}
+		}
+
 		onlyPlayers, ok := manager.OpenWorldEntityIterator(invocation, worldID, true)
 		if !ok {
 			t.Fatal("player iterator open failed")

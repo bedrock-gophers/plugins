@@ -15,7 +15,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - player-action telemetry;
 - reflected command arguments and overloads;
 - direct `Player.Message` output;
-- transaction-safe range, lazy block/entity/player iteration, current-world lookup, height/light
+- transaction-safe range, lazy block/entity/player/bounding-box iteration, current-world lookup, height/light
   queries, and block access through `World.Tx`;
 - direct lazy server-wide player iteration, global messaging, stable handle retention, and UUID/name
   lookup in `/kitchen server`;

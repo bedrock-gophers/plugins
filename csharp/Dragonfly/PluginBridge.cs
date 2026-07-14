@@ -1739,16 +1739,25 @@ internal static unsafe class PluginBridge
             bool playersOnly)
         {
             var world = TransactionWorld(invocation);
-            return new TransactionEntityEnumerable(invocation, world.Id, playersOnly);
+            return new TransactionEntityEnumerable(invocation, world.Id, playersOnly, null);
+        }
+
+        internal static IEnumerable<World.Entity> TransactionEntitiesWithin(
+            ulong invocation,
+            Cube.BBox box)
+        {
+            var world = TransactionWorld(invocation);
+            return new TransactionEntityEnumerable(invocation, world.Id, playersOnly: false, box);
         }
 
         private sealed class TransactionEntityEnumerable(
             ulong invocation,
             WorldId world,
-            bool playersOnly) : IEnumerable<World.Entity>
+            bool playersOnly,
+            Cube.BBox? box) : IEnumerable<World.Entity>
         {
             public IEnumerator<World.Entity> GetEnumerator() =>
-                new TransactionEntityEnumerator(invocation, world, playersOnly);
+                new TransactionEntityEnumerator(invocation, world, playersOnly, box);
 
             System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
         }
@@ -1761,22 +1770,49 @@ internal static unsafe class PluginBridge
             private ulong _iterator;
             private bool _disposed;
 
-            internal TransactionEntityEnumerator(ulong invocation, WorldId world, bool playersOnly)
+            internal TransactionEntityEnumerator(
+                ulong invocation,
+                WorldId world,
+                bool playersOnly,
+                Cube.BBox? box)
             {
                 _api = Api;
-                if (_api is null || _api->WorldEntityIteratorOpen == null ||
+                if (_api is null ||
                     _api->WorldEntityIteratorNext == null || _api->WorldEntityIteratorClose == null)
                     throw new InvalidOperationException("world transaction is unavailable");
 
                 _invocation = invocation;
                 _playersOnly = playersOnly;
                 ulong iterator = 0;
-                var status = _api->WorldEntityIteratorOpen(
-                    _api->Context,
-                    invocation,
-                    world,
-                    playersOnly ? (byte)1 : (byte)0,
-                    &iterator);
+                int status;
+                if (box is { } bounds)
+                {
+                    if (_api->WorldEntitiesWithinOpen == null)
+                        throw new InvalidOperationException("world transaction is unavailable");
+                    var min = bounds.Min();
+                    var max = bounds.Max();
+                    status = _api->WorldEntitiesWithinOpen(
+                        _api->Context,
+                        invocation,
+                        world,
+                        new Dragonfly.Native.BBox
+                        {
+                            Min = new Vec3 { X = min.X, Y = min.Y, Z = min.Z },
+                            Max = new Vec3 { X = max.X, Y = max.Y, Z = max.Z },
+                        },
+                        &iterator);
+                }
+                else
+                {
+                    if (_api->WorldEntityIteratorOpen == null)
+                        throw new InvalidOperationException("world transaction is unavailable");
+                    status = _api->WorldEntityIteratorOpen(
+                        _api->Context,
+                        invocation,
+                        world,
+                        playersOnly ? (byte)1 : (byte)0,
+                        &iterator);
+                }
                 if (status != Abi.Ok || iterator == 0)
                 {
                     if (iterator != 0)

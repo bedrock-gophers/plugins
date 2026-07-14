@@ -421,6 +421,7 @@ type Host interface {
 	SaveWorld(InvocationID, WorldID) bool
 	SpawnWorldEntity(InvocationID, WorldID, EntitySpawn) (EntityID, bool)
 	OpenWorldEntityIterator(InvocationID, WorldID, bool) (EntityIteratorID, bool)
+	OpenWorldEntitiesWithin(InvocationID, WorldID, BBox) (EntityIteratorID, bool)
 	NextWorldEntity(InvocationID, EntityIteratorID) (EntityID, bool, bool)
 	CloseWorldEntities(InvocationID, EntityIteratorID)
 	OpenServerPlayerIterator(InvocationID) (PlayerIteratorID, bool)
@@ -570,6 +571,9 @@ func (noopHost) SpawnWorldEntity(InvocationID, WorldID, EntitySpawn) (EntityID, 
 	return EntityID{}, false
 }
 func (noopHost) OpenWorldEntityIterator(InvocationID, WorldID, bool) (EntityIteratorID, bool) {
+	return 0, false
+}
+func (noopHost) OpenWorldEntitiesWithin(InvocationID, WorldID, BBox) (EntityIteratorID, bool) {
 	return 0, false
 }
 func (noopHost) NextWorldEntity(InvocationID, EntityIteratorID) (EntityID, bool, bool) {

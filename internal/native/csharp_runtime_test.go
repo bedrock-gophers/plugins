@@ -305,6 +305,7 @@ type csharpWorldHost struct {
 	entityIteratorInvocation   InvocationID
 	entityIteratorWorld        WorldID
 	entityIteratorPlayersOnly  []bool
+	entityIteratorBoxes        []BBox
 	entityIteratorClosed       EntityIteratorID
 	entityHandle               EntityHandleID
 	entityHandleEntity         EntityID
@@ -413,6 +414,15 @@ func (h *csharpWorldHost) OpenWorldEntityIterator(invocation InvocationID, world
 	} else {
 		h.entityIteratorValues = append(h.entityIteratorValues[:0], h.entityIteratorEntities...)
 	}
+	return h.entityIterator, h.entityIterator != 0 && world == h.worldID
+}
+
+func (h *csharpWorldHost) OpenWorldEntitiesWithin(invocation InvocationID, world WorldID, box BBox) (EntityIteratorID, bool) {
+	h.entityIteratorInvocation, h.entityIteratorWorld = invocation, world
+	h.entityIteratorBoxes = append(h.entityIteratorBoxes, box)
+	h.entityIteratorOpenCalls++
+	h.entityIteratorIndex = 0
+	h.entityIteratorValues = append(h.entityIteratorValues[:0], h.entityIteratorEntities...)
 	return h.entityIterator, h.entityIterator != 0 && world == h.worldID
 }
 
@@ -822,15 +832,19 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	entities.Overload = 21
 	entities.Arguments = []string{"entities"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, entities)
-	if err != nil || output.Failed || output.Message != "world=kitchen:arena, entities=2, players=1" {
+	if err != nil || output.Failed || output.Message != "world=kitchen:arena, entities=2, nearby=2, players=1" {
 		t.Fatalf("entity iteration output=%#v error=%v", output, err)
 	}
-	if host.currentWorldCalls != 3 || host.currentWorldInvocation != 42 ||
-		host.entityIteratorOpenCalls != 2 || host.entityIteratorNextCalls != 5 ||
-		host.entityIteratorCloseCalls != 2 || host.entityIteratorInvocation != 42 ||
+	if host.currentWorldCalls != 4 || host.currentWorldInvocation != 42 ||
+		host.entityIteratorOpenCalls != 3 || host.entityIteratorNextCalls != 8 ||
+		host.entityIteratorCloseCalls != 3 || host.entityIteratorInvocation != 42 ||
 		host.entityIteratorWorld != 91 || host.entityIteratorClosed != 12 ||
 		!slices.Equal(host.entityIteratorPlayersOnly, []bool{false, true}) ||
-		host.entityPlayerCalls != 3 || len(host.texts) == 0 ||
+		!slices.Equal(host.entityIteratorBoxes, []BBox{{
+			Min: Vec3{X: -15, Y: 48, Z: -14},
+			Max: Vec3{X: 17, Y: 80, Z: 18},
+		}}) ||
+		host.entityPlayerCalls != 5 || len(host.texts) == 0 ||
 		host.texts[len(host.texts)-1] != "Kitchen entity iteration is live." {
 		t.Fatalf("entity iterator host state: %+v", host)
 	}

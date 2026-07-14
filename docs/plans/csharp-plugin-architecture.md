@@ -163,7 +163,10 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    and is closed on exhaustion, early disposal, or invocation end. The replaced eager private
    entity/player snapshots have been removed. ABI 39 adds stable private handle identities and the
    AST-generated `EntityHandle.Entity`, `UUID`, `Closed`, and `Close` methods plus exact public
-   `Tx.AddEntity`, `AddEntityAt`, and `RemoveEntity` signatures. Removing an entity expires its
+   `Tx.AddEntity`, `AddEntityAt`, and `RemoveEntity` signatures. `Cube.BBox` and
+   `Tx.EntitiesWithin` are AST-generated too; the latter lazily selects entities whose positions
+   are strictly inside the box, matching Dragonfly rather than intersecting entity hitboxes.
+   Removing an entity expires its
    world-bound identity; adding the same handle creates a fresh identity while preserving handle
    equality. Abandoned detached custom entities are closed before plugin runtime shutdown.
    Generic player removal is intentionally rejected for now because Dragonfly's connected session
@@ -184,7 +187,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    callback completion, or runtime shutdown.
    `World.Schedule(Action<World.Tx>)` is the current fire-and-forget C# adaptation of Dragonfly's
    owner-scheduled `World.Do`. The generator validates the exact upstream `Do(func(*Tx)) *Task`
-   shape. The private ABI 41 callback trampoline keeps delegates plugin-owned, executes them on the
+   shape. The private ABI 42 callback trampoline keeps delegates plugin-owned, executes them on the
    selected world owner with a fresh borrowed transaction, and removes them on execution or task
    failure. Framework teardown stops admission and drains every accepted callback before closing
    the NativeAOT runtime. Managed `Task` cancellation, waiting, and completion callbacks remain a
@@ -198,7 +201,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    implementing `World.Sound`. `HandleSound` materialises their exported bool, scalar, block, item,
    liquid, instrument, disc, horn, pitch, and stage fields. Bucket sounds preserve the exact typed
    liquid block state rather than reducing it to a Minecraft identifier or liquid-kind enum.
-   Next entity slices add `EntitiesWithin`, `EntitySpawnOpts`, `EntityType`, `EntityConfig`, and the
+   Next entity slices add `EntitySpawnOpts`, `EntityType`, `EntityConfig`, and the
    remaining `entity.Ent` capabilities and transaction methods.
 9. Convert practice-core and expand parity tests against Dragonfly.
 
@@ -219,7 +222,7 @@ available too. Functional Nodebuff and Sumo FFA are therefore implementable with
 Remaining raw-Dragonfly parity work is concentrated in the rest of the entity transaction slice
 and advanced world construction:
 
-- `EntitiesWithin`, player-capable raw handle transfer, and the remaining entity transaction methods;
+- player-capable raw handle transfer and the remaining entity transaction methods;
 - custom providers, generators, and entity-type construction beyond the current NOP/MCDB
   `World.Config` surface.
 
@@ -243,6 +246,8 @@ that promoted private Go embeddings round-trip through the typed C# API.
 Its separate `/kitchen biome` overload changes and restores a typed biome while exercising every
 temperature and weather query in this slice.
 `/kitchen tick` reads Dragonfly's transaction-owned current tick; it does not alias world day-time.
+`/kitchen entities` exercises `Entities`, `Players`, and a strict-position `EntitiesWithin` query
+using an AST-generated `Cube.BBox` around the command source.
 `/kitchen handle` resolves a live non-player handle, checks its UUID and transaction lookup,
 removes it, proves the worldless lookup fails, then re-adds it at the command source while preserving
 handle identity.

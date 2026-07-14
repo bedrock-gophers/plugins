@@ -206,8 +206,8 @@ _Static_assert(sizeof(DfWorldCloseInput) == 8, "DfWorldCloseInput ABI layout cha
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
 _Static_assert(sizeof(DfEntityHandleId) == 16, "DfEntityHandleId ABI layout changed");
 _Static_assert(sizeof(DfUuid) == 16, "DfUuid ABI layout changed");
-_Static_assert(sizeof(DfHostApiV27) == 816, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 41u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 824, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 42u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -221,6 +221,10 @@ _Static_assert(offsetof(DfHostApiV27, player_xuid) == 784, "DfHostApiV27.player_
 _Static_assert(offsetof(DfHostApiV27, server_world) == 792, "DfHostApiV27.server_world ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_schedule) == 800, "DfHostApiV27.world_schedule ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_new) == 808, "DfHostApiV27.world_new ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, world_entities_within_open) == 816, "DfHostApiV27.world_entities_within_open ABI offset changed");
+_Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
+_Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
+_Static_assert(offsetof(DfBBox, max) == 24, "DfBBox.max ABI offset changed");
 _Static_assert(sizeof(DfWorldConfigV1) == 56, "DfWorldConfigV1 ABI layout changed");
 _Static_assert(offsetof(DfHostApiV27, player_hurt) == 392, "DfHostApiV27.player_hurt ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, skin_snapshot_info) == 400, "DfHostApiV27.skin_snapshot_info ABI offset changed");
@@ -346,6 +350,7 @@ extern DfStatus bg_go_world_sound_play(uint64_t context, DfInvocationId invocati
 extern DfStatus bg_go_player_sound_play(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV1 *sound);
 extern DfStatus bg_go_world_current(uint64_t context, DfInvocationId invocation, DfWorldId *world);
 extern DfStatus bg_go_world_entity_iterator_open(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t players_only, DfEntityIteratorId *iterator);
+extern DfStatus bg_go_world_entities_within_open(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBBox box, DfEntityIteratorId *iterator);
 extern DfStatus bg_go_world_entity_iterator_next(uint64_t context, DfInvocationId invocation, DfEntityIteratorId iterator, DfEntityId *entity, uint8_t *found);
 extern void bg_go_world_entity_iterator_close(uint64_t context, DfInvocationId invocation, DfEntityIteratorId iterator);
 extern DfStatus bg_go_entity_handle(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityHandleId *handle);
@@ -512,6 +517,7 @@ static DfStatus host_world_sound_play(uint64_t context, DfInvocationId invocatio
 static DfStatus host_player_sound_play(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV1 *sound) { return bg_go_player_sound_play(context, invocation, player, sound); }
 static DfStatus host_world_current(uint64_t context, DfInvocationId invocation, DfWorldId *world) { return bg_go_world_current(context, invocation, world); }
 static DfStatus host_world_entity_iterator_open(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t players_only, DfEntityIteratorId *iterator) { return bg_go_world_entity_iterator_open(context, invocation, world, players_only, iterator); }
+static DfStatus host_world_entities_within_open(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBBox box, DfEntityIteratorId *iterator) { return bg_go_world_entities_within_open(context, invocation, world, box, iterator); }
 static DfStatus host_world_entity_iterator_next(uint64_t context, DfInvocationId invocation, DfEntityIteratorId iterator, DfEntityId *entity, uint8_t *found) { return bg_go_world_entity_iterator_next(context, invocation, iterator, entity, found); }
 static void host_world_entity_iterator_close(uint64_t context, DfInvocationId invocation, DfEntityIteratorId iterator) { bg_go_world_entity_iterator_close(context, invocation, iterator); }
 static DfStatus host_entity_handle(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityHandleId *handle) { return bg_go_entity_handle(context, invocation, entity, handle); }
@@ -760,6 +766,7 @@ DfStatus bg_runtime_open(
         .server_world = host_server_world,
         .world_schedule = host_world_schedule,
         .world_new = host_world_new,
+        .world_entities_within_open = host_world_entities_within_open,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

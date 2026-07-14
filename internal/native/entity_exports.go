@@ -44,6 +44,23 @@ func bg_go_world_entity_iterator_open(context C.uint64_t, invocation C.DfInvocat
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_world_entities_within_open
+func bg_go_world_entities_within_open(context C.uint64_t, invocation C.DfInvocationId, worldID C.DfWorldId, box C.DfBBox, output *C.DfEntityIteratorId) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	id, ok := host.OpenWorldEntitiesWithin(InvocationID(invocation), WorldID(worldID.value), BBox{
+		Min: Vec3{X: float64(box.min.x), Y: float64(box.min.y), Z: float64(box.min.z)},
+		Max: Vec3{X: float64(box.max.x), Y: float64(box.max.y), Z: float64(box.max.z)},
+	})
+	if !ok || id == 0 {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.DfEntityIteratorId(id)
+	return C.DF_STATUS_OK
+}
+
 //export bg_go_world_entity_iterator_next
 func bg_go_world_entity_iterator_next(context C.uint64_t, invocation C.DfInvocationId, iterator C.DfEntityIteratorId, output *C.DfEntityId, found *C.uint8_t) C.DfStatus {
 	host, ok := resolveHost(uint64(context))

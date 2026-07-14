@@ -96,6 +96,10 @@ type Vec3 struct {
 	X, Y, Z float64
 }
 
+type BBox struct {
+	Min, Max Vec3
+}
+
 type Rotation struct {
 	Yaw, Pitch float64
 }
