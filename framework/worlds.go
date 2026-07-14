@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"log/slog"
 	"math"
 	"os"
@@ -49,6 +50,40 @@ type worldOpening struct {
 	err  error
 }
 
+type blockPositionIterator struct {
+	mu         sync.Mutex
+	invocation native.InvocationID
+	next       func() (cube.Pos, bool)
+	stop       func()
+	stopped    bool
+}
+
+func (i *blockPositionIterator) advance() (position cube.Pos, found bool, valid bool) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.stopped {
+		return cube.Pos{}, false, false
+	}
+	defer func() {
+		if recover() != nil {
+			position, found, valid = cube.Pos{}, false, false
+		}
+	}()
+	position, found = i.next()
+	return position, found, true
+}
+
+func (i *blockPositionIterator) close() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.stopped {
+		return
+	}
+	i.stopped = true
+	defer func() { _ = recover() }()
+	i.stop()
+}
+
 // WorldManager owns every world exposed through the plugin framework.
 type WorldManager struct {
 	mu              sync.RWMutex
@@ -68,6 +103,9 @@ type WorldManager struct {
 	closing         bool
 	closeDone       chan struct{}
 	closeErr        error
+	blockIteratorMu sync.Mutex
+	blockIterators  map[native.BlockIteratorID]*blockPositionIterator
+	nextBlockIter   native.BlockIteratorID
 }
 
 // NewWorldManager constructs an in-memory manager, primarily useful to embedders and tests.
@@ -101,7 +139,8 @@ func newWorldManager(root string, log *slog.Logger, players *host.Players) *Worl
 	return &WorldManager{
 		worlds: make(map[WorldID]*managedWorld), handles: make(map[native.WorldID]*managedWorld), byWorld: make(map[*world.World]*managedWorld),
 		openings: make(map[WorldID]*worldOpening), providerPaths: make(map[string]WorldID),
-		root: root, log: log, players: players, entityHandles: entityHandles,
+		blockIterators: make(map[native.BlockIteratorID]*blockPositionIterator),
+		root:           root, log: log, players: players, entityHandles: entityHandles,
 	}
 }
 
@@ -635,6 +674,93 @@ func (m *WorldManager) WorldBlockLoaded(invocation native.InvocationID, id nativ
 	return result.block, result.loaded, err == nil
 }
 
+func (m *WorldManager) OpenWorldBlocksWithin(invocation native.InvocationID, id native.WorldID, position native.BlockPos, radius int32, values []native.WorldBlock) (native.BlockIteratorID, bool) {
+	entry, ok := m.entryForInvocation(invocation, id)
+	if !ok || m.players == nil {
+		return 0, false
+	}
+	entry.lifecycle.RLock()
+	defer entry.lifecycle.RUnlock()
+	if entry.closed {
+		return 0, false
+	}
+	tx := m.currentTx(invocation, entry.world)
+	if tx == nil {
+		return 0, false
+	}
+	blocks := make([]world.Block, len(values))
+	for index, value := range values {
+		properties, valid := decodeBlockProperties(value.PropertiesNBT)
+		if !valid || value.Identifier == "" {
+			return 0, false
+		}
+		block, valid := entry.world.BlockRegistry().BlockByName(value.Identifier, properties)
+		if !valid {
+			return 0, false
+		}
+		blocks[index] = block
+	}
+	next, stop := iter.Pull(tx.BlocksWithin(blockPosition(position), int(radius), blocks...))
+	iterator := &blockPositionIterator{invocation: invocation, next: next, stop: stop}
+	m.blockIteratorMu.Lock()
+	if m.nextBlockIter == native.BlockIteratorID(^uint64(0)) {
+		m.blockIteratorMu.Unlock()
+		iterator.close()
+		return 0, false
+	}
+	m.nextBlockIter++
+	iteratorID := m.nextBlockIter
+	m.blockIterators[iteratorID] = iterator
+	m.blockIteratorMu.Unlock()
+	if !m.players.OnInvocationEnd(invocation, func() { m.closeWorldBlocks(invocation, iteratorID) }) {
+		m.closeWorldBlocks(invocation, iteratorID)
+		return 0, false
+	}
+	return iteratorID, true
+}
+
+func (m *WorldManager) NextWorldBlock(invocation native.InvocationID, id native.BlockIteratorID) (native.BlockPos, bool, bool) {
+	m.blockIteratorMu.Lock()
+	iterator, ok := m.blockIterators[id]
+	m.blockIteratorMu.Unlock()
+	if !ok || iterator.invocation != invocation {
+		return native.BlockPos{}, false, false
+	}
+	position, found, valid := iterator.advance()
+	if !valid || !found {
+		m.closeWorldBlocks(invocation, id)
+	}
+	if !valid {
+		return native.BlockPos{}, false, false
+	}
+	if !found {
+		return native.BlockPos{}, false, true
+	}
+	if position.X() < math.MinInt32 || position.X() > math.MaxInt32 || position.Y() < math.MinInt32 || position.Y() > math.MaxInt32 || position.Z() < math.MinInt32 || position.Z() > math.MaxInt32 {
+		m.closeWorldBlocks(invocation, id)
+		return native.BlockPos{}, false, false
+	}
+	return native.BlockPos{X: int32(position.X()), Y: int32(position.Y()), Z: int32(position.Z())}, true, true
+}
+
+func (m *WorldManager) CloseWorldBlocks(invocation native.InvocationID, id native.BlockIteratorID) {
+	m.closeWorldBlocks(invocation, id)
+}
+
+func (m *WorldManager) closeWorldBlocks(invocation native.InvocationID, id native.BlockIteratorID) {
+	m.blockIteratorMu.Lock()
+	iterator, ok := m.blockIterators[id]
+	if ok && iterator.invocation == invocation {
+		delete(m.blockIterators, id)
+	} else {
+		iterator = nil
+	}
+	m.blockIteratorMu.Unlock()
+	if iterator != nil {
+		iterator.close()
+	}
+}
+
 func (m *WorldManager) WorldRange(invocation native.InvocationID, id native.WorldID) (native.BlockRange, bool) {
 	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
@@ -651,6 +777,56 @@ func (m *WorldManager) WorldRange(invocation native.InvocationID, id native.Worl
 			return native.BlockRange{}, false
 		}
 		return native.BlockRange{Min: int32(value.Min()), Max: int32(value.Max())}, true
+	})
+}
+
+func (m *WorldManager) WorldHighestLightBlocker(invocation native.InvocationID, id native.WorldID, x, z int32) (int32, bool) {
+	return m.worldHeight(invocation, id, func(tx *world.Tx) int { return tx.HighestLightBlocker(int(x), int(z)) })
+}
+
+func (m *WorldManager) WorldHighestBlock(invocation native.InvocationID, id native.WorldID, x, z int32) (int32, bool) {
+	return m.worldHeight(invocation, id, func(tx *world.Tx) int { return tx.HighestBlock(int(x), int(z)) })
+}
+
+func (m *WorldManager) worldHeight(invocation native.InvocationID, id native.WorldID, read func(*world.Tx) int) (int32, bool) {
+	entry, ok := m.entryForInvocation(invocation, id)
+	if !ok {
+		return 0, false
+	}
+	entry.lifecycle.RLock()
+	defer entry.lifecycle.RUnlock()
+	if entry.closed {
+		return 0, false
+	}
+	return readManagedWorld(m, invocation, entry, func(tx *world.Tx) (int32, bool) {
+		value := read(tx)
+		if value < math.MinInt32 || value > math.MaxInt32 {
+			return 0, false
+		}
+		return int32(value), true
+	})
+}
+
+func (m *WorldManager) WorldLight(invocation native.InvocationID, id native.WorldID, position native.BlockPos) (uint8, bool) {
+	return m.worldLight(invocation, id, position, (*world.Tx).Light)
+}
+
+func (m *WorldManager) WorldSkyLight(invocation native.InvocationID, id native.WorldID, position native.BlockPos) (uint8, bool) {
+	return m.worldLight(invocation, id, position, (*world.Tx).SkyLight)
+}
+
+func (m *WorldManager) worldLight(invocation native.InvocationID, id native.WorldID, position native.BlockPos, read func(*world.Tx, cube.Pos) uint8) (uint8, bool) {
+	entry, ok := m.entryForInvocation(invocation, id)
+	if !ok {
+		return 0, false
+	}
+	entry.lifecycle.RLock()
+	defer entry.lifecycle.RUnlock()
+	if entry.closed {
+		return 0, false
+	}
+	return readManagedWorld(m, invocation, entry, func(tx *world.Tx) (uint8, bool) {
+		return read(tx, blockPosition(position)), true
 	})
 }
 

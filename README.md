@@ -46,16 +46,21 @@ Current C# slice: loading, lifecycle, reflected commands, player text actions, g
 
 World callbacks now carry Dragonfly-shaped transactions. `Player.Context` inherits
 `World.Context`, which inherits `World.Tx`; commands receive the same `World.Tx`. `Cube.Pos`,
-`World.Block`, `World.SetOpts`, `World.Tx.Range`, `World.Tx.Block`, `World.Tx.BlockLoaded`,
-`World.Tx.SetBlock`, 79 stateless concrete block types, and `Block.Sand` are generated from
-Dragonfly source and its registered states:
+`World.Block`, `World.SetOpts`, and the current `World.Tx` block-query surface are generated from
+Dragonfly source. This includes `Range`, `Block`, `BlockLoaded`, `BlocksWithin`, `SetBlock`,
+`HighestLightBlocker`, `HighestBlock`, `Light`, and `SkyLight`, plus 79 stateless concrete block
+types and `Block.Sand`:
 
 ```csharp
 var pos = Cube.PosFromVec3(source.Position()).Side(Cube.Face.Down);
 var (block, loaded) = tx.BlockLoaded(pos);
 World.Block? previous = loaded ? block : tx.Block(pos);
 Cube.Range bounds = tx.Range();
+var nearby = tx.BlocksWithin(pos, 8, new Block.Sand());
 tx.SetBlock(pos, new Block.Sand());
 ```
+
+`BlocksWithin` stays lazy across the private ABI: each C# enumerator owns a transaction-scoped
+Dragonfly iterator and closes it on exhaustion, early exit, or callback completion.
 
 Minecraft identifiers, state NBT, world handles, and ABI errors remain private transport details.

@@ -136,6 +136,181 @@ internal static unsafe class PluginBridge
             return (BlockCodec.Decode(Encoding.UTF8.GetString(identifierBytes), propertyBytes), true);
         }
 
+        internal static IEnumerable<Cube.Pos> WorldBlocksWithin(
+            ulong invocation,
+            Cube.Pos position,
+            int radius,
+            IReadOnlyList<World.Block> blocks) =>
+            new WorldBlocksWithinEnumerable(invocation, position, radius, blocks);
+
+        internal static int WorldHighestLightBlocker(ulong invocation, int x, int z)
+        {
+            var api = Api;
+            if (api is null || api->WorldHighestLightBlocker == null)
+                throw new InvalidOperationException("world transaction is unavailable");
+            int y;
+            if (api->WorldHighestLightBlocker(api->Context, invocation, default, x, z, &y) != Abi.Ok)
+                throw new InvalidOperationException("world transaction is no longer valid");
+            return y;
+        }
+
+        internal static int WorldHighestBlock(ulong invocation, int x, int z)
+        {
+            var api = Api;
+            if (api is null || api->WorldHighestBlock == null)
+                throw new InvalidOperationException("world transaction is unavailable");
+            int y;
+            if (api->WorldHighestBlock(api->Context, invocation, default, x, z, &y) != Abi.Ok)
+                throw new InvalidOperationException("world transaction is no longer valid");
+            return y;
+        }
+
+        internal static byte WorldLight(ulong invocation, Cube.Pos position) =>
+            WorldLightLevel(invocation, position, sky: false);
+
+        internal static byte WorldSkyLight(ulong invocation, Cube.Pos position) =>
+            WorldLightLevel(invocation, position, sky: true);
+
+        private static byte WorldLightLevel(ulong invocation, Cube.Pos position, bool sky)
+        {
+            var api = Api;
+            if (api is null || sky && api->WorldSkyLight == null || !sky && api->WorldLight == null)
+                throw new InvalidOperationException("world transaction is unavailable");
+            byte level;
+            var nativePosition = new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() };
+            var status = sky
+                ? api->WorldSkyLight(api->Context, invocation, default, nativePosition, &level)
+                : api->WorldLight(api->Context, invocation, default, nativePosition, &level);
+            if (status != Abi.Ok)
+                throw new InvalidOperationException("world transaction is no longer valid");
+            return level;
+        }
+
+        private sealed class WorldBlocksWithinEnumerable(
+            ulong invocation,
+            Cube.Pos position,
+            int radius,
+            IReadOnlyList<World.Block> blocks) : IEnumerable<Cube.Pos>
+        {
+            public IEnumerator<Cube.Pos> GetEnumerator() =>
+                new WorldBlocksWithinEnumerator(invocation, position, radius, blocks);
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class WorldBlocksWithinEnumerator : IEnumerator<Cube.Pos>
+        {
+            private readonly HostApi* _api;
+            private readonly ulong _invocation;
+            private ulong _iterator;
+            private bool _disposed;
+
+            internal WorldBlocksWithinEnumerator(
+                ulong invocation,
+                Cube.Pos position,
+                int radius,
+                IReadOnlyList<World.Block> blocks)
+            {
+                _api = Api;
+                if (_api is null || _api->WorldBlocksWithinOpen == null ||
+                    _api->WorldBlocksWithinNext == null || _api->WorldBlocksWithinClose == null)
+                    throw new InvalidOperationException("world transaction is unavailable");
+
+                _invocation = invocation;
+                var encoded = new (byte[] Identifier, byte[] Properties)[blocks.Count];
+                var storageLength = 0;
+                for (var index = 0; index < blocks.Count; index++)
+                {
+                    if (!BlockCodec.TryEncode(blocks[index], out var identifier, out var properties))
+                        throw new ArgumentException("block type is not registered", nameof(blocks));
+                    var identifierBytes = Encoding.UTF8.GetBytes(identifier);
+                    encoded[index] = (identifierBytes, properties);
+                    storageLength = checked(storageLength + identifierBytes.Length + properties.Length);
+                }
+
+                var storage = new byte[storageLength];
+                var views = new BlockView[encoded.Length];
+                fixed (byte* storageData = storage)
+                fixed (BlockView* viewData = views)
+                {
+                    var offset = 0;
+                    for (var index = 0; index < encoded.Length; index++)
+                    {
+                        var (identifier, properties) = encoded[index];
+                        identifier.CopyTo(storage, offset);
+                        views[index].Identifier = new StringView
+                        {
+                            Data = storageData + offset,
+                            Length = (ulong)identifier.Length,
+                        };
+                        offset += identifier.Length;
+                        properties.CopyTo(storage, offset);
+                        views[index].PropertiesNbt = new StringView
+                        {
+                            Data = storageData + offset,
+                            Length = (ulong)properties.Length,
+                        };
+                        offset += properties.Length;
+                    }
+
+                    ulong iterator = 0;
+                    var status = _api->WorldBlocksWithinOpen(
+                            _api->Context,
+                            invocation,
+                            default,
+                            new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() },
+                            radius,
+                            viewData,
+                            (ulong)views.Length,
+                            &iterator);
+                    if (status != Abi.Ok || iterator == 0)
+                    {
+                        if (iterator != 0)
+                            _api->WorldBlocksWithinClose(_api->Context, invocation, iterator);
+                        throw new InvalidOperationException("world transaction is no longer valid");
+                    }
+                    _iterator = iterator;
+                }
+            }
+
+            public Cube.Pos Current { get; private set; }
+            object System.Collections.IEnumerator.Current => Current;
+
+            public bool MoveNext()
+            {
+                if (_disposed) return false;
+                BlockPos position;
+                byte ok;
+                if (_api->WorldBlocksWithinNext(
+                        _api->Context,
+                        _invocation,
+                        _iterator,
+                        &position,
+                        &ok) != Abi.Ok || ok > 1)
+                {
+                    Dispose();
+                    throw new InvalidOperationException("world transaction is no longer valid");
+                }
+                if (ok == 0)
+                {
+                    Dispose();
+                    return false;
+                }
+                Current = new Cube.Pos(position.X, position.Y, position.Z);
+                return true;
+            }
+
+            public void Reset() => throw new NotSupportedException();
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _api->WorldBlocksWithinClose(_api->Context, _invocation, _iterator);
+                _iterator = 0;
+            }
+        }
+
         internal static void SetWorldBlock(
             ulong invocation,
             Cube.Pos position,
@@ -219,7 +394,7 @@ internal static unsafe class PluginBridge
     {
         if (host is null) return Abi.Error;
         var header = (HostHeader*)host;
-        if (header->Version != Abi.HostVersion || header->Size < 512) return Abi.Error;
+        if (header->Version != Abi.HostVersion || header->Size < 568) return Abi.Error;
         Host.Api = (HostApi*)host;
         return Abi.Ok;
     }

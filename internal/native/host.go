@@ -163,6 +163,8 @@ type BlockRange struct {
 	Max int32
 }
 
+type BlockIteratorID uint64
+
 type WorldSetOpts struct {
 	DisableBlockUpdates       bool
 	DisableLiquidDisplacement bool
@@ -407,9 +409,16 @@ type Host interface {
 	UnloadWorld(InvocationID, WorldID) bool
 	WorldBlock(InvocationID, WorldID, BlockPos) (WorldBlock, bool)
 	WorldBlockLoaded(InvocationID, WorldID, BlockPos) (WorldBlock, bool, bool)
+	OpenWorldBlocksWithin(InvocationID, WorldID, BlockPos, int32, []WorldBlock) (BlockIteratorID, bool)
+	NextWorldBlock(InvocationID, BlockIteratorID) (BlockPos, bool, bool)
+	CloseWorldBlocks(InvocationID, BlockIteratorID)
 	WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool)
 	SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock, WorldSetOpts) bool
 	WorldRange(InvocationID, WorldID) (BlockRange, bool)
+	WorldHighestLightBlocker(InvocationID, WorldID, int32, int32) (int32, bool)
+	WorldHighestBlock(InvocationID, WorldID, int32, int32) (int32, bool)
+	WorldLight(InvocationID, WorldID, BlockPos) (uint8, bool)
+	WorldSkyLight(InvocationID, WorldID, BlockPos) (uint8, bool)
 	WorldTime(InvocationID, WorldID) (int64, bool)
 	SetWorldTime(InvocationID, WorldID, int64) bool
 	WorldSpawn(InvocationID, WorldID) (BlockPos, bool)
@@ -486,6 +495,13 @@ func (noopHost) WorldBlock(InvocationID, WorldID, BlockPos) (WorldBlock, bool) {
 func (noopHost) WorldBlockLoaded(InvocationID, WorldID, BlockPos) (WorldBlock, bool, bool) {
 	return WorldBlock{}, false, false
 }
+func (noopHost) OpenWorldBlocksWithin(InvocationID, WorldID, BlockPos, int32, []WorldBlock) (BlockIteratorID, bool) {
+	return 0, false
+}
+func (noopHost) NextWorldBlock(InvocationID, BlockIteratorID) (BlockPos, bool, bool) {
+	return BlockPos{}, false, false
+}
+func (noopHost) CloseWorldBlocks(InvocationID, BlockIteratorID) {}
 func (noopHost) WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool) {
 	return WorldBlock{}, false
 }
@@ -493,11 +509,19 @@ func (noopHost) SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock, World
 	return false
 }
 func (noopHost) WorldRange(InvocationID, WorldID) (BlockRange, bool) { return BlockRange{}, false }
-func (noopHost) WorldTime(InvocationID, WorldID) (int64, bool)       { return 0, false }
-func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool      { return false }
-func (noopHost) WorldSpawn(InvocationID, WorldID) (BlockPos, bool)   { return BlockPos{}, false }
-func (noopHost) SetWorldSpawn(InvocationID, WorldID, BlockPos) bool  { return false }
-func (noopHost) SaveWorld(InvocationID, WorldID) bool                { return false }
+func (noopHost) WorldHighestLightBlocker(InvocationID, WorldID, int32, int32) (int32, bool) {
+	return 0, false
+}
+func (noopHost) WorldHighestBlock(InvocationID, WorldID, int32, int32) (int32, bool) {
+	return 0, false
+}
+func (noopHost) WorldLight(InvocationID, WorldID, BlockPos) (uint8, bool)    { return 0, false }
+func (noopHost) WorldSkyLight(InvocationID, WorldID, BlockPos) (uint8, bool) { return 0, false }
+func (noopHost) WorldTime(InvocationID, WorldID) (int64, bool)               { return 0, false }
+func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool              { return false }
+func (noopHost) WorldSpawn(InvocationID, WorldID) (BlockPos, bool)           { return BlockPos{}, false }
+func (noopHost) SetWorldSpawn(InvocationID, WorldID, BlockPos) bool          { return false }
+func (noopHost) SaveWorld(InvocationID, WorldID) bool                        { return false }
 func (noopHost) SpawnWorldEntity(InvocationID, WorldID, EntitySpawn) (EntityID, bool) {
 	return EntityID{}, false
 }

@@ -151,6 +151,11 @@ func (tx *Tx) Range() cube.Range { return cube.Range{} }
 func (tx *Tx) SetBlock(pos cube.Pos, b Block, opts *SetOpts) {}
 func (tx *Tx) Block(pos cube.Pos) Block { return nil }
 func (tx *Tx) BlockLoaded(pos cube.Pos) (Block, bool) { return nil, false }
+func (tx *Tx) BlocksWithin(pos cube.Pos, radius int, blocks ...Block) iter.Seq[cube.Pos] { return nil }
+func (tx *Tx) HighestLightBlocker(x, z int) int { return 0 }
+func (tx *Tx) HighestBlock(x, z int) int { return 0 }
+func (tx *Tx) Light(pos cube.Pos) uint8 { return 0 }
+func (tx *Tx) SkyLight(pos cube.Pos) uint8 { return 0 }
 func (tx *Tx) Liquid(pos cube.Pos) (Liquid, bool) { return nil, false }`
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
@@ -168,6 +173,11 @@ func (tx *Tx) Liquid(pos cube.Pos) (Liquid, bool) { return nil, false }`
 		"public void SetBlock(Cube.Pos pos, Block? b, SetOpts? opts = null)",
 		"public Block Block(Cube.Pos pos)",
 		"public (Block? Block, bool Ok) BlockLoaded(Cube.Pos pos)",
+		"public IEnumerable<Cube.Pos> BlocksWithin(Cube.Pos pos, int radius, params Block[] blocks)",
+		"public int HighestLightBlocker(int x, int z)",
+		"public int HighestBlock(int x, int z)",
+		"public byte Light(Cube.Pos pos)",
+		"public byte SkyLight(Cube.Pos pos)",
 		"public bool DisableRedstoneUpdates;",
 	} {
 		if !strings.Contains(worldOutput, expected) {
@@ -198,6 +208,27 @@ func (tx *Tx) Liquid(pos cube.Pos) (Liquid, bool) { return nil, false }`
 	}
 	if strings.Contains(blockOutput, "public (string") || strings.Contains(blockOutput, "EncodeBlock()") {
 		t.Fatalf("typed blocks expose encoded state:\n%s", blockOutput)
+	}
+}
+
+func TestInspectWorldTxRejectsVariadicDrift(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tx.go")
+	source := `package world
+func (tx *Tx) Range() cube.Range { return cube.Range{} }
+func (tx *Tx) SetBlock(pos cube.Pos, b Block, opts *SetOpts) {}
+func (tx *Tx) Block(pos cube.Pos) Block { return nil }
+func (tx *Tx) BlockLoaded(pos cube.Pos) (Block, bool) { return nil, false }
+func (tx *Tx) BlocksWithin(pos cube.Pos, radius int, blocks []Block) iter.Seq[cube.Pos] { return nil }
+func (tx *Tx) HighestLightBlocker(x, z int) int { return 0 }
+func (tx *Tx) HighestBlock(x, z int) int { return 0 }
+func (tx *Tx) Light(pos cube.Pos) uint8 { return 0 }
+func (tx *Tx) SkyLight(pos cube.Pos) uint8 { return 0 }`
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := inspectWorldTx(path)
+	if err == nil || !strings.Contains(err.Error(), "world.Tx.BlocksWithin: unsupported parameter type []Block") {
+		t.Fatalf("expected changed BlocksWithin variadic error, got %v", err)
 	}
 }
 

@@ -69,8 +69,19 @@ func TestPlayersInvocationRegistryIsExactAndExpires(t *testing.T) {
 			if got, ok := players.InvocationTx(firstID); !ok || got != firstTx {
 				t.Fatalf("second invocation aliased first: %p, %v", got, ok)
 			}
+			cleanups := 0
+			if !players.OnInvocationEnd(secondID, func() { cleanups++ }) ||
+				!players.OnInvocationEnd(secondID, func() { cleanups++ }) {
+				t.Fatal("invocation cleanup registration failed")
+			}
 			endSecond()
 			endSecond()
+			if cleanups != 2 {
+				t.Fatalf("invocation cleanups = %d", cleanups)
+			}
+			if players.OnInvocationEnd(secondID, func() {}) {
+				t.Fatal("cleanup registered after invocation ended")
+			}
 			if _, ok := players.InvocationTx(secondID); ok {
 				t.Fatal("ended invocation still resolves")
 			}

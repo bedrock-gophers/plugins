@@ -99,6 +99,11 @@ var selectedWorldTxMethods = []string{
 	"SetBlock",
 	"Block",
 	"BlockLoaded",
+	"BlocksWithin",
+	"HighestLightBlocker",
+	"HighestBlock",
+	"Light",
+	"SkyLight",
 }
 
 func main() {
@@ -380,6 +385,9 @@ func inspectWorldTx(path string) ([]commandMethod, error) {
 		found[function.Name.Name] = commandMethod{
 			Name: function.Name.Name, Parameters: parameters, ReturnType: result,
 		}
+		if err := validateWorldTxMethod(found[function.Name.Name]); err != nil {
+			return nil, fmt.Errorf("world.Tx.%s: %w", function.Name.Name, err)
+		}
 	}
 	methods := make([]commandMethod, 0, len(selectedWorldTxMethods))
 	for _, name := range selectedWorldTxMethods {
@@ -390,6 +398,40 @@ func inspectWorldTx(path string) ([]commandMethod, error) {
 		methods = append(methods, definition)
 	}
 	return methods, nil
+}
+
+func validateWorldTxMethod(method commandMethod) error {
+	expected := map[string]commandMethod{
+		"Range": {Name: "Range", ReturnType: "Cube.Range"},
+		"SetBlock": {Name: "SetBlock", ReturnType: "void", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"}, {Name: "b", Type: "Block?"}, {Name: "opts", Type: "SetOpts?"},
+		}},
+		"Block": {Name: "Block", ReturnType: "Block", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"},
+		}},
+		"BlockLoaded": {Name: "BlockLoaded", ReturnType: "(Block? Block, bool Ok)", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"},
+		}},
+		"BlocksWithin": {Name: "BlocksWithin", ReturnType: "IEnumerable<Cube.Pos>", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"}, {Name: "radius", Type: "int"}, {Name: "blocks", Type: "params Block[]"},
+		}},
+		"HighestLightBlocker": {Name: "HighestLightBlocker", ReturnType: "int", Parameters: []parameter{
+			{Name: "x", Type: "int"}, {Name: "z", Type: "int"},
+		}},
+		"HighestBlock": {Name: "HighestBlock", ReturnType: "int", Parameters: []parameter{
+			{Name: "x", Type: "int"}, {Name: "z", Type: "int"},
+		}},
+		"Light": {Name: "Light", ReturnType: "byte", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"},
+		}},
+		"SkyLight": {Name: "SkyLight", ReturnType: "byte", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"},
+		}},
+	}[method.Name]
+	if !reflect.DeepEqual(method, expected) {
+		return fmt.Errorf("signature changed: got %s %s(%s)", method.ReturnType, method.Name, formatParameters(method.Parameters))
+	}
+	return nil
 }
 
 func selectedWorldTxMethod(name string) bool {
@@ -465,6 +507,12 @@ func translateWorldTxResult(method string, fields *ast.FieldList) (string, error
 
 func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 	switch value := expression.(type) {
+	case *ast.Ellipsis:
+		typeName, ok := worldTxCSharpType(value.Elt, false)
+		if !ok {
+			return "", false
+		}
+		return "params " + typeName + "[]", true
 	case *ast.StarExpr:
 		typeName, ok := worldTxCSharpType(value.X, parameter)
 		if !ok {
@@ -476,6 +524,8 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 			"Block":   "Block",
 			"SetOpts": "SetOpts",
 			"bool":    "bool",
+			"int":     "int",
+			"uint8":   "byte",
 		}[value.Name]
 		if !ok {
 			return "", false
@@ -494,6 +544,20 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 			"cube.Range": "Cube.Range",
 		}[packageName.Name+"."+value.Sel.Name]
 		return typeName, ok
+	case *ast.IndexExpr:
+		selector, ok := value.X.(*ast.SelectorExpr)
+		if !ok {
+			return "", false
+		}
+		packageName, ok := selector.X.(*ast.Ident)
+		if !ok || packageName.Name != "iter" || selector.Sel.Name != "Seq" {
+			return "", false
+		}
+		element, ok := worldTxCSharpType(value.Index, false)
+		if !ok || element != "Cube.Pos" {
+			return "", false
+		}
+		return "IEnumerable<" + element + ">", true
 	default:
 		return "", false
 	}
@@ -1129,6 +1193,19 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 			fmt.Fprintf(&output, "            PluginBridge.Host.WorldBlock(Invocation, %s);\n", method.Parameters[0].Name)
 		case "BlockLoaded":
 			fmt.Fprintf(&output, "            PluginBridge.Host.WorldBlockLoaded(Invocation, %s);\n", method.Parameters[0].Name)
+		case "BlocksWithin":
+			fmt.Fprintf(&output, "            PluginBridge.Host.WorldBlocksWithin(Invocation, %s, %s, %s);\n",
+				method.Parameters[0].Name, method.Parameters[1].Name, method.Parameters[2].Name)
+		case "HighestLightBlocker":
+			fmt.Fprintf(&output, "            PluginBridge.Host.WorldHighestLightBlocker(Invocation, %s, %s);\n",
+				method.Parameters[0].Name, method.Parameters[1].Name)
+		case "HighestBlock":
+			fmt.Fprintf(&output, "            PluginBridge.Host.WorldHighestBlock(Invocation, %s, %s);\n",
+				method.Parameters[0].Name, method.Parameters[1].Name)
+		case "Light":
+			fmt.Fprintf(&output, "            PluginBridge.Host.WorldLight(Invocation, %s);\n", method.Parameters[0].Name)
+		case "SkyLight":
+			fmt.Fprintf(&output, "            PluginBridge.Host.WorldSkyLight(Invocation, %s);\n", method.Parameters[0].Name)
 		default:
 			panic("unsupported world.Tx method: " + method.Name)
 		}

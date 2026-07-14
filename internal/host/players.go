@@ -30,6 +30,7 @@ type Players struct {
 	entities       *Entities
 	departedWorlds map[*world.EntityHandle]native.WorldID
 	invocations    map[native.InvocationID]*world.Tx
+	invocationEnds map[native.InvocationID][]func()
 	nextInvocation native.InvocationID
 }
 
@@ -48,6 +49,7 @@ func NewPlayers() *Players {
 		entities:       NewEntities(),
 		departedWorlds: map[*world.EntityHandle]native.WorldID{},
 		invocations:    map[native.InvocationID]*world.Tx{},
+		invocationEnds: map[native.InvocationID][]func(){},
 	}
 }
 
@@ -264,11 +266,7 @@ func (p *Players) BeginInvocation(tx *world.Tx) (native.InvocationID, func()) {
 	p.mu.Unlock()
 	var once sync.Once
 	return id, func() {
-		once.Do(func() {
-			p.mu.Lock()
-			delete(p.invocations, id)
-			p.mu.Unlock()
-		})
+		once.Do(func() { p.EndInvocation(id) })
 	}
 }
 
@@ -303,7 +301,26 @@ func (p *Players) EndInvocation(id native.InvocationID) {
 	}
 	p.mu.Lock()
 	delete(p.invocations, id)
+	callbacks := p.invocationEnds[id]
+	delete(p.invocationEnds, id)
 	p.mu.Unlock()
+	for _, callback := range callbacks {
+		callback()
+	}
+}
+
+// OnInvocationEnd registers cleanup that runs exactly once when id ends.
+func (p *Players) OnInvocationEnd(id native.InvocationID, callback func()) bool {
+	if id == 0 || callback == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, ok := p.invocations[id]; !ok {
+		return false
+	}
+	p.invocationEnds[id] = append(p.invocationEnds[id], callback)
+	return true
 }
 
 func txWorld(tx *world.Tx) (value *world.World, ok bool) {

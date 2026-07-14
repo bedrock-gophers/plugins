@@ -212,19 +212,36 @@ public sealed class KitchenSink : Plugin
             var (block, loaded) = tx.BlockLoaded(position);
             var previous = loaded ? block : tx.Block(position);
             var wasSand = previous is Block.Sand;
+            var nearbySand = tx.BlocksWithin(position, 2, new Block.Sand());
+            var highestLightBlocker = tx.HighestLightBlocker(position.X(), position.Z());
+            var highestBlock = tx.HighestBlock(position.X(), position.Z());
+            var light = tx.Light(position);
+            var skyLight = tx.SkyLight(position);
             tx.SetBlock(position, new Block.Sand(), new World.SetOpts
             {
                 DisableBlockUpdates = true,
                 DisableLiquidDisplacement = true,
                 DisableRedstoneUpdates = true,
             });
+            var firstNearbySand = "none";
+            foreach (var nearbyPosition in nearbySand)
+            {
+                firstNearbySand = nearbyPosition.ToString();
+                break;
+            }
             output.Printf(
-                "block={0}, range={1}..{2}, loaded={3}, was_sand={4}",
+                "block={0}, range={1}..{2}, loaded={3}, was_sand={4}, nearby_sand={5}, " +
+                "highest_light_blocker={6}, highest_block={7}, light={8}, sky_light={9}",
                 position,
                 range.Min(),
                 range.Max(),
                 loaded ? "true" : "false",
-                wasSand ? "true" : "false");
+                wasSand ? "true" : "false",
+                firstNearbySand,
+                highestLightBlocker,
+                highestBlock,
+                light,
+                skyLight);
         }
     }
 }

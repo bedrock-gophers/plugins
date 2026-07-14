@@ -152,6 +152,41 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 		if _, loaded, valid := manager.WorldBlockLoaded(invocation, 0, native.BlockPos{X: 30_000_000, Y: 3, Z: 30_000_000}); !valid || loaded {
 			t.Fatalf("WorldBlockLoaded(unloaded) = loaded %v, valid %v", loaded, valid)
 		}
+		iterator, ok := manager.OpenWorldBlocksWithin(invocation, 0, native.BlockPos{X: 2, Y: 3, Z: 4}, 1, []native.WorldBlock{{Identifier: name, PropertiesNBT: stateNBT}})
+		if !ok || iterator == 0 {
+			t.Fatal("OpenWorldBlocksWithin() failed")
+		}
+		position, found, valid := manager.NextWorldBlock(invocation, iterator)
+		if !valid || !found || position != (native.BlockPos{X: 2, Y: 3, Z: 4}) {
+			t.Fatalf("NextWorldBlock() = %#v, %v, %v", position, found, valid)
+		}
+		if _, found, valid := manager.NextWorldBlock(invocation, iterator); !valid || found {
+			t.Fatalf("NextWorldBlock(end) = found %v, valid %v", found, valid)
+		}
+		if _, _, valid := manager.NextWorldBlock(invocation, iterator); valid {
+			t.Fatal("finished block iterator remained live")
+		}
+		closedIterator, ok := manager.OpenWorldBlocksWithin(invocation, 0, native.BlockPos{X: 2, Y: 3, Z: 4}, 1, []native.WorldBlock{{Identifier: name, PropertiesNBT: stateNBT}})
+		if !ok {
+			t.Fatal("second OpenWorldBlocksWithin() failed")
+		}
+		manager.CloseWorldBlocks(invocation, closedIterator)
+		if _, _, valid := manager.NextWorldBlock(invocation, closedIterator); valid {
+			t.Fatal("closed block iterator remained live")
+		}
+		if got, ok := manager.WorldHighestLightBlocker(invocation, 0, 2, 4); !ok || got != int32(tx.HighestLightBlocker(2, 4)) {
+			t.Fatalf("WorldHighestLightBlocker() = %d, %v", got, ok)
+		}
+		if got, ok := manager.WorldHighestBlock(invocation, 0, 2, 4); !ok || got != int32(tx.HighestBlock(2, 4)) {
+			t.Fatalf("WorldHighestBlock() = %d, %v", got, ok)
+		}
+		blockPosition := native.BlockPos{X: 2, Y: 3, Z: 4}
+		if got, ok := manager.WorldLight(invocation, 0, blockPosition); !ok || got != tx.Light(cube.Pos{2, 3, 4}) {
+			t.Fatalf("WorldLight() = %d, %v", got, ok)
+		}
+		if got, ok := manager.WorldSkyLight(invocation, 0, blockPosition); !ok || got != tx.SkyLight(cube.Pos{2, 3, 4}) {
+			t.Fatalf("WorldSkyLight() = %d, %v", got, ok)
+		}
 		bars := block.IronBars{}
 		tx.SetBlock(cube.Pos{2, 3, 4}, bars, nil)
 		tx.SetLiquid(cube.Pos{2, 3, 4}, block.Water{Still: true, Depth: 8})
@@ -166,6 +201,20 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 		}
 		if manager.SaveWorld(invocation, id) {
 			t.Fatal("SaveWorld succeeded from owner transaction")
+		}
+		leakedIterator, ok := manager.OpenWorldBlocksWithin(invocation, 0, native.BlockPos{X: 2, Y: 3, Z: 4}, 1, []native.WorldBlock{{Identifier: name, PropertiesNBT: stateNBT}})
+		if !ok {
+			t.Fatal("leaked OpenWorldBlocksWithin() failed")
+		}
+		leave()
+		if _, _, valid := manager.NextWorldBlock(invocation, leakedIterator); valid {
+			t.Fatal("iterator survived invocation cleanup")
+		}
+		manager.blockIteratorMu.Lock()
+		remainingIterators := len(manager.blockIterators)
+		manager.blockIteratorMu.Unlock()
+		if remainingIterators != 0 {
+			t.Fatalf("block iterators after invocation = %d", remainingIterators)
 		}
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)

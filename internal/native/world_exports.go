@@ -14,6 +14,7 @@ const (
 	maxWorldNameBytes       = 256
 	maxBlockIdentifierBytes = 256
 	maxBlockPropertiesBytes = 64 << 10
+	maxBlocksWithinTargets  = 1 << 16
 	maxSourceNameBytes      = 64 << 10
 	setBlockDisableUpdates  = 1
 	setBlockDisableLiquid   = 2
@@ -144,6 +145,118 @@ func bg_go_world_range(context C.uint64_t, invocation C.DfInvocationId, world C.
 	}
 	output.min = C.int32_t(value.Min)
 	output.max = C.int32_t(value.Max)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_blocks_within_open
+func bg_go_world_blocks_within_open(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, radius C.int32_t, blocks *C.DfBlockView, blockCount C.uint64_t, output *C.DfBlockIteratorId) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	*output = 0
+	count := uint64(blockCount)
+	if !ok || count > maxBlocksWithinTargets || count != 0 && blocks == nil {
+		return C.DF_STATUS_ERROR
+	}
+	values := make([]WorldBlock, int(count))
+	for index, view := range unsafe.Slice(blocks, int(count)) {
+		identifier, validIdentifier := copyWorldBytes(view.identifier, maxBlockIdentifierBytes)
+		properties, validProperties := copyWorldBytes(view.properties_nbt, maxBlockPropertiesBytes)
+		if !validIdentifier || !validProperties || len(identifier) == 0 || !utf8.Valid(identifier) {
+			return C.DF_STATUS_ERROR
+		}
+		values[index] = WorldBlock{Identifier: string(identifier), PropertiesNBT: properties}
+	}
+	id, ok := host.OpenWorldBlocksWithin(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position), int32(radius), values)
+	if !ok || id == 0 {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.DfBlockIteratorId(id)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_blocks_within_next
+func bg_go_world_blocks_within_next(context C.uint64_t, invocation C.DfInvocationId, iterator C.DfBlockIteratorId, position *C.DfBlockPos, found *C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || iterator == 0 || position == nil || found == nil {
+		return C.DF_STATUS_ERROR
+	}
+	*position = C.DfBlockPos{}
+	*found = 0
+	value, hasNext, valid := host.NextWorldBlock(InvocationID(invocation), BlockIteratorID(iterator))
+	if !valid {
+		return C.DF_STATUS_ERROR
+	}
+	if !hasNext {
+		return C.DF_STATUS_OK
+	}
+	*position = C.DfBlockPos{x: C.int32_t(value.X), y: C.int32_t(value.Y), z: C.int32_t(value.Z)}
+	*found = 1
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_blocks_within_close
+func bg_go_world_blocks_within_close(context C.uint64_t, invocation C.DfInvocationId, iterator C.DfBlockIteratorId) {
+	host, ok := resolveHost(uint64(context))
+	if ok && iterator != 0 {
+		host.CloseWorldBlocks(InvocationID(invocation), BlockIteratorID(iterator))
+	}
+}
+
+//export bg_go_world_highest_light_blocker
+func bg_go_world_highest_light_blocker(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, x, z C.int32_t, output *C.int32_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := host.WorldHighestLightBlocker(InvocationID(invocation), WorldID(world.value), int32(x), int32(z))
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.int32_t(value)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_highest_block
+func bg_go_world_highest_block(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, x, z C.int32_t, output *C.int32_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := host.WorldHighestBlock(InvocationID(invocation), WorldID(world.value), int32(x), int32(z))
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.int32_t(value)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_light
+func bg_go_world_light(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, output *C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := host.WorldLight(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position))
+	if !ok || value > 15 {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.uint8_t(value)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_sky_light
+func bg_go_world_sky_light(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, output *C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := host.WorldSkyLight(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position))
+	if !ok || value > 15 {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.uint8_t(value)
 	return C.DF_STATUS_OK
 }
 

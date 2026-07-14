@@ -91,6 +91,36 @@ type csharpWorldHost struct {
 	worldBlockLoadedCalls      int
 	worldBlockLoadedOK         bool
 	worldBlockCalls            int
+	blocksWithinInvocation     InvocationID
+	blocksWithinWorld          WorldID
+	blocksWithinPosition       BlockPos
+	blocksWithinRadius         int32
+	blocksWithinBlocks         []WorldBlock
+	blockIterator              BlockIteratorID
+	blockIteratorPositions     []BlockPos
+	blockIteratorIndex         int
+	blockIteratorOpenCalls     int
+	blockIteratorNextCalls     int
+	blockIteratorCloseCalls    int
+	blockIteratorInvocation    InvocationID
+	blockIteratorClosed        BlockIteratorID
+	highestLightBlockerCall    csharpWorldQueryCall
+	highestLightBlocker        int32
+	highestBlockCall           csharpWorldQueryCall
+	highestBlock               int32
+	lightCall                  csharpWorldQueryCall
+	light                      uint8
+	skyLightCall               csharpWorldQueryCall
+	skyLight                   uint8
+	worldQueryOperations       []string
+}
+
+type csharpWorldQueryCall struct {
+	invocation InvocationID
+	world      WorldID
+	position   BlockPos
+	x          int32
+	z          int32
 }
 
 func (h *csharpWorldHost) WorldRange(invocation InvocationID, world WorldID) (BlockRange, bool) {
@@ -110,12 +140,73 @@ func (h *csharpWorldHost) WorldBlock(invocation InvocationID, world WorldID, pos
 	return h.recordingHost.WorldBlock(invocation, world, position)
 }
 
+func (h *csharpWorldHost) OpenWorldBlocksWithin(invocation InvocationID, world WorldID, position BlockPos, radius int32, blocks []WorldBlock) (BlockIteratorID, bool) {
+	h.blocksWithinInvocation, h.blocksWithinWorld = invocation, world
+	h.blocksWithinPosition, h.blocksWithinRadius = position, radius
+	h.blocksWithinBlocks = append([]WorldBlock(nil), blocks...)
+	h.blockIteratorIndex = 0
+	h.blockIteratorOpenCalls++
+	h.worldQueryOperations = append(h.worldQueryOperations, "open")
+	return h.blockIterator, true
+}
+
+func (h *csharpWorldHost) NextWorldBlock(invocation InvocationID, iterator BlockIteratorID) (BlockPos, bool, bool) {
+	h.blockIteratorInvocation = invocation
+	h.blockIteratorNextCalls++
+	h.worldQueryOperations = append(h.worldQueryOperations, "next")
+	if iterator != h.blockIterator || h.blockIteratorIndex >= len(h.blockIteratorPositions) {
+		return BlockPos{}, false, iterator == h.blockIterator
+	}
+	position := h.blockIteratorPositions[h.blockIteratorIndex]
+	h.blockIteratorIndex++
+	return position, true, true
+}
+
+func (h *csharpWorldHost) CloseWorldBlocks(invocation InvocationID, iterator BlockIteratorID) {
+	h.blockIteratorInvocation, h.blockIteratorClosed = invocation, iterator
+	h.blockIteratorCloseCalls++
+	h.worldQueryOperations = append(h.worldQueryOperations, "close")
+}
+
+func (h *csharpWorldHost) WorldHighestLightBlocker(invocation InvocationID, world WorldID, x, z int32) (int32, bool) {
+	h.highestLightBlockerCall = csharpWorldQueryCall{invocation: invocation, world: world, x: x, z: z}
+	h.worldQueryOperations = append(h.worldQueryOperations, "highest-light-blocker")
+	return h.highestLightBlocker, true
+}
+
+func (h *csharpWorldHost) WorldHighestBlock(invocation InvocationID, world WorldID, x, z int32) (int32, bool) {
+	h.highestBlockCall = csharpWorldQueryCall{invocation: invocation, world: world, x: x, z: z}
+	h.worldQueryOperations = append(h.worldQueryOperations, "highest-block")
+	return h.highestBlock, true
+}
+
+func (h *csharpWorldHost) WorldLight(invocation InvocationID, world WorldID, position BlockPos) (uint8, bool) {
+	h.lightCall = csharpWorldQueryCall{invocation: invocation, world: world, position: position}
+	h.worldQueryOperations = append(h.worldQueryOperations, "light")
+	return h.light, true
+}
+
+func (h *csharpWorldHost) WorldSkyLight(invocation InvocationID, world WorldID, position BlockPos) (uint8, bool) {
+	h.skyLightCall = csharpWorldQueryCall{invocation: invocation, world: world, position: position}
+	h.worldQueryOperations = append(h.worldQueryOperations, "sky-light")
+	return h.skyLight, true
+}
+
 func TestCSharpReflectedCommands(t *testing.T) {
 	host := &csharpWorldHost{
 		recordingHost:      &recordingHost{},
 		worldRange:         BlockRange{Min: -64, Max: 319},
 		worldBlockLoaded:   WorldBlock{Identifier: "minecraft:sand"},
 		worldBlockLoadedOK: true,
+		blockIterator:      7,
+		blockIteratorPositions: []BlockPos{
+			{X: 0, Y: 63, Z: 0},
+			{X: 2, Y: 63, Z: 2},
+		},
+		highestLightBlocker: 70,
+		highestBlock:        72,
+		light:               9,
+		skyLight:            15,
 	}
 	pluginRuntime := openCSharpRuntimeWithHost(t, host)
 	commands, err := pluginRuntime.Commands()
@@ -212,7 +303,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	input.Overload = 7
 	input.Arguments = []string{"block"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=true, was_sand=true" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15" {
 		t.Fatalf("block output=%#v error=%v", output, err)
 	}
 	if host.worldRangeCalls != 1 || host.worldRangeInvocation != 42 || host.worldRangeWorld != 0 {
@@ -227,16 +318,45 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		!host.worldSetOpts.DisableBlockUpdates || !host.worldSetOpts.DisableLiquidDisplacement || !host.worldSetOpts.DisableRedstoneUpdates {
 		t.Fatalf("block host call: position=%+v block=%+v options=%+v", host.worldBlockPos, host.worldBlockSet, host.worldSetOpts)
 	}
+	queryPosition := BlockPos{X: 1, Y: 63, Z: 2}
+	columnCall := csharpWorldQueryCall{invocation: 42, x: 1, z: 2}
+	positionCall := csharpWorldQueryCall{invocation: 42, position: queryPosition}
+	if host.blocksWithinInvocation != 42 || host.blocksWithinWorld != 0 || host.blocksWithinPosition != queryPosition ||
+		host.blocksWithinRadius != 2 || len(host.blocksWithinBlocks) != 1 ||
+		host.blocksWithinBlocks[0].Identifier != "minecraft:sand" || !slices.Equal(host.blocksWithinBlocks[0].PropertiesNBT, properties) {
+		t.Fatalf("blocks within open: invocation=%d world=%d position=%+v radius=%d blocks=%+v",
+			host.blocksWithinInvocation, host.blocksWithinWorld, host.blocksWithinPosition, host.blocksWithinRadius, host.blocksWithinBlocks)
+	}
+	if host.highestLightBlockerCall != columnCall || host.highestBlockCall != columnCall ||
+		host.lightCall != positionCall || host.skyLightCall != positionCall {
+		t.Fatalf("scalar query calls: highest_light=%+v highest=%+v light=%+v sky_light=%+v",
+			host.highestLightBlockerCall, host.highestBlockCall, host.lightCall, host.skyLightCall)
+	}
+	if host.blockIteratorOpenCalls != 1 || host.blockIteratorNextCalls != 1 || host.blockIteratorCloseCalls != 1 ||
+		host.blockIteratorInvocation != 42 || host.blockIteratorClosed != 7 || host.blockIteratorIndex != 1 {
+		t.Fatalf("block iterator: open=%d next=%d close=%d invocation=%d closed=%d index=%d",
+			host.blockIteratorOpenCalls, host.blockIteratorNextCalls, host.blockIteratorCloseCalls,
+			host.blockIteratorInvocation, host.blockIteratorClosed, host.blockIteratorIndex)
+	}
+	if !slices.Equal(host.worldQueryOperations, []string{
+		"highest-light-blocker", "highest-block", "light", "sky-light", "open", "next", "close",
+	}) {
+		t.Fatalf("world query operations=%v", host.worldQueryOperations)
+	}
 
 	host.worldBlockLoadedOK = false
 	host.worldBlock, host.worldBlockOK = host.worldBlockLoaded, true
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=false, was_sand=true" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15" {
 		t.Fatalf("unloaded block output=%#v error=%v", output, err)
 	}
 	if host.worldRangeCalls != 2 || host.worldBlockLoadedCalls != 3 || host.worldBlockCalls != 2 {
 		t.Fatalf("unloaded fallback host calls: range=%d loaded=%d block=%d",
 			host.worldRangeCalls, host.worldBlockLoadedCalls, host.worldBlockCalls)
+	}
+	if host.blockIteratorOpenCalls != 2 || host.blockIteratorNextCalls != 2 || host.blockIteratorCloseCalls != 2 {
+		t.Fatalf("second block iterator: open=%d next=%d close=%d",
+			host.blockIteratorOpenCalls, host.blockIteratorNextCalls, host.blockIteratorCloseCalls)
 	}
 
 	options, err := pluginRuntime.CommandEnumOptions(kitchen.Index, 5, 1, CommandEnumContext{
