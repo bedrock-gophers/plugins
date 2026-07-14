@@ -189,10 +189,24 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 		}
 		bars := block.IronBars{}
 		tx.SetBlock(cube.Pos{2, 3, 4}, bars, nil)
-		tx.SetLiquid(cube.Pos{2, 3, 4}, block.Water{Still: true, Depth: 8})
-		liquid, ok := manager.WorldLiquid(invocation, id, native.BlockPos{X: 2, Y: 3, Z: 4})
-		if !ok || liquid.Identifier != "minecraft:water" {
-			t.Fatalf("WorldLiquid() = %#v, %v", liquid, ok)
+		waterName, waterState := (block.Water{Still: true, Depth: 8}).EncodeBlock()
+		waterNBT, ok := encodeBlockProperties(waterState)
+		water := native.WorldBlock{Identifier: waterName, PropertiesNBT: waterNBT}
+		if !ok || !manager.SetWorldLiquid(invocation, id, blockPosition, &water) {
+			t.Fatal("SetWorldLiquid() failed")
+		}
+		liquid, found, valid := manager.WorldLiquid(invocation, id, blockPosition)
+		if !valid || !found || liquid.Identifier != "minecraft:water" {
+			t.Fatalf("WorldLiquid() = %#v, %v, %v", liquid, found, valid)
+		}
+		if !manager.SetWorldLiquid(invocation, id, blockPosition, nil) {
+			t.Fatal("SetWorldLiquid(nil) failed")
+		}
+		if _, found, valid := manager.WorldLiquid(invocation, id, blockPosition); !valid || found {
+			t.Fatalf("WorldLiquid(removed) = found %v, valid %v", found, valid)
+		}
+		if !manager.SetWorldLiquid(invocation, id, blockPosition, &water) {
+			t.Fatal("second SetWorldLiquid() failed")
 		}
 		foreground, ok := manager.WorldBlock(invocation, id, native.BlockPos{X: 2, Y: 3, Z: 4})
 		barsName, _ := bars.EncodeBlock()
@@ -264,11 +278,11 @@ func TestWorldManagerInvocationCannotBorrowAnotherWorldTransaction(t *testing.T)
 		if _, ok := manager.WorldBlock(invocation, secondID, position); ok {
 			t.Fatal("cross-world synchronous read succeeded")
 		}
-		if _, ok := manager.WorldLiquid(invocation, secondID, position); ok {
+		if _, _, valid := manager.WorldLiquid(invocation, secondID, position); valid {
 			t.Fatal("cross-world synchronous liquid read succeeded")
 		}
 		tx.SetLiquid(cube.Pos{1, 2, 3}, block.Water{Still: true, Depth: 8})
-		if _, ok := manager.WorldLiquid(invocation, firstID, position); !ok {
+		if _, found, valid := manager.WorldLiquid(invocation, firstID, position); !valid || !found {
 			t.Fatal("same-world liquid read did not use invocation transaction")
 		}
 		if _, ok := manager.WorldBlock(invocation, firstID, position); !ok {
@@ -281,7 +295,7 @@ func TestWorldManagerInvocationCannotBorrowAnotherWorldTransaction(t *testing.T)
 	if _, ok := manager.WorldBlock(stale, firstID, position); ok {
 		t.Fatal("stale invocation still resolves")
 	}
-	if _, ok := manager.WorldLiquid(stale, firstID, position); ok {
+	if _, _, valid := manager.WorldLiquid(stale, firstID, position); valid {
 		t.Fatal("stale invocation still resolves liquid")
 	}
 }

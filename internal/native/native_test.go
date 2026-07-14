@@ -360,9 +360,21 @@ func (h *recordingHost) WorldBlock(_ InvocationID, id WorldID, position BlockPos
 	h.worldBlockPos = position
 	return h.worldBlock, (id == 0 || id == h.worldID) && h.worldBlockOK
 }
-func (h *recordingHost) WorldLiquid(_ InvocationID, id WorldID, position BlockPos) (WorldBlock, bool) {
+func (h *recordingHost) WorldLiquid(_ InvocationID, id WorldID, position BlockPos) (WorldBlock, bool, bool) {
 	h.worldBlockPos = position
-	return h.worldLiquid, id == h.worldID && h.worldLiquidOK
+	if id != h.worldID {
+		return WorldBlock{}, false, false
+	}
+	return h.worldLiquid, h.worldLiquidOK, true
+}
+func (h *recordingHost) SetWorldLiquid(_ InvocationID, id WorldID, position BlockPos, value *WorldBlock) bool {
+	h.worldBlockPos = position
+	if value == nil {
+		h.worldLiquid, h.worldLiquidOK = WorldBlock{}, false
+	} else {
+		h.worldLiquid, h.worldLiquidOK = *value, true
+	}
+	return id == 0 || id == h.worldID
 }
 func (h *recordingHost) SetWorldBlock(_ InvocationID, id WorldID, position BlockPos, value WorldBlock, options WorldSetOpts) bool {
 	h.worldBlockPos, h.worldBlockSet, h.worldSetOpts = position, value, options

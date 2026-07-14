@@ -217,12 +217,20 @@ public sealed class KitchenSink : Plugin
             var highestBlock = tx.HighestBlock(position.X(), position.Z());
             var light = tx.Light(position);
             var skyLight = tx.SkyLight(position);
+            var (_, liquidBeforeFound) = tx.Liquid(position);
             tx.SetBlock(position, new Block.Sand(), new World.SetOpts
             {
                 DisableBlockUpdates = true,
                 DisableLiquidDisplacement = true,
                 DisableRedstoneUpdates = true,
             });
+            tx.SetLiquid(position, new Block.Water(Still: true, Depth: 8, Falling: false));
+            var (liquid, liquidFound) = tx.Liquid(position);
+            var liquidState = liquid is Block.Water water
+                ? $"Water(still={(water.Still ? "true" : "false")},depth={water.Depth}," +
+                  $"falling={(water.Falling ? "true" : "false")})"
+                : liquid?.GetType().Name ?? "none";
+            tx.SetLiquid(position, null);
             var firstNearbySand = "none";
             foreach (var nearbyPosition in nearbySand)
             {
@@ -231,7 +239,8 @@ public sealed class KitchenSink : Plugin
             }
             output.Printf(
                 "block={0}, range={1}..{2}, loaded={3}, was_sand={4}, nearby_sand={5}, " +
-                "highest_light_blocker={6}, highest_block={7}, light={8}, sky_light={9}",
+                "highest_light_blocker={6}, highest_block={7}, light={8}, sky_light={9}, " +
+                "liquid_before={10}, liquid={11}:{12}",
                 position,
                 range.Min(),
                 range.Max(),
@@ -241,7 +250,10 @@ public sealed class KitchenSink : Plugin
                 highestLightBlocker,
                 highestBlock,
                 light,
-                skyLight);
+                skyLight,
+                liquidBeforeFound ? "true" : "false",
+                liquidFound ? "true" : "false",
+                liquidState);
         }
     }
 }

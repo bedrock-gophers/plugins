@@ -7,6 +7,8 @@ public sealed partial class World
 {
     public interface Block { }
 
+    public interface Liquid : Block { }
+
     public sealed class SetOpts
     {
         public bool DisableBlockUpdates;
@@ -30,6 +32,12 @@ public sealed partial class World
 
         public IEnumerable<Cube.Pos> BlocksWithin(Cube.Pos pos, int radius, params Block[] blocks) =>
             PluginBridge.Host.WorldBlocksWithin(Invocation, pos, radius, blocks);
+
+        public (Liquid? Liquid, bool Ok) Liquid(Cube.Pos pos) =>
+            PluginBridge.Host.WorldLiquid(Invocation, pos);
+
+        public void SetLiquid(Cube.Pos pos, Liquid? b) =>
+            PluginBridge.Host.SetWorldLiquid(Invocation, pos, b);
 
         public int HighestLightBlocker(int x, int z) =>
             PluginBridge.Host.WorldHighestLightBlocker(Invocation, x, z);

@@ -28,15 +28,18 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `Cube.Face`, `World.Block`, `World.SetOpts`, `World.Tx.Range`, `World.Tx.Block`,
    `World.Tx.BlockLoaded`, `World.Tx.BlocksWithin`, `World.Tx.SetBlock`,
    `World.Tx.HighestLightBlocker`, `World.Tx.HighestBlock`, `World.Tx.Light`,
-   `World.Tx.SkyLight`, 79 stateless block types, and `Block.Sand`.
+   `World.Tx.SkyLight`, `World.Liquid`, `World.Tx.Liquid`, `World.Tx.SetLiquid`, 79 stateless
+   block types, `Block.Sand`, `Block.Water`, and `Block.Lava`.
    Transaction method signatures and parameter names come from Dragonfly's `world.Tx` Go AST;
    `BlockLoaded` preserves Dragonfly's non-loading query through a C# tuple. `BlocksWithin` maps
    `iter.Seq[cube.Pos]` to lazy `IEnumerable<Cube.Pos>` backed by a transaction-scoped native
    iterator; it is not materialised into a snapshot. `Player.Context : World.Context : World.Tx`,
    so event handlers use world operations directly just like embedded Dragonfly contexts.
-   Registered block states supply canonical private codecs; public plugins never handle
-   identifiers, NBT, world handles, iterator handles, or host errors. Remaining stateful blocks,
-   liquids, structures, world methods, custom blocks, and block models land incrementally.
+   Registered block and liquid states supply canonical private codecs; public plugins never handle
+   identifiers, NBT, world handles, iterator handles, or host errors. `Liquid` preserves
+   Dragonfly's `(Liquid, bool)` result, and passing `null` to `SetLiquid` removes the liquid. Host
+   ABI 24 transports that distinction without exposing it publicly. Remaining stateful blocks,
+   structures, world methods, custom blocks, and block models land incrementally.
 5. Items, forms, entities, particles, sounds, and remaining world/block methods.
 6. Convert practice-core and expand parity tests against Dragonfly.
 
@@ -50,8 +53,9 @@ transports calls.
 `examples/plugins/kitchen-sink` must use every exposed API. Its `/kitchen block` overload reads the
 block below the source through `World.Tx`, writes typed `Block.Sand`, and exercises all three
 `World.SetOpts` flags, reads the world range, performs a non-loading block lookup, lazily searches
-nearby blocks, and reads height/light data. NativeAOT and host-call tests verify the public shape,
-lazy iterator cleanup, and transaction-safe transport.
+nearby blocks, reads height/light data, inspects typed water, and writes/removes typed liquid.
+NativeAOT and host-call tests verify the public shape, lazy iterator cleanup, and transaction-safe
+transport.
 
 `examples/plugins/vanilla-commands` keeps its plugin entry tiny and one command per file. It currently exercises `/gamemode`, `/help`, `/ping`, and `/position`, and expands with each gameplay parity slice.
 

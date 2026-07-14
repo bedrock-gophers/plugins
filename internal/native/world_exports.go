@@ -261,13 +261,44 @@ func bg_go_world_sky_light(context C.uint64_t, invocation C.DfInvocationId, worl
 }
 
 //export bg_go_world_liquid_get
-func bg_go_world_liquid_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, output *C.DfBlockData) C.DfStatus {
+func bg_go_world_liquid_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, found *C.uint8_t, output *C.DfBlockData) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
-	if !ok || output == nil {
+	if !ok || found == nil || output == nil {
 		return C.DF_STATUS_ERROR
 	}
-	block, ok := host.WorldLiquid(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position))
-	return writeWorldBlock(output, block, ok)
+	*found = 0
+	output.identifier.len = 0
+	output.properties_nbt.len = 0
+	block, present, valid := host.WorldLiquid(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position))
+	if !valid {
+		return C.DF_STATUS_ERROR
+	}
+	if !present {
+		return C.DF_STATUS_OK
+	}
+	*found = 1
+	return writeWorldBlock(output, block, true)
+}
+
+//export bg_go_world_liquid_set
+func bg_go_world_liquid_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, view *C.DfBlockView) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	var value *WorldBlock
+	if view != nil {
+		identifier, validIdentifier := copyWorldBytes(view.identifier, maxBlockIdentifierBytes)
+		properties, validProperties := copyWorldBytes(view.properties_nbt, maxBlockPropertiesBytes)
+		if !validIdentifier || !validProperties || len(identifier) == 0 || !utf8.Valid(identifier) {
+			return C.DF_STATUS_ERROR
+		}
+		value = &WorldBlock{Identifier: string(identifier), PropertiesNBT: properties}
+	}
+	if !host.SetWorldLiquid(InvocationID(invocation), WorldID(world.value), nativeBlockPosition(position), value) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
 }
 
 func writeWorldBlock(output *C.DfBlockData, block WorldBlock, ok bool) C.DfStatus {

@@ -412,7 +412,8 @@ type Host interface {
 	OpenWorldBlocksWithin(InvocationID, WorldID, BlockPos, int32, []WorldBlock) (BlockIteratorID, bool)
 	NextWorldBlock(InvocationID, BlockIteratorID) (BlockPos, bool, bool)
 	CloseWorldBlocks(InvocationID, BlockIteratorID)
-	WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool)
+	WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool, bool)
+	SetWorldLiquid(InvocationID, WorldID, BlockPos, *WorldBlock) bool
 	SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock, WorldSetOpts) bool
 	WorldRange(InvocationID, WorldID) (BlockRange, bool)
 	WorldHighestLightBlocker(InvocationID, WorldID, int32, int32) (int32, bool)
@@ -502,9 +503,10 @@ func (noopHost) NextWorldBlock(InvocationID, BlockIteratorID) (BlockPos, bool, b
 	return BlockPos{}, false, false
 }
 func (noopHost) CloseWorldBlocks(InvocationID, BlockIteratorID) {}
-func (noopHost) WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool) {
-	return WorldBlock{}, false
+func (noopHost) WorldLiquid(InvocationID, WorldID, BlockPos) (WorldBlock, bool, bool) {
+	return WorldBlock{}, false, false
 }
+func (noopHost) SetWorldLiquid(InvocationID, WorldID, BlockPos, *WorldBlock) bool { return false }
 func (noopHost) SetWorldBlock(InvocationID, WorldID, BlockPos, WorldBlock, WorldSetOpts) bool {
 	return false
 }

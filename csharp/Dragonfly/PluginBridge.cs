@@ -136,6 +136,92 @@ internal static unsafe class PluginBridge
             return (BlockCodec.Decode(Encoding.UTF8.GetString(identifierBytes), propertyBytes), true);
         }
 
+        internal static (World.Liquid? Liquid, bool Ok) WorldLiquid(
+            ulong invocation,
+            Cube.Pos position)
+        {
+            var api = Api;
+            if (api is null || api->WorldLiquidGet == null)
+                throw new InvalidOperationException("world transaction is unavailable");
+
+            var nativePosition = new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() };
+            var data = new BlockData();
+            byte found = 0;
+            var status = api->WorldLiquidGet(
+                api->Context,
+                invocation,
+                default,
+                nativePosition,
+                &found,
+                &data);
+            if (found == 0)
+            {
+                if (status != Abi.Ok)
+                    throw new InvalidOperationException("world transaction is no longer valid");
+                return (null, false);
+            }
+            if (found != 1 || data.Identifier.Length > 256 || data.PropertiesNbt.Length > 64 * 1024)
+                throw new InvalidOperationException("invalid liquid state returned by server");
+
+            var identifierBytes = new byte[checked((int)data.Identifier.Length)];
+            var propertyBytes = new byte[checked((int)data.PropertiesNbt.Length)];
+            fixed (byte* identifier = identifierBytes)
+            fixed (byte* properties = propertyBytes)
+            {
+                data.Identifier = new StringBuffer
+                {
+                    Data = identifier,
+                    Capacity = (ulong)identifierBytes.Length,
+                };
+                data.PropertiesNbt = new StringBuffer
+                {
+                    Data = properties,
+                    Capacity = (ulong)propertyBytes.Length,
+                };
+                found = 0;
+                if (api->WorldLiquidGet(
+                        api->Context,
+                        invocation,
+                        default,
+                        nativePosition,
+                        &found,
+                        &data) != Abi.Ok || found != 1)
+                    throw new InvalidOperationException("world transaction is no longer valid");
+            }
+            return (BlockCodec.DecodeLiquid(Encoding.UTF8.GetString(identifierBytes), propertyBytes), true);
+        }
+
+        internal static void SetWorldLiquid(
+            ulong invocation,
+            Cube.Pos position,
+            World.Liquid? liquid)
+        {
+            var api = Api;
+            if (api is null || api->WorldLiquidSet == null) return;
+            var nativePosition = new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() };
+            if (liquid is null)
+            {
+                if (api->WorldLiquidSet(api->Context, invocation, default, nativePosition, null) != Abi.Ok)
+                    throw new InvalidOperationException("world transaction is no longer valid");
+                return;
+            }
+            if (!BlockCodec.TryEncode(liquid, out var identifier, out var properties))
+                throw new ArgumentException("liquid type is not registered", nameof(liquid));
+
+            var identifierBytes = Encoding.UTF8.GetBytes(identifier);
+            fixed (byte* identifierData = identifierBytes)
+            fixed (byte* propertyData = properties)
+            {
+                var view = new BlockView
+                {
+                    Identifier = new StringView { Data = identifierData, Length = (ulong)identifierBytes.Length },
+                    PropertiesNbt = new StringView { Data = propertyData, Length = (ulong)properties.Length },
+                };
+                if (api->WorldLiquidSet(api->Context, invocation, default, nativePosition, &view) != Abi.Ok)
+                    throw new InvalidOperationException("world transaction is no longer valid");
+            }
+        }
+
         internal static IEnumerable<Cube.Pos> WorldBlocksWithin(
             ulong invocation,
             Cube.Pos position,
@@ -394,7 +480,7 @@ internal static unsafe class PluginBridge
     {
         if (host is null) return Abi.Error;
         var header = (HostHeader*)host;
-        if (header->Version != Abi.HostVersion || header->Size < 568) return Abi.Error;
+        if (header->Version != Abi.HostVersion || header->Size < 576) return Abi.Error;
         Host.Api = (HostApi*)host;
         return Abi.Ok;
     }

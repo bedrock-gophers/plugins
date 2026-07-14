@@ -830,24 +830,75 @@ func (m *WorldManager) worldLight(invocation native.InvocationID, id native.Worl
 	})
 }
 
-func (m *WorldManager) WorldLiquid(invocation native.InvocationID, id native.WorldID, position native.BlockPos) (native.WorldBlock, bool) {
+func (m *WorldManager) WorldLiquid(invocation native.InvocationID, id native.WorldID, position native.BlockPos) (native.WorldBlock, bool, bool) {
 	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
-		return native.WorldBlock{}, false
+		return native.WorldBlock{}, false, false
 	}
 	entry.lifecycle.RLock()
 	defer entry.lifecycle.RUnlock()
 	if entry.closed {
-		return native.WorldBlock{}, false
+		return native.WorldBlock{}, false, false
 	}
-	return m.readTx(invocation, entry, func(tx *world.Tx) (native.WorldBlock, bool) {
+	read := func(tx *world.Tx) (native.WorldBlock, bool, bool) {
 		liquid, ok := tx.Liquid(blockPosition(position))
 		if !ok {
-			return native.WorldBlock{}, false
+			return native.WorldBlock{}, false, true
 		}
 		name, properties := liquid.EncodeBlock()
 		encoded, ok := encodeBlockProperties(properties)
-		return native.WorldBlock{Identifier: name, PropertiesNBT: encoded}, ok
+		return native.WorldBlock{Identifier: name, PropertiesNBT: encoded}, true, ok
+	}
+	if tx := m.currentTx(invocation, entry.world); tx != nil {
+		return read(tx)
+	}
+	if invocation != 0 {
+		return native.WorldBlock{}, false, false
+	}
+	type liquidResult struct {
+		block native.WorldBlock
+		found bool
+	}
+	result, err := world.Call(context.Background(), entry.world, func(tx *world.Tx) (liquidResult, error) {
+		block, found, valid := read(tx)
+		if !valid {
+			return liquidResult{}, errors.New("world liquid operation failed")
+		}
+		return liquidResult{block: block, found: found}, nil
+	})
+	return result.block, result.found, err == nil
+}
+
+func (m *WorldManager) SetWorldLiquid(invocation native.InvocationID, id native.WorldID, position native.BlockPos, value *native.WorldBlock) bool {
+	entry, ok := m.entryForInvocation(invocation, id)
+	if !ok {
+		return false
+	}
+	entry.lifecycle.RLock()
+	defer entry.lifecycle.RUnlock()
+	if entry.closed {
+		return false
+	}
+	var liquid world.Liquid
+	if value != nil {
+		if value.Identifier == "" {
+			return false
+		}
+		properties, valid := decodeBlockProperties(value.PropertiesNBT)
+		if !valid {
+			return false
+		}
+		block, valid := entry.world.BlockRegistry().BlockByName(value.Identifier, properties)
+		if !valid {
+			return false
+		}
+		liquid, valid = block.(world.Liquid)
+		if !valid {
+			return false
+		}
+	}
+	return m.writeTx(invocation, entry, func(tx *world.Tx) {
+		tx.SetLiquid(blockPosition(position), liquid)
 	})
 }
 

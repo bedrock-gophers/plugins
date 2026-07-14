@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -152,11 +157,12 @@ func (tx *Tx) SetBlock(pos cube.Pos, b Block, opts *SetOpts) {}
 func (tx *Tx) Block(pos cube.Pos) Block { return nil }
 func (tx *Tx) BlockLoaded(pos cube.Pos) (Block, bool) { return nil, false }
 func (tx *Tx) BlocksWithin(pos cube.Pos, radius int, blocks ...Block) iter.Seq[cube.Pos] { return nil }
+func (tx *Tx) Liquid(pos cube.Pos) (Liquid, bool) { return nil, false }
+func (tx *Tx) SetLiquid(pos cube.Pos, b Liquid) {}
 func (tx *Tx) HighestLightBlocker(x, z int) int { return 0 }
 func (tx *Tx) HighestBlock(x, z int) int { return 0 }
 func (tx *Tx) Light(pos cube.Pos) uint8 { return 0 }
-func (tx *Tx) SkyLight(pos cube.Pos) uint8 { return 0 }
-func (tx *Tx) Liquid(pos cube.Pos) (Liquid, bool) { return nil, false }`
+func (tx *Tx) SkyLight(pos cube.Pos) uint8 { return 0 }`
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +180,9 @@ func (tx *Tx) Liquid(pos cube.Pos) (Liquid, bool) { return nil, false }`
 		"public Block Block(Cube.Pos pos)",
 		"public (Block? Block, bool Ok) BlockLoaded(Cube.Pos pos)",
 		"public IEnumerable<Cube.Pos> BlocksWithin(Cube.Pos pos, int radius, params Block[] blocks)",
+		"public interface Liquid : Block { }",
+		"public (Liquid? Liquid, bool Ok) Liquid(Cube.Pos pos)",
+		"public void SetLiquid(Cube.Pos pos, Liquid? b)",
 		"public int HighestLightBlocker(int x, int z)",
 		"public int HighestBlock(int x, int z)",
 		"public byte Light(Cube.Pos pos)",
@@ -194,13 +203,28 @@ func (tx *Tx) Liquid(pos cube.Pos) (Liquid, bool) { return nil, false }`
 			{Name: "Sand", Identifier: "minecraft:sand", PropertiesNBT: []byte{10, 0, 0, 0}},
 			{Name: "Sand", Identifier: "minecraft:red_sand", PropertiesNBT: []byte{10, 0, 0, 0}},
 		},
+		Liquids: []liquidSpec{
+			{Name: "Water", States: []encodedLiquid{{
+				encodedBlock: encodedBlock{Name: "Water", Identifier: "minecraft:water", PropertiesNBT: []byte{10, 1}},
+				Still:        true, Depth: 8,
+			}}},
+			{Name: "Lava", States: []encodedLiquid{{
+				encodedBlock: encodedBlock{Name: "Lava", Identifier: "minecraft:flowing_lava", PropertiesNBT: []byte{10, 2}},
+				Depth:        4, Falling: true,
+			}}},
+		},
 	}))
 	for _, expected := range []string{
 		"public readonly record struct Air : World.Block;",
 		"public readonly record struct Sand(bool Red = false) : World.Block;",
+		"public readonly record struct Water(bool Still, int Depth, bool Falling) : World.Liquid;",
+		"public readonly record struct Lava(bool Still, int Depth, bool Falling) : World.Liquid;",
 		"internal static class BlockCodec",
 		"case Block.Sand { Red: true }:",
+		"case Block.Water { Still: true, Depth: 8, Falling: false }:",
+		"internal static World.Liquid DecodeLiquid",
 		"private sealed record EncodedBlock",
+		"private sealed record EncodedLiquid",
 	} {
 		if !strings.Contains(blockOutput, expected) {
 			t.Fatalf("generated block output missing %q:\n%s", expected, blockOutput)
@@ -208,6 +232,98 @@ func (tx *Tx) Liquid(pos cube.Pos) (Liquid, bool) { return nil, false }`
 	}
 	if strings.Contains(blockOutput, "public (string") || strings.Contains(blockOutput, "EncodeBlock()") {
 		t.Fatalf("typed blocks expose encoded state:\n%s", blockOutput)
+	}
+}
+
+func TestValidateLiquidFieldsRejectsASTDrift(t *testing.T) {
+	parse := func(source string) *ast.TypeSpec {
+		t.Helper()
+		file, err := parser.ParseFile(token.NewFileSet(), "liquid.go", source, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result *ast.TypeSpec
+		ast.Inspect(file, func(node ast.Node) bool {
+			spec, ok := node.(*ast.TypeSpec)
+			if ok && spec.Name.Name == "Water" {
+				result = spec
+			}
+			return true
+		})
+		return result
+	}
+	valid := parse(`package block
+type Water struct {
+	empty
+	Still bool
+	Depth int
+	Falling bool
+}`)
+	if err := validateLiquidFields(valid, "Water"); err != nil {
+		t.Fatalf("valid liquid fields rejected: %v", err)
+	}
+	changed := parse(`package block
+type Water struct {
+	empty
+	Still bool
+	Depth int32
+	Falling bool
+}`)
+	if err := validateLiquidFields(changed, "Water"); err == nil || !strings.Contains(err.Error(), "fields changed") {
+		t.Fatalf("expected liquid field drift error, got %v", err)
+	}
+}
+
+func TestInspectBlocksUsesCanonicalLiquidStates(t *testing.T) {
+	command := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/df-mc/dragonfly")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := inspectBlocks(filepath.Join(string(bytes.TrimSpace(output)), "server", "block"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := func(name string, still bool, depth int, falling bool) encodedLiquid {
+		t.Helper()
+		for _, liquid := range spec.Liquids {
+			if liquid.Name != name {
+				continue
+			}
+			for _, candidate := range liquid.States {
+				if candidate.Still == still && candidate.Depth == depth && candidate.Falling == falling {
+					return candidate
+				}
+			}
+		}
+		t.Fatalf("%s state (%t, %d, %t) not generated", name, still, depth, falling)
+		return encodedLiquid{}
+	}
+	for _, test := range []struct {
+		name       string
+		state      encodedLiquid
+		identifier string
+		depth      byte
+	}{
+		{name: "still water", state: state("Water", true, 8, false), identifier: "minecraft:water", depth: 0},
+		{name: "falling lava", state: state("Lava", false, 4, true), identifier: "minecraft:flowing_lava", depth: 12},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if test.state.Identifier != test.identifier || !bytes.Equal(test.state.PropertiesNBT, canonicalLiquidNBT(test.depth)) {
+				t.Fatalf("state = %q, %v", test.state.Identifier, test.state.PropertiesNBT)
+			}
+		})
+	}
+}
+
+func canonicalLiquidNBT(depth byte) []byte {
+	return []byte{
+		10, 0, 0,
+		10, 12, 0, 'l', 'i', 'q', 'u', 'i', 'd', '_', 'd', 'e', 'p', 't', 'h',
+		3, 4, 0, 'k', 'i', 'n', 'd', 2, 0, 0, 0,
+		3, 5, 0, 'v', 'a', 'l', 'u', 'e', depth, 0, 0, 0,
+		0,
+		0,
 	}
 }
 

@@ -113,6 +113,14 @@ type csharpWorldHost struct {
 	skyLightCall               csharpWorldQueryCall
 	skyLight                   uint8
 	worldQueryOperations       []string
+	worldLiquid                WorldBlock
+	worldLiquidOK              bool
+	worldLiquidInvocation      InvocationID
+	worldLiquidWorld           WorldID
+	worldLiquidPosition        BlockPos
+	worldLiquidCalls           int
+	worldLiquidReadCalls       []csharpWorldQueryCall
+	worldLiquidSets            []csharpWorldLiquidSetCall
 }
 
 type csharpWorldQueryCall struct {
@@ -121,6 +129,13 @@ type csharpWorldQueryCall struct {
 	position   BlockPos
 	x          int32
 	z          int32
+}
+
+type csharpWorldLiquidSetCall struct {
+	invocation InvocationID
+	world      WorldID
+	position   BlockPos
+	liquid     *WorldBlock
 }
 
 func (h *csharpWorldHost) WorldRange(invocation InvocationID, world WorldID) (BlockRange, bool) {
@@ -190,6 +205,36 @@ func (h *csharpWorldHost) WorldSkyLight(invocation InvocationID, world WorldID, 
 	h.skyLightCall = csharpWorldQueryCall{invocation: invocation, world: world, position: position}
 	h.worldQueryOperations = append(h.worldQueryOperations, "sky-light")
 	return h.skyLight, true
+}
+
+func (h *csharpWorldHost) WorldLiquid(invocation InvocationID, world WorldID, position BlockPos) (WorldBlock, bool, bool) {
+	h.worldLiquidInvocation, h.worldLiquidWorld, h.worldLiquidPosition = invocation, world, position
+	h.worldLiquidCalls++
+	h.worldLiquidReadCalls = append(h.worldLiquidReadCalls, csharpWorldQueryCall{
+		invocation: invocation,
+		world:      world,
+		position:   position,
+	})
+	return h.worldLiquid, h.worldLiquidOK, true
+}
+
+func (h *csharpWorldHost) SetWorldLiquid(invocation InvocationID, world WorldID, position BlockPos, liquid *WorldBlock) bool {
+	var copied *WorldBlock
+	if liquid != nil {
+		value := *liquid
+		value.PropertiesNBT = append([]byte(nil), liquid.PropertiesNBT...)
+		copied = &value
+		h.worldLiquid, h.worldLiquidOK = value, true
+	} else {
+		h.worldLiquid, h.worldLiquidOK = WorldBlock{}, false
+	}
+	h.worldLiquidSets = append(h.worldLiquidSets, csharpWorldLiquidSetCall{
+		invocation: invocation,
+		world:      world,
+		position:   position,
+		liquid:     copied,
+	})
+	return true
 }
 
 func TestCSharpReflectedCommands(t *testing.T) {
@@ -303,7 +348,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	input.Overload = 7
 	input.Arguments = []string{"block"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=false, liquid=true:Water(still=true,depth=8,falling=false)" {
 		t.Fatalf("block output=%#v error=%v", output, err)
 	}
 	if host.worldRangeCalls != 1 || host.worldRangeInvocation != 42 || host.worldRangeWorld != 0 {
@@ -343,11 +388,25 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	}) {
 		t.Fatalf("world query operations=%v", host.worldQueryOperations)
 	}
+	if host.worldLiquidCalls != 3 || !slices.Equal(host.worldLiquidReadCalls, []csharpWorldQueryCall{
+		positionCall, positionCall, positionCall,
+	}) {
+		t.Fatalf("liquid read calls: calls=%d invocation=%d world=%d position=%+v",
+			host.worldLiquidCalls, host.worldLiquidInvocation, host.worldLiquidWorld, host.worldLiquidPosition)
+	}
+	if len(host.worldLiquidSets) != 2 || host.worldLiquidSets[0].invocation != 42 ||
+		host.worldLiquidSets[0].world != 0 || host.worldLiquidSets[0].position != queryPosition ||
+		host.worldLiquidSets[0].liquid == nil || host.worldLiquidSets[0].liquid.Identifier != "minecraft:water" ||
+		len(host.worldLiquidSets[0].liquid.PropertiesNBT) == 0 ||
+		host.worldLiquidSets[1].invocation != 42 || host.worldLiquidSets[1].world != 0 ||
+		host.worldLiquidSets[1].position != queryPosition || host.worldLiquidSets[1].liquid != nil {
+		t.Fatalf("liquid set calls=%+v", host.worldLiquidSets)
+	}
 
 	host.worldBlockLoadedOK = false
 	host.worldBlock, host.worldBlockOK = host.worldBlockLoaded, true
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=false, liquid=true:Water(still=true,depth=8,falling=false)" {
 		t.Fatalf("unloaded block output=%#v error=%v", output, err)
 	}
 	if host.worldRangeCalls != 2 || host.worldBlockLoadedCalls != 3 || host.worldBlockCalls != 2 {
@@ -357,6 +416,12 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	if host.blockIteratorOpenCalls != 2 || host.blockIteratorNextCalls != 2 || host.blockIteratorCloseCalls != 2 {
 		t.Fatalf("second block iterator: open=%d next=%d close=%d",
 			host.blockIteratorOpenCalls, host.blockIteratorNextCalls, host.blockIteratorCloseCalls)
+	}
+	if host.worldLiquidCalls != 6 || len(host.worldLiquidSets) != 4 || host.worldLiquidSets[2].liquid == nil ||
+		host.worldLiquidSets[2].liquid.Identifier != "minecraft:water" ||
+		!slices.Equal(host.worldLiquidSets[2].liquid.PropertiesNBT, host.worldLiquidSets[0].liquid.PropertiesNBT) ||
+		host.worldLiquidSets[3].liquid != nil {
+		t.Fatalf("second liquid pass: reads=%d sets=%+v", host.worldLiquidCalls, host.worldLiquidSets)
 	}
 
 	options, err := pluginRuntime.CommandEnumOptions(kitchen.Index, 5, 1, CommandEnumContext{
