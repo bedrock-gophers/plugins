@@ -1,4 +1,4 @@
-BEDROCK_GOPHERS_REV := a54e6d1360fa7e9053af4ff79551a845817726c0
+BEDROCK_GOPHERS_REV := de5277911db345ac342705be164d51ac96d92055
 BEDROCK_GOPHERS_SHORT_REV := $(shell printf '%.12s' $(BEDROCK_GOPHERS_REV))
 GO_FRAMEWORK_REV := $(shell go list -m -f '{{.Version}}' github.com/bedrock-gophers/plugins | sed 's/.*-//')
 CACHE := .cache/bedrock-gophers
