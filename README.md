@@ -23,6 +23,8 @@ temperature, rain, snow, and thunder transaction queries before restoring the or
 `/kitchen particle` emits every typed Dragonfly particle and exercises all typed note instruments.
 `/kitchen game-mode` exercises registered lookup, player reads, and a custom game mode without
 leaving the player changed.
+`/kitchen form` covers reflected menu, custom, and modal forms with every typed element;
+`/kitchen raw-form` demonstrates the open plugin-defined form interface.
 Compatible precompiled `.so` plugins remain supported by the loader; because the source build
 clears `plugins/*.so`, stage binary-only plugins after `make build` and start `.build/bin/server`
 directly.
