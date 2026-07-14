@@ -6,4 +6,4 @@ Strict consumer-only example. This branch contains no framework, runtime, SDK, o
 make run
 ```
 
-The build fetches the exact framework revision pinned in `go.mod`, compiles its C# NativeAOT runtime and lifecycle example, stages both shared libraries, then starts the Go server.
+The build fetches the exact framework revision pinned in `go.mod`, compiles its C# NativeAOT runtime and examples, stages the shared libraries, then starts the Go server.

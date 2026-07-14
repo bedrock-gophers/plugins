@@ -1,4 +1,4 @@
-BEDROCK_GOPHERS_REV := 7897b0b1e439786315be998eb61fdd44c924e6d6
+BEDROCK_GOPHERS_REV := d40b11e3c9684e2c0d80032862cb1b02e00c5416
 BEDROCK_GOPHERS_SHORT_REV := $(shell printf '%.12s' $(BEDROCK_GOPHERS_REV))
 GO_FRAMEWORK_REV := $(shell go list -m -f '{{.Version}}' github.com/bedrock-gophers/plugins | sed 's/.*-//')
 CACHE := .cache/bedrock-gophers
@@ -20,7 +20,7 @@ build: check-revision prepare
 	$(MAKE) -C $(CACHE) build-native
 	mkdir -p lib plugins
 	cp $(CACHE)/build/lib/libdragonfly_plugin_runtime.so lib/
-	cp $(CACHE)/build/plugins/LifecycleLogger.so plugins/
+	cp $(CACHE)/build/plugins/*.so plugins/
 	go mod download
 
 run: build
