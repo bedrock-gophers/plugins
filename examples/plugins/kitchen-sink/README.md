@@ -7,6 +7,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - all 37 Dragonfly player handlers, including typed damage/healing sources, worlds, entities,
   mutable skins and respawns, transfer addresses, command arguments, diagnostics, typed block/item
   payloads, mutable break drops, item-pickup replacement, signed durations, and full snapshots;
+- every package-shaped Dragonfly damage/healing source plus direct `Player.Hurt` and `Player.Heal`;
 - concrete `Player` targets and `Player.Name()` in attack and entity-use handlers;
 - all 13 Dragonfly world handlers, including typed liquids/sounds/blocks/entities, entity
   spawn/despawn, mutable explosion lists and scalars, full redstone updates, and world close;

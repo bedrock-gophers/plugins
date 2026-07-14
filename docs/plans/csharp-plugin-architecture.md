@@ -234,12 +234,18 @@ Direct server-wide lazy player iteration and UUID/name lookup now make global br
 online-player resolution possible without a public manager abstraction. Player-backed attack and
 entity-use targets are concrete `Player` values, so killer inventory inspection and refill are
 available too. Functional Nodebuff and Sumo FFA are therefore implementable with the current API.
+Damage and healing sources are generated directly from the Dragonfly Go AST under their real
+package owners: `Entity`, `Block`, `Effect`, `Player`, and `Enchantment`, with only the two source
+interfaces under `World`. Exported Go fields remain typed record properties, protection matching
+is preserved through `Enchantment.AffectedDamageSource`, and `Player.Hurt` and `Player.Heal` both
+accept the same source interfaces as Dragonfly. Unknown custom implementations cross the private
+ABI without adding invented public wrapper types.
 
 Remaining raw-Dragonfly parity work includes:
 
 - remaining `Player`, `World`, and `World.Tx` methods, including transaction defer/event,
   world configuration, presentation, combat, and player-control surfaces;
-- exact package-shaped damage/healing sources, command behavior, and skin types;
+- exact command behavior and skin types;
 - player-capable raw handle transfer and remaining concrete entity capabilities;
 - custom items, blocks, providers, and generators beyond current generated registries and
   NOP/MCDB `World.Config` surface.

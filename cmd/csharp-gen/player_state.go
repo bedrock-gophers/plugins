@@ -15,6 +15,7 @@ var selectedPlayerStateMethods = []string{
 	"MaxHealth",
 	"SetMaxHealth",
 	"Heal",
+	"Hurt",
 	"ExperienceLevel",
 	"SetExperienceLevel",
 	"ExperienceProgress",
@@ -53,6 +54,7 @@ func inspectPlayerStateMethods(path string) ([]playerStateMethod, error) {
 		"MaxHealth":             {Results: "float64"},
 		"SetMaxHealth":          {Parameters: "float64"},
 		"Heal":                  {Parameters: "float64, world.HealingSource", Results: "float64"},
+		"Hurt":                  {Parameters: "float64, world.DamageSource", Results: "float64, bool"},
 		"ExperienceLevel":       {Results: "int"},
 		"SetExperienceLevel":    {Parameters: "int"},
 		"ExperienceProgress":    {Results: "float64"},
@@ -121,6 +123,8 @@ func generatePlayerStateMethods(methods []playerStateMethod) []byte {
 			fmt.Fprintf(&output, "    public void SetMaxHealth(double %s) => PluginBridge.Host.SetPlayerState(_invocation, Id, Abi.PlayerStateMaxHealth, new PlayerStateValue { Number = %s });\n", parameter, parameter)
 		case "Heal":
 			fmt.Fprintf(&output, "    public double Heal(double %s, World.HealingSource %s) => PluginBridge.Host.HealPlayer(_invocation, Id, %s, %s);\n", methodsParameter(method, 0), methodsParameter(method, 1), methodsParameter(method, 0), methodsParameter(method, 1))
+		case "Hurt":
+			fmt.Fprintf(&output, "    public (double Damage, bool Vulnerable) Hurt(double %s, World.DamageSource %s) => PluginBridge.Host.HurtPlayer(_invocation, Id, %s, %s);\n", methodsParameter(method, 0), methodsParameter(method, 1), methodsParameter(method, 0), methodsParameter(method, 1))
 		case "ExperienceLevel":
 			output.WriteString("    public int ExperienceLevel() => checked((int)PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateExperienceLevel).Integer);\n")
 		case "SetExperienceLevel":

@@ -593,6 +593,17 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	sourceTypes, err := inspectSourceTypes(
+		filepath.Join(directory, "server", "world"),
+		filepath.Join(directory, "server", "entity"),
+		filepath.Join(directory, "server", "entity", "effect"),
+		filepath.Join(directory, "server", "player"),
+		filepath.Join(directory, "server", "block"),
+		filepath.Join(directory, "server", "item", "enchantment"),
+	)
+	if err != nil {
+		fatal(err)
+	}
 	playerEffectMethods, err := inspectPlayerEffectMethods(filepath.Join(directory, "server", "player", "player.go"))
 	if err != nil {
 		fatal(err)
@@ -723,6 +734,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Effect.Types.g.cs"),
 			Content: generateEffects(effects),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Source.g.cs"),
+			Content: generateSourceTypes(sourceTypes),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Effect.g.cs"),

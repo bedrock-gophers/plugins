@@ -183,6 +183,24 @@ public static class Abi
     public const uint DamageSourceFeatherFalling = 1 << 5;
     public const uint DamageSourceBlastProtection = 1 << 6;
     public const uint DamageSourceProjectileProtection = 1 << 7;
+    public const uint DamageSourceCustom = 0;
+    public const uint DamageSourceAttack = 1;
+    public const uint DamageSourceBlock = 2;
+    public const uint DamageSourceDrowning = 3;
+    public const uint DamageSourceExplosion = 4;
+    public const uint DamageSourceFall = 5;
+    public const uint DamageSourceFireKind = 6;
+    public const uint DamageSourceGlide = 7;
+    public const uint DamageSourceInstant = 8;
+    public const uint DamageSourceLava = 9;
+    public const uint DamageSourceLightning = 10;
+    public const uint DamageSourceMagma = 11;
+    public const uint DamageSourcePoison = 12;
+    public const uint DamageSourceProjectile = 13;
+    public const uint DamageSourceStarvation = 14;
+    public const uint DamageSourceSuffocation = 15;
+    public const uint DamageSourceThorns = 16;
+    public const uint DamageSourceVoid = 17;
     public const uint DamageSourceWither = 18;
     public const uint HealingSourceCustom = 0;
     public const uint HealingSourceFood = 1;
@@ -261,6 +279,13 @@ public struct PlayerStateValue
 public struct PlayerHealResult
 {
     public double Healed;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PlayerHurtResult
+{
+    public double Damage;
+    public byte Vulnerable;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -364,7 +389,7 @@ public unsafe struct HostApi
     public void* WorldSoundPlay;
     public void* PlayerSoundPlay;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, double, HealingSourceView*, PlayerHealResult*, int> PlayerHeal;
-    public void* PlayerHurt;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, double, DamageSourceView*, PlayerHurtResult*, int> PlayerHurt;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, SkinInfo*, int> SkinSnapshotInfo;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, SkinView*, int> SkinSnapshotSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, WorldId, Vec3, int> PlayerTransfer;

@@ -20,13 +20,31 @@ const csharpBuiltinGameModeDescriptor = int64(-1 << 63)
 
 type csharpEntityHost struct {
 	*recordingHost
-	despawnInvocation InvocationID
-	despawnEntity     EntityID
+	despawnInvocation       InvocationID
+	despawnEntity           EntityID
+	entityHandle            EntityHandleID
+	entityHandleEntity      EntityID
+	entityHandleActive      bool
+	entityHandleCalls       []EntityID
+	entityHandleEntityCalls int
 }
 
 func (h *csharpEntityHost) DespawnEntity(invocation InvocationID, entity EntityID) bool {
 	h.despawnInvocation, h.despawnEntity = invocation, entity
 	return true
+}
+
+func (h *csharpEntityHost) EntityHandle(_ InvocationID, entity EntityID) (EntityHandleID, bool) {
+	h.entityHandleCalls = append(h.entityHandleCalls, entity)
+	return h.entityHandle, h.entityHandle.Valid()
+}
+
+func (h *csharpEntityHost) EntityHandleEntity(_ InvocationID, handle EntityHandleID) (EntityID, bool, bool) {
+	h.entityHandleEntityCalls++
+	if handle != h.entityHandle {
+		return EntityID{}, false, false
+	}
+	return h.entityHandleEntity, h.entityHandleActive, true
 }
 
 func openCSharpRuntime(t testing.TB) *Runtime {
@@ -677,7 +695,8 @@ func TestCSharpReflectedCommands(t *testing.T) {
 			Velocity: Vec3{X: 0.25, Y: 0.5, Z: -0.25},
 			Rotation: Rotation{Yaw: 90, Pitch: -15},
 		}, worldID: 91, worldName: "kitchen:arena", worldSpawn: BlockPos{X: 8, Y: 70, Z: -4},
-			healed: 4,
+			healed:     4,
+			hurtResult: PlayerHurtResult{Damage: 1, Vulnerable: true},
 			stateValues: map[PlayerStateKind]PlayerStateValue{
 				PlayerStateHealth:    {Number: 16},
 				PlayerStateMaxHealth: {Number: 20},
@@ -709,7 +728,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 25 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 26 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -787,12 +806,51 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	heal.Overload = 19
 	heal.Arguments = []string{"heal"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, heal)
-	if err != nil || output.Failed || output.Message != "healed=4, health=16" || len(host.heals) != 1 ||
+	if err != nil || output.Failed || output.Message != "healed=4, damage=1, vulnerable=True, health=16" || len(host.heals) != 1 ||
 		host.heals[0].Health != 20 || host.heals[0].Source.Kind != HealingSourceInstant {
 		t.Fatalf("heal output=%#v calls=%+v error=%v", output, host.heals, err)
 	}
+	if len(host.hurts) != 1 || host.hurts[0].Damage != 1 || host.hurts[0].Source.Kind != DamageSourceFall ||
+		!host.hurts[0].Source.FeatherFalling {
+		t.Fatalf("hurt calls=%+v", host.hurts)
+	}
+	sources := base
+	sources.Overload = 20
+	sources.Arguments = []string{"sources"}
+	playerEntityID := EntityID{UUID: player.UUID, Generation: player.Generation}
+	host.entityHandle = EntityHandleID{Value: 70, Generation: 4}
+	host.entityHandleEntity = playerEntityID
+	host.entityHandleActive = true
+	output, err = pluginRuntime.HandleCommand(kitchen.Index, sources)
+	if err != nil || output.Failed || output.Message != "damage=21, healing=4" {
+		t.Fatalf("source output=%#v error=%v", output, err)
+	}
+	if len(host.hurts) != 22 || host.hurts[1].Source.Kind != DamageSourceAttack ||
+		host.hurts[1].Source.Entity != playerEntityID ||
+		host.hurts[2].Source.Kind != DamageSourceAttack || host.hurts[2].Source.Entity != playerEntityID ||
+		host.hurts[9].Source.Kind != DamageSourceProjectile ||
+		host.hurts[9].Source.Entity != playerEntityID || host.hurts[9].Source.SecondaryEntity != playerEntityID ||
+		host.hurts[13].Source.Kind != DamageSourcePoison || !host.hurts[13].Source.Data ||
+		host.hurts[15].Source.Kind != DamageSourceBlock || host.hurts[15].Source.Block == nil ||
+		host.hurts[15].Source.Block.Identifier != "minecraft:sand" ||
+		host.hurts[16].Source.Kind != DamageSourceCustom || host.hurts[16].Source.Name != "block.DamageSource" ||
+		host.hurts[20].Source.Kind != DamageSourceThorns || host.hurts[20].Source.Entity != playerEntityID {
+		t.Fatalf("typed source calls=%+v", host.hurts)
+	}
+	custom := host.hurts[21].Source
+	if custom.Kind != DamageSourceCustom || !strings.Contains(custom.Name, "KitchenDamageSource") ||
+		!custom.ReducedByArmour || custom.ReducedByResistance || !custom.Fire || !custom.IgnoresTotem ||
+		!custom.FireProtection || !custom.BlastProtection || custom.FeatherFalling || custom.ProjectileProtection {
+		t.Fatalf("custom damage source=%+v", custom)
+	}
+	if len(host.heals) != 5 || host.heals[1].Source.Kind != HealingSourceFood || !host.heals[1].Source.Data ||
+		host.heals[2].Source.Kind != HealingSourceInstant || host.heals[3].Source.Kind != HealingSourceRegeneration ||
+		host.heals[4].Source.Kind != HealingSourceCustom ||
+		!strings.Contains(host.heals[4].Source.Name, "KitchenHealingSource") {
+		t.Fatalf("healing source calls=%+v", host.heals)
+	}
 	configuredWorld := base
-	configuredWorld.Overload = 20
+	configuredWorld.Overload = 21
 	configuredWorld.Arguments = []string{"world"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, configuredWorld)
 	if err != nil || output.Failed || output.Message != "memory=World, persistent=kitchen:arena, spawn=8,70,-4" {
@@ -833,7 +891,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		Position: Vec3{X: 1, Y: 64, Z: 2},
 	}
 	entities := base
-	entities.Overload = 21
+	entities.Overload = 22
 	entities.Arguments = []string{"entities"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, entities)
 	if err != nil || output.Failed || output.Message != "world=kitchen:arena, entities=2, nearby=2, players=1" {
@@ -858,8 +916,10 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	host.entityHandleActive = true
 	host.entityHandleAdded = EntityID{UUID: nonPlayerEntity.UUID, Generation: 6}
 	host.entityIteratorEntities = []EntityID{playerEntity, nonPlayerEntity}
+	host.entityHandleCalls = nil
+	host.entityHandleEntityCalls = 0
 	handle := base
-	handle.Overload = 23
+	handle.Overload = 24
 	handle.Arguments = []string{"handle"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, handle)
 	if err != nil || output.Failed || output.Message !=
@@ -1781,17 +1841,60 @@ func TestCSharpRuntimeReflectedPlayerHandlers(t *testing.T) {
 	})
 
 	heal, err := pluginRuntime.HandlePlayerHeal(next(), PlayerHealInput{
-		Player: player, Health: -2, Source: HealingSource{Kind: HealingSourceInstant},
+		Player: player, Health: -2, Source: HealingSource{Name: "custom-heal", Kind: HealingSourceCustom},
 	}, false)
 	if err != nil || heal.Cancelled || heal.Health != 0 {
 		t.Fatalf("heal output=%+v error=%v", heal, err)
 	}
 	hurt, err := pluginRuntime.HandlePlayerHurt(next(), PlayerHurtInput{
 		Player: player, Damage: -3, AttackImmunity: -123_456_789 * time.Nanosecond,
-		Source: DamageSource{Kind: DamageSourceFall},
+		Source: DamageSource{
+			Name: "custom-hurt", Kind: DamageSourceCustom,
+			ReducedByArmour: true, Fire: true, IgnoresTotem: true,
+			FireProtection: true, BlastProtection: true,
+		},
 	}, false)
 	if err != nil || hurt.Cancelled || hurt.Damage != 0 || hurt.AttackImmunity != -123_456_789*time.Nanosecond {
 		t.Fatalf("hurt output=%+v error=%v", hurt, err)
+	}
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	var sourceOverload uint64
+	sourceFound := false
+	for index, overload := range kitchen.Overloads {
+		if len(overload.Parameters) == 1 && overload.Parameters[0].Name == "sources" {
+			sourceOverload = uint64(index)
+			sourceFound = true
+			break
+		}
+	}
+	if !sourceFound {
+		t.Fatalf("sources overload missing: %#v", kitchen.Overloads)
+	}
+	host.entityHandle = EntityHandleID{Value: 72, Generation: 5}
+	host.entityHandleEntity = EntityID{UUID: player.Player.UUID, Generation: player.Player.Generation}
+	host.entityHandleActive = true
+	sourceOutput, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: next(), Source: player.Name, SourceKind: CommandSourcePlayer, SourcePlayer: &player.Player,
+		Overload: sourceOverload, Arguments: []string{"sources"},
+		OnlinePlayers: []CommandPlayer{{Player: player.Player, Name: player.Name, Position: player.Position}},
+	})
+	if err != nil || sourceOutput.Failed || sourceOutput.Message != "damage=22, healing=5" {
+		t.Fatalf("opaque source output=%+v error=%v", sourceOutput, err)
+	}
+	roundTripDamage := host.hurts[len(host.hurts)-1].Source
+	if roundTripDamage.Name != "custom-hurt" || roundTripDamage.Kind != DamageSourceCustom ||
+		!roundTripDamage.ReducedByArmour || roundTripDamage.ReducedByResistance || !roundTripDamage.Fire ||
+		!roundTripDamage.IgnoresTotem || !roundTripDamage.FireProtection || !roundTripDamage.BlastProtection ||
+		roundTripDamage.FeatherFalling || roundTripDamage.ProjectileProtection {
+		t.Fatalf("opaque damage round trip=%+v", roundTripDamage)
+	}
+	roundTripHealing := host.heals[len(host.heals)-1].Source
+	if roundTripHealing.Name != "custom-heal" || roundTripHealing.Kind != HealingSourceCustom {
+		t.Fatalf("opaque healing round trip=%+v", roundTripHealing)
 	}
 	keepInventory, err := pluginRuntime.HandlePlayerDeath(next(), PlayerDeathInput{
 		Player: player, Source: DamageSource{Kind: DamageSourceVoid},

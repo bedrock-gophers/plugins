@@ -26,6 +26,7 @@ func TestPlayerStateMethodsFollowDragonflyAST(t *testing.T) {
 		"double MaxHealth()",
 		"void SetMaxHealth(double health)",
 		"double Heal(double health, World.HealingSource source)",
+		"(double Damage, bool Vulnerable) Hurt(double dmg, World.DamageSource src)",
 		"int ExperienceLevel()",
 		"void SetExperienceLevel(int level)",
 		"double ExperienceProgress()",

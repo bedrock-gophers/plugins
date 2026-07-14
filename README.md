@@ -293,5 +293,5 @@ The generated effect slice exposes all 28 registered Dragonfly effects, `Effect.
 constructors, value methods, colour mixing, registry lookup, and `Player.AddEffect`, `RemoveEffect`,
 `Effect`, and `Effects`. ABI 39 carries effect duration, potency, ambient/particle/infinite flags,
 and the current tick; C# exposes duration at `TimeSpan`'s 100 ns precision. Custom effect callbacks,
-registration, and concrete effect-specific multiplier methods wait for the entity and damage-source
-slices; no identifier-based fallback is exposed.
+registration, and the remaining concrete effect-specific multiplier methods are not exposed yet;
+no identifier-based fallback is exposed.

@@ -19,6 +19,8 @@ public sealed class KitchenSink : Plugin
     private long _scheduled;
     private World? _memoryWorld;
     private World? _persistentWorld;
+    private World.DamageSource? _lastDamageSource;
+    private World.HealingSource? _lastHealingSource;
 
     public override void OnEnable()
     {
@@ -46,6 +48,7 @@ public sealed class KitchenSink : Plugin
             new KitchenCrop(),
             new KitchenKinematics(),
             new KitchenHeal(),
+            new KitchenSources(this),
             new KitchenWorld(this),
             new KitchenEntities(),
             new KitchenServer(this),
@@ -98,7 +101,7 @@ public sealed class KitchenSink : Plugin
     public override void HandleHeal(Player.Context ctx, ref double health, World.HealingSource source)
     {
         health = Math.Max(0, health);
-        _ = source;
+        _lastHealingSource = source;
     }
 
     public override void HandleHurt(
@@ -109,6 +112,7 @@ public sealed class KitchenSink : Plugin
         World.DamageSource source)
     {
         damage = Math.Max(0, damage);
+        _lastDamageSource = source;
         _ = (immune, attackImmunity, source.ReducedByArmour(), source.ReducedByResistance(),
             source.Fire(), source.IgnoreTotem());
     }
@@ -415,8 +419,84 @@ public sealed class KitchenSink : Plugin
                 output.Error("This command can only be used by a player.");
                 return;
             }
-            var healed = player.Heal(player.MaxHealth(), new World.InstantHealingSource());
-            output.Printf("healed={0}, health={1}", healed, player.Health());
+            var healed = player.Heal(player.MaxHealth(), new Effect.InstantHealingSource());
+            var (damage, vulnerable) = player.Hurt(1, new Entity.FallDamageSource());
+            output.Printf("healed={0}, damage={1}, vulnerable={2}, health={3}",
+                healed, damage, vulnerable, player.Health());
+        }
+    }
+
+    internal sealed class KitchenSources(KitchenSink plugin) : Cmd.Runnable
+    {
+        public Cmd.SubCommand Sources;
+
+        private readonly record struct KitchenDamageSource : Enchantment.AffectedDamageSource
+        {
+            public bool ReducedByArmour() => true;
+            public bool ReducedByResistance() => false;
+            public bool Fire() => true;
+            public bool IgnoreTotem() => true;
+            public bool AffectedByEnchantment(Item.EnchantmentType e) =>
+                object.Equals(e, Item.FireProtection) || object.Equals(e, Item.BlastProtection);
+        }
+
+        private readonly record struct KitchenHealingSource : World.HealingSource;
+
+        private sealed class KitchenEntityProxy(World.Entity entity) : World.Entity
+        {
+            public void Close() => entity.Close();
+            public World.EntityHandle H() => entity.H();
+            public Vector3 Position() => entity.Position();
+            public Rotation Rotation() => entity.Rotation();
+        }
+
+        private static World.DamageSource[] DamageSources(Player player) =>
+        [
+            new Entity.AttackDamageSource(player),
+            new Entity.AttackDamageSource(new KitchenEntityProxy(player)),
+            new Entity.VoidDamageSource(),
+            new Entity.SuffocationDamageSource(),
+            new Entity.DrowningDamageSource(),
+            new Entity.FallDamageSource(),
+            new Entity.GlideDamageSource(),
+            new Entity.LightningDamageSource(),
+            new Entity.ProjectileDamageSource(player, player),
+            new Entity.ExplosionDamageSource(),
+            new Effect.WitherDamageSource(),
+            new Effect.InstantDamageSource(),
+            new Effect.PoisonDamageSource(Fatal: true),
+            new Player.StarvationDamageSource(),
+            new Block.DamageSource(new Block.Sand()),
+            new Block.DamageSource(),
+            new Block.MagmaDamageSource(),
+            new Block.LavaDamageSource(),
+            new Block.FireDamageSource(),
+            new Enchantment.ThornsDamageSource(player),
+            new KitchenDamageSource(),
+        ];
+
+        private static World.HealingSource[] HealingSources() =>
+        [
+            new Entity.FoodHealingSource(QuickRegeneration: true),
+            new Effect.InstantHealingSource(),
+            new Effect.RegenerationHealingSource(),
+            new KitchenHealingSource(),
+        ];
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var damageSources = DamageSources(player).ToList();
+            var healingSources = HealingSources().ToList();
+            if (plugin._lastDamageSource is { } storedDamage) damageSources.Add(storedDamage);
+            if (plugin._lastHealingSource is { } storedHealing) healingSources.Add(storedHealing);
+            foreach (var damageSource in damageSources) player.Hurt(0, damageSource);
+            foreach (var healingSource in healingSources) player.Heal(0, healingSource);
+            output.Printf("damage={0}, healing={1}", damageSources.Count, healingSources.Count);
         }
     }
 

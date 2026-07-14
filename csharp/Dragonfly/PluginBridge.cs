@@ -67,10 +67,11 @@ internal static unsafe class PluginBridge
 
             var (kind, data, name) = source switch
             {
-                World.FoodHealingSource food =>
-                    (Abi.HealingSourceFood, food.QuickRegeneration() ? (byte)1 : (byte)0, ""),
-                World.InstantHealingSource => (Abi.HealingSourceInstant, (byte)0, ""),
-                World.RegenerationHealingSource => (Abi.HealingSourceRegeneration, (byte)0, ""),
+                Entity.FoodHealingSource food =>
+                    (Abi.HealingSourceFood, food.QuickRegeneration ? (byte)1 : (byte)0, ""),
+                Effect.InstantHealingSource => (Abi.HealingSourceInstant, (byte)0, ""),
+                Effect.RegenerationHealingSource => (Abi.HealingSourceRegeneration, (byte)0, ""),
+                OpaqueHealingSource opaque => (Abi.HealingSourceCustom, (byte)0, opaque.Name),
                 _ => (Abi.HealingSourceCustom, (byte)0, source.GetType().FullName ?? source.GetType().Name),
             };
             var nameBytes = Encoding.UTF8.GetBytes(name);
@@ -87,6 +88,196 @@ internal static unsafe class PluginBridge
                     ? result.Healed
                     : 0;
             }
+        }
+
+        internal static (double Damage, bool Vulnerable) HurtPlayer(
+            ulong invocation,
+            PlayerId player,
+            double damage,
+            World.DamageSource source)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            var api = Api;
+            if (api is null || api->PlayerHurt == null) return default;
+
+            uint kind;
+            byte data = 0;
+            var name = "";
+            World.Entity? entity = null;
+            World.Entity? secondaryEntity = null;
+            World.Block? block = null;
+            switch (source)
+            {
+                case Entity.AttackDamageSource value:
+                    kind = Abi.DamageSourceAttack;
+                    entity = value.Attacker;
+                    break;
+                case Block.DamageSource { Block: not null } value:
+                    kind = Abi.DamageSourceBlock;
+                    block = value.Block;
+                    break;
+                case Block.DamageSource:
+                    kind = Abi.DamageSourceCustom;
+                    name = "block.DamageSource";
+                    break;
+                case Entity.DrowningDamageSource:
+                    kind = Abi.DamageSourceDrowning;
+                    break;
+                case Entity.ExplosionDamageSource:
+                    kind = Abi.DamageSourceExplosion;
+                    break;
+                case Entity.FallDamageSource:
+                    kind = Abi.DamageSourceFall;
+                    break;
+                case Block.FireDamageSource:
+                    kind = Abi.DamageSourceFireKind;
+                    break;
+                case Entity.GlideDamageSource:
+                    kind = Abi.DamageSourceGlide;
+                    break;
+                case Effect.InstantDamageSource:
+                    kind = Abi.DamageSourceInstant;
+                    break;
+                case Block.LavaDamageSource:
+                    kind = Abi.DamageSourceLava;
+                    break;
+                case Entity.LightningDamageSource:
+                    kind = Abi.DamageSourceLightning;
+                    break;
+                case Block.MagmaDamageSource:
+                    kind = Abi.DamageSourceMagma;
+                    break;
+                case Effect.PoisonDamageSource value:
+                    kind = Abi.DamageSourcePoison;
+                    data = value.Fatal ? (byte)1 : (byte)0;
+                    break;
+                case Entity.ProjectileDamageSource value:
+                    kind = Abi.DamageSourceProjectile;
+                    entity = value.Projectile;
+                    secondaryEntity = value.Owner;
+                    break;
+                case Player.StarvationDamageSource:
+                    kind = Abi.DamageSourceStarvation;
+                    break;
+                case Entity.SuffocationDamageSource:
+                    kind = Abi.DamageSourceSuffocation;
+                    break;
+                case Enchantment.ThornsDamageSource value:
+                    kind = Abi.DamageSourceThorns;
+                    entity = value.Owner;
+                    break;
+                case Entity.VoidDamageSource:
+                    kind = Abi.DamageSourceVoid;
+                    break;
+                case Effect.WitherDamageSource:
+                    kind = Abi.DamageSourceWither;
+                    break;
+                case OpaqueDamageSource value:
+                    kind = Abi.DamageSourceCustom;
+                    name = value.Name;
+                    break;
+                default:
+                    kind = Abi.DamageSourceCustom;
+                    name = source.GetType().FullName ?? source.GetType().Name;
+                    break;
+            }
+
+            var flags = DamageSourceFlags(source);
+            var entityId = default(EntityId);
+            var secondaryEntityId = default(EntityId);
+            if (entity is not null && !TryDamageSourceEntityId(invocation, entity, out entityId) ||
+                secondaryEntity is not null && !TryDamageSourceEntityId(invocation, secondaryEntity, out secondaryEntityId))
+                return default;
+
+            var blockIdentifier = Array.Empty<byte>();
+            var blockProperties = Array.Empty<byte>();
+            if (block is not null)
+            {
+                if (!BlockCodec.TryEncode(block, out var identifier, out blockProperties)) return default;
+                blockIdentifier = Encoding.UTF8.GetBytes(identifier);
+            }
+            else if (kind == Abi.DamageSourceBlock)
+            {
+                return default;
+            }
+
+            var nameBytes = Encoding.UTF8.GetBytes(name);
+            fixed (byte* nameData = nameBytes)
+            fixed (byte* identifierData = blockIdentifier)
+            fixed (byte* propertiesData = blockProperties)
+            {
+                var blockView = new BlockView
+                {
+                    Identifier = new StringView { Data = identifierData, Length = (ulong)blockIdentifier.Length },
+                    PropertiesNbt = new StringView { Data = propertiesData, Length = (ulong)blockProperties.Length },
+                };
+                var view = new DamageSourceView
+                {
+                    Name = new StringView { Data = nameData, Length = (ulong)nameBytes.Length },
+                    Kind = kind,
+                    Flags = flags,
+                    Entity = entityId,
+                    SecondaryEntity = secondaryEntityId,
+                    Block = block is null ? null : &blockView,
+                    Data = data,
+                };
+                PlayerHurtResult result;
+                if (api->PlayerHurt(api->Context, invocation, player, damage, &view, &result) != Abi.Ok ||
+                    result.Vulnerable > 1)
+                    return default;
+                return (result.Damage, result.Vulnerable != 0);
+            }
+        }
+
+        private static bool TryDamageSourceEntityId(
+            ulong invocation,
+            World.Entity entity,
+            out EntityId id)
+        {
+            if (World.TryEntityIdOf(entity, out id)) return true;
+            var api = Api;
+            if (api is null || api->EntityHandleEntity == null) return false;
+            try
+            {
+                var handle = entity.H();
+                byte found;
+                EntityId resolved;
+                if (api->EntityHandleEntity(api->Context, invocation, handle.Id, &resolved, &found) != Abi.Ok ||
+                    found != 1 || resolved.Generation == 0)
+                    return false;
+                id = resolved;
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                id = default;
+                return false;
+            }
+            catch (ArgumentException)
+            {
+                id = default;
+                return false;
+            }
+        }
+
+        private static uint DamageSourceFlags(World.DamageSource source)
+        {
+            var flags = source.ReducedByArmour() ? Abi.DamageSourceReducedByArmour : 0u;
+            if (source.ReducedByResistance()) flags |= Abi.DamageSourceReducedByResistance;
+            if (source.Fire()) flags |= Abi.DamageSourceFire;
+            if (source.IgnoreTotem()) flags |= Abi.DamageSourceIgnoresTotem;
+            if (source is Enchantment.AffectedDamageSource affected)
+            {
+                if (affected.AffectedByEnchantment(Item.FireProtection))
+                    flags |= Abi.DamageSourceFireProtection;
+                if (affected.AffectedByEnchantment(Item.FeatherFalling))
+                    flags |= Abi.DamageSourceFeatherFalling;
+                if (affected.AffectedByEnchantment(Item.BlastProtection))
+                    flags |= Abi.DamageSourceBlastProtection;
+                if (affected.AffectedByEnchantment(Item.ProjectileProtection))
+                    flags |= Abi.DamageSourceProjectileProtection;
+            }
+            return flags;
         }
 
         internal static World.GameMode PlayerGameMode(ulong invocation, PlayerId player) =>
@@ -3646,36 +3837,36 @@ internal static unsafe class PluginBridge
             source.Data > 1 || source.Data != 0 && source.Kind != 12 ||
             (source.Block is not null) != (source.Kind == 2))
             throw new InvalidOperationException("invalid damage source returned by server");
-        _ = Utf8(source.Name);
-        var properties = new World.DamageProperties(
-            (source.Flags & Abi.DamageSourceReducedByArmour) != 0,
-            (source.Flags & Abi.DamageSourceReducedByResistance) != 0,
-            (source.Flags & Abi.DamageSourceFire) != 0,
-            (source.Flags & Abi.DamageSourceIgnoresTotem) != 0);
+        var name = Utf8(source.Name);
         return source.Kind switch
         {
-            0 => new World.CustomDamageSource(properties),
-            1 => new World.AttackDamageSource(properties, EventEntity(source.Entity, invocation)),
-            2 => new World.BlockDamageSource(properties, EventBlock(*source.Block)),
-            3 => new World.DrowningDamageSource(properties),
-            4 => new World.ExplosionDamageSource(properties),
-            5 => new World.FallDamageSource(properties),
-            6 => new World.FireDamageSource(properties),
-            7 => new World.GlideDamageSource(properties),
-            8 => new World.InstantDamageSource(properties),
-            9 => new World.LavaDamageSource(properties),
-            10 => new World.LightningDamageSource(properties),
-            11 => new World.MagmaDamageSource(properties),
-            12 => new World.PoisonDamageSource(properties, source.Data != 0),
-            13 => new World.ProjectileDamageSource(
-                properties,
+            0 => new OpaqueDamageSource(
+                name,
+                source.Flags,
+                (source.Flags & Abi.DamageSourceReducedByArmour) != 0,
+                (source.Flags & Abi.DamageSourceReducedByResistance) != 0,
+                (source.Flags & Abi.DamageSourceFire) != 0,
+                (source.Flags & Abi.DamageSourceIgnoresTotem) != 0),
+            1 => new Entity.AttackDamageSource(EventEntity(source.Entity, invocation)),
+            2 => new Block.DamageSource(EventBlock(*source.Block)),
+            3 => new Entity.DrowningDamageSource(),
+            4 => new Entity.ExplosionDamageSource(),
+            5 => new Entity.FallDamageSource(),
+            6 => new Block.FireDamageSource(),
+            7 => new Entity.GlideDamageSource(),
+            8 => new Effect.InstantDamageSource(),
+            9 => new Block.LavaDamageSource(),
+            10 => new Entity.LightningDamageSource(),
+            11 => new Block.MagmaDamageSource(),
+            12 => new Effect.PoisonDamageSource(source.Data != 0),
+            13 => new Entity.ProjectileDamageSource(
                 EventEntity(source.Entity, invocation),
                 EventEntity(source.SecondaryEntity, invocation)),
-            14 => new World.StarvationDamageSource(properties),
-            15 => new World.SuffocationDamageSource(properties),
-            16 => new World.ThornsDamageSource(properties, EventEntity(source.Entity, invocation)),
-            17 => new World.VoidDamageSource(properties),
-            18 => new World.WitherDamageSource(properties),
+            14 => new Player.StarvationDamageSource(),
+            15 => new Entity.SuffocationDamageSource(),
+            16 => new Enchantment.ThornsDamageSource(EventEntity(source.Entity, invocation)),
+            17 => new Entity.VoidDamageSource(),
+            18 => new Effect.WitherDamageSource(),
             _ => throw new InvalidOperationException("invalid damage source returned by server"),
         };
     }
@@ -3685,16 +3876,41 @@ internal static unsafe class PluginBridge
         if (source.Kind > Abi.HealingSourceRegeneration || source.Data > 1 ||
             source.Data != 0 && source.Kind != 1)
             throw new InvalidOperationException("invalid healing source returned by server");
-        _ = Utf8(source.Name);
+        var name = Utf8(source.Name);
         return source.Kind switch
         {
-            0 => new World.CustomHealingSource(),
-            1 => new World.FoodHealingSource(source.Data != 0),
-            2 => new World.InstantHealingSource(),
-            3 => new World.RegenerationHealingSource(),
+            0 => new OpaqueHealingSource(name),
+            1 => new Entity.FoodHealingSource(source.Data != 0),
+            2 => new Effect.InstantHealingSource(),
+            3 => new Effect.RegenerationHealingSource(),
             _ => throw new InvalidOperationException("invalid healing source returned by server"),
         };
     }
+
+    private sealed record OpaqueDamageSource(
+        string Name,
+        uint Flags,
+        bool Armour,
+        bool Resistance,
+        bool IsFire,
+        bool IgnoresTotem) : Enchantment.AffectedDamageSource
+    {
+        public bool ReducedByArmour() => Armour;
+        public bool ReducedByResistance() => Resistance;
+        public bool Fire() => IsFire;
+        public bool IgnoreTotem() => IgnoresTotem;
+        public bool AffectedByEnchantment(Item.EnchantmentType e) =>
+            object.Equals(e, Item.FireProtection)
+                ? (Flags & Abi.DamageSourceFireProtection) != 0
+                : object.Equals(e, Item.FeatherFalling)
+                    ? (Flags & Abi.DamageSourceFeatherFalling) != 0
+                    : object.Equals(e, Item.BlastProtection)
+                        ? (Flags & Abi.DamageSourceBlastProtection) != 0
+                        : object.Equals(e, Item.ProjectileProtection) &&
+                          (Flags & Abi.DamageSourceProjectileProtection) != 0;
+    }
+
+    private sealed record OpaqueHealingSource(string Name) : World.HealingSource;
 
     private static Net.UDPAddr EventUDPAddr(UDPAddrView address)
     {
