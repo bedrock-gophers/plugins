@@ -226,6 +226,82 @@ public sealed class KitchenSink : Plugin
         Increment(ref _diagnostics);
     }
 
+    public override void HandleLiquidFlow(
+        World.Context ctx,
+        Cube.Pos from,
+        Cube.Pos into,
+        World.Liquid liquid,
+        World.Block replaced) => _ = (ctx, from, into, liquid, replaced);
+
+    public override void HandleLiquidDecay(
+        World.Context ctx,
+        Cube.Pos pos,
+        World.Liquid before,
+        World.Liquid? after) => _ = (ctx, pos, before, after);
+
+    public override void HandleLiquidHarden(
+        World.Context ctx,
+        Cube.Pos hardenedPos,
+        World.Block liquidHardened,
+        World.Block otherLiquid,
+        World.Block newBlock) =>
+        _ = (ctx, hardenedPos, liquidHardened, otherLiquid, newBlock);
+
+    public override void HandleSound(World.Context ctx, World.Sound sound, Vector3 pos)
+    {
+        if (!Finite(pos)) ctx.Cancel();
+        object inspected = sound switch
+        {
+            Sound.Attack value => value.Damage,
+            Sound.Fall value => value.Distance,
+            Sound.BlockPlace value => value.Block,
+            Sound.Note value => (value.Instrument, value.Pitch),
+            Sound.MusicDiscPlay value => value.DiscType,
+            Sound.EquipItem value => value.Item,
+            Sound.BucketFill value => value.Liquid,
+            Sound.BucketEmpty value => value.Liquid,
+            Sound.CrossbowLoad value => (value.Stage, value.QuickCharge),
+            Sound.GoatHorn value => value.Horn,
+            _ => sound,
+        };
+        _ = inspected;
+    }
+
+    public override void HandleFireSpread(World.Context ctx, Cube.Pos from, Cube.Pos to) =>
+        _ = (ctx, from, to);
+
+    public override void HandleBlockBurn(World.Context ctx, Cube.Pos pos) => _ = (ctx, pos);
+    public override void HandleCropTrample(World.Context ctx, Cube.Pos pos) => _ = (ctx, pos);
+    public override void HandleLeavesDecay(World.Context ctx, Cube.Pos pos) => _ = (ctx, pos);
+
+    public override void HandleEntitySpawn(World.Tx tx, World.Entity entity) =>
+        _ = (tx, entity.H(), entity.Position(), entity.Rotation());
+
+    public override void HandleEntityDespawn(World.Tx tx, World.Entity entity) =>
+        _ = (tx, entity.H(), entity.Position(), entity.Rotation());
+
+    public override void HandleExplosion(
+        World.Context ctx,
+        Vector3 position,
+        ref World.Entity[] entities,
+        ref Cube.Pos[] blocks,
+        ref double itemDropChance,
+        ref bool spawnFire)
+    {
+        if (!Finite(position)) ctx.Cancel();
+        entities = [.. entities.Where(entity => Finite(entity.Position()))];
+        blocks = [.. blocks.Distinct()];
+        itemDropChance = Math.Clamp(itemDropChance, 0, 1);
+        _ = spawnFire;
+    }
+
+    public override void HandleRedstoneUpdate(World.Context ctx, World.RedstoneUpdate update) =>
+        _ = (ctx, update.Pos, update.ChangedNeighbour, update.HasChangedNeighbour,
+            update.ChangedRedstoneRelevant, update.Source, update.HasSource, update.Before,
+            update.After, update.OldPower, update.NewPower, update.CurrentTick, update.Cause);
+
+    public override void HandleClose(World.Tx tx) => _ = tx;
+
     private static void Increment(ref long counter) => Interlocked.Increment(ref counter);
 
     private static bool Finite(Vector3 value) =>
