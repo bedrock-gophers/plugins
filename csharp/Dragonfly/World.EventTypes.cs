@@ -18,38 +18,6 @@ public sealed partial class World : IEquatable<World>
     public override bool Equals(object? obj) => obj is World other && Equals(other);
     public override int GetHashCode() => Id.Value.GetHashCode();
 
-    public sealed class Entity : IEquatable<Entity>
-    {
-        internal EntityId Id { get; }
-        internal ulong Invocation { get; }
-
-        internal Entity(ulong invocation, EntityId id)
-        {
-            Invocation = invocation;
-            Id = id;
-        }
-
-        public bool Equals(Entity? other) => other is not null && SameId(Id, other.Id);
-        public override bool Equals(object? obj) => obj is Entity other && Equals(other);
-
-        public override unsafe int GetHashCode()
-        {
-            var hash = new HashCode();
-            var id = Id;
-            hash.Add(id.Generation);
-            for (var index = 0; index < 16; index++) hash.Add(id.Bytes[index]);
-            return hash.ToHashCode();
-        }
-
-        private static unsafe bool SameId(EntityId left, EntityId right)
-        {
-            if (left.Generation != right.Generation) return false;
-            for (var index = 0; index < 16; index++)
-                if (left.Bytes[index] != right.Bytes[index]) return false;
-            return true;
-        }
-    }
-
     internal readonly record struct DamageProperties(
         bool ReducedByArmour,
         bool ReducedByResistance,

@@ -135,7 +135,14 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    normalised because Dragonfly exposes no potency getter. Custom `Type.Apply`, `LastingType.Start`/`End`,
    `Register`, and concrete multiplier methods wait for entity and damage-source callbacks instead
    of receiving a second abstraction.
-8. Entities, remaining sounds, and remaining world/block methods.
+8. Entities, remaining sounds, and remaining world/block methods. The entity foundation now
+   generates Dragonfly's exact `World.Entity` interface (`Close`, `H`, `Position`, `Rotation`)
+   from `server/world/entity.go`. Handler entities are live host-backed values, not public ID
+   tokens; `EntityHandle` retains stable identity without conflating handle closure with entity
+   despawning. `Player` implements `World.Entity`, as it does in
+   Dragonfly. Entity IDs, generations, state buffers, and host status codes remain private.
+   Next entity slices add the remaining `EntityHandle` surface, `entity.Ent` capabilities,
+   transaction add/remove/list methods, then plugin-defined entity types and callbacks.
 9. Convert practice-core and expand parity tests against Dragonfly.
 
 Each slice removes the replaced legacy implementation. Unsupported API remains absent rather than gaining a parallel abstraction.
@@ -175,6 +182,8 @@ all potion/stew effect families, and a real player add/read/list/remove round tr
 The same one-file plugin overrides all 37 `Player.Handler` methods; mutable damage, healing,
 immunity, keep-inventory, respawn, skin, knockback, transfer, command arguments, drops, pickup,
 experience, page, and reminder values traverse the real private ABI.
+Its entity-use handler reads the target's live position and rotation and checks its stable handle,
+covering the generated `World.Entity` foundation without exposing the private entity ID.
 `/kitchen form` exercises reflected menu, custom, and modal forms, every built-in element,
 submitted values, closers, and nested sends. `/kitchen raw-form` exercises the open `Form.Value`
 contract plus public element/menu-element JSON marshalling.

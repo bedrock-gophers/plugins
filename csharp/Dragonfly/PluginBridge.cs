@@ -51,6 +51,50 @@ internal static unsafe class PluginBridge
         internal static World.GameMode PlayerGameMode(ulong invocation, PlayerId player) =>
             World.GameModeFromDescriptor(GetPlayerState(invocation, player, 0).Integer);
 
+        internal readonly record struct EntitySnapshot(Vector3 Position, Rotation Rotation);
+
+        internal static EntitySnapshot ReadEntityState(ulong invocation, EntityId entity)
+        {
+            if (!TryReadEntityState(invocation, entity, out var state))
+                throw new InvalidOperationException("entity is no longer available");
+            return state;
+        }
+
+        internal static bool TryReadEntityState(
+            ulong invocation,
+            EntityId entity,
+            out EntitySnapshot snapshot)
+        {
+            snapshot = default;
+            var api = Api;
+            if (api is null || api->EntityState == null) return false;
+
+            const int maxEntityTypeBytes = 256;
+            const int maxNameTagBytes = 4096;
+            byte* entityType = stackalloc byte[maxEntityTypeBytes];
+            byte* nameTag = stackalloc byte[maxNameTagBytes];
+            Dragonfly.Native.EntityState state = new()
+            {
+                EntityType = new StringBuffer { Data = entityType, Capacity = maxEntityTypeBytes },
+                NameTag = new StringBuffer { Data = nameTag, Capacity = maxNameTagBytes },
+            };
+            if (api->EntityState(api->Context, invocation, entity, &state) != Abi.Ok ||
+                state.EntityType.Length == 0 || state.EntityType.Length > maxEntityTypeBytes ||
+                state.NameTag.Length > maxNameTagBytes)
+                return false;
+            snapshot = new EntitySnapshot(
+                new Vector3(state.Position.X, state.Position.Y, state.Position.Z),
+                new Rotation(state.Rotation.Yaw, state.Rotation.Pitch));
+            return true;
+        }
+
+        internal static void CloseEntity(ulong invocation, EntityId entity)
+        {
+            var api = Api;
+            if (api is null || api->EntityDespawn == null) return;
+            _ = api->EntityDespawn(api->Context, invocation, entity);
+        }
+
         internal static void AddPlayerEffect(ulong invocation, PlayerId player, Effect.Value effect)
         {
             var type = effect.Type();
@@ -2175,7 +2219,7 @@ internal static unsafe class PluginBridge
     }
 
     private static World.Entity? EventEntity(EntityId entity, ulong invocation) =>
-        entity.Generation == 0 ? null : new World.Entity(invocation, entity);
+        entity.Generation == 0 ? null : World.HostEntityFrom(invocation, entity);
 
     private static World.DamageSource EventDamageSource(DamageSourceView source, ulong invocation)
     {

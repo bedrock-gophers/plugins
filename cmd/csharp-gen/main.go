@@ -502,6 +502,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	entityMethods, err := inspectWorldEntity(filepath.Join(directory, "server", "world", "entity.go"))
+	if err != nil {
+		fatal(err)
+	}
 	playerMethods, err := playerTextMethods(filepath.Join(directory, "server", "player", "player.go"))
 	if err != nil {
 		fatal(err)
@@ -579,6 +583,10 @@ func main() {
 		fatal(err)
 	}
 	files := []generatedFile{
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Entity.g.cs"),
+			Content: generateWorldEntity(entityMethods),
+		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Handler.g.cs"),
 			Content: generatePlayerHandler(methods),

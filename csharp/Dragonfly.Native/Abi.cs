@@ -127,6 +127,9 @@ public static class Abi
     public const uint DamageSourceProjectileProtection = 1 << 7;
     public const uint DamageSourceWither = 18;
     public const uint HealingSourceRegeneration = 3;
+    public const uint EntityHasVelocity = 1;
+    public const uint EntityHasNameTag = 2;
+    public const uint EntityCanTeleport = 4;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -261,11 +264,11 @@ public unsafe struct HostApi
     public void* WorldEntitySpawn;
     public void* WorldEntities;
     public void* WorldPlayers;
-    public void* EntityState;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, EntityId, EntityState*, int> EntityState;
     public void* EntityTeleport;
     public void* EntityVelocitySet;
     public void* EntityNameTagSet;
-    public void* EntityDespawn;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, EntityId, int> EntityDespawn;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, Vec3, ParticleView*, int> WorldParticleAdd;
     public void* WorldSoundPlay;
     public void* PlayerSoundPlay;
@@ -574,6 +577,18 @@ public struct NativeRotation
 {
     public double Yaw;
     public double Pitch;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct EntityState
+{
+    public Vec3 Position;
+    public NativeRotation Rotation;
+    public Vec3 Velocity;
+    public uint Capabilities;
+    public WorldId World;
+    public StringBuffer EntityType;
+    public StringBuffer NameTag;
 }
 
 [StructLayout(LayoutKind.Sequential)]

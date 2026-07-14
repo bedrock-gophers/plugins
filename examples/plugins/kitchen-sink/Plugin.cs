@@ -137,7 +137,15 @@ public sealed class KitchenSink : Plugin
         Cube.Face face,
         Vector3 clickPos) => _ = (pos, face, clickPos);
 
-    public override void HandleItemUseOnEntity(Player.Context ctx, World.Entity entity) => _ = entity;
+    public override void HandleItemUseOnEntity(Player.Context ctx, World.Entity entity)
+    {
+        if (!Finite(entity.Position()) || !Finite(entity.Rotation()))
+        {
+            entity.Close();
+            ctx.Cancel();
+        }
+        _ = entity.H();
+    }
 
     public override void HandleItemRelease(Player.Context ctx, Item.Stack item, TimeSpan duration) =>
         _ = (item, duration);
@@ -210,6 +218,9 @@ public sealed class KitchenSink : Plugin
 
     private static bool Finite(Vector3 value) =>
         double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z);
+
+    private static bool Finite(Rotation value) =>
+        double.IsFinite(value.Yaw) && double.IsFinite(value.Pitch);
 
     internal sealed class KitchenStatus(KitchenSink plugin) : Cmd.Runnable
     {

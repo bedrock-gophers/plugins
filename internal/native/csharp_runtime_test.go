@@ -17,6 +17,17 @@ import (
 
 const csharpBuiltinGameModeDescriptor = int64(-1 << 63)
 
+type csharpEntityHost struct {
+	*recordingHost
+	despawnInvocation InvocationID
+	despawnEntity     EntityID
+}
+
+func (h *csharpEntityHost) DespawnEntity(invocation InvocationID, entity EntityID) bool {
+	h.despawnInvocation, h.despawnEntity = invocation, entity
+	return true
+}
+
 func openCSharpRuntime(t testing.TB) *Runtime {
 	return openCSharpRuntimeWithHost(t, nil)
 }
@@ -1198,7 +1209,8 @@ func TestCSharpRuntimeLifecycleAndQuit(t *testing.T) {
 }
 
 func TestCSharpRuntimeReflectedPlayerHandlers(t *testing.T) {
-	pluginRuntime := openCSharpRuntime(t)
+	host := &csharpEntityHost{recordingHost: &recordingHost{}}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
 	properties, err := nbt.MarshalEncoding(map[string]any{}, nbt.LittleEndian)
 	if err != nil {
 		t.Fatal(err)
@@ -1370,6 +1382,10 @@ func TestCSharpRuntimeReflectedPlayerHandlers(t *testing.T) {
 	}
 
 	target := EntityID{UUID: [16]byte{0x44}, Generation: 9}
+	host.entityState = EntityState{
+		Type: "minecraft:zombie", Position: Vec3{X: 4, Y: 65, Z: 8},
+		Rotation: Rotation{Yaw: 90, Pitch: -15},
+	}
 	allowed("item use on entity", func() (bool, error) {
 		return pluginRuntime.HandlePlayerItemUseOnEntity(
 			next(), PlayerItemUseOnEntityInput{Player: player, Target: target}, false)
@@ -1380,6 +1396,18 @@ func TestCSharpRuntimeReflectedPlayerHandlers(t *testing.T) {
 		attack.KnockbackHeight != 0 || !attack.Critical {
 		t.Fatalf("attack output=%+v error=%v", attack, err)
 	}
+	if host.entityStateID != target {
+		t.Fatalf("event entity state read used %#v, want %#v", host.entityStateID, target)
+	}
+	host.entityState.Position.X = math.NaN()
+	closeInvocation := next()
+	cancelled, err = pluginRuntime.HandlePlayerItemUseOnEntity(
+		closeInvocation, PlayerItemUseOnEntityInput{Player: player, Target: target}, false)
+	if err != nil || !cancelled || host.despawnInvocation != closeInvocation || host.despawnEntity != target {
+		t.Fatalf("invalid entity close: cancelled=%v invocation=%d entity=%#v error=%v",
+			cancelled, host.despawnInvocation, host.despawnEntity, err)
+	}
+	host.entityState.Position.X = 4
 
 	transfer, err := pluginRuntime.HandlePlayerTransfer(next(), PlayerTransferInput{
 		Player:  player,
