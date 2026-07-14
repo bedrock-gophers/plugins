@@ -1915,6 +1915,17 @@ internal static unsafe class PluginBridge
             return checked((int)count);
         }
 
+        internal static World ServerWorld(uint dimension)
+        {
+            var api = Api;
+            if (api is null || api->ServerWorld == null)
+                throw new InvalidOperationException("server is unavailable");
+            WorldId world;
+            if (api->ServerWorld(api->Context, dimension, &world) != Abi.Ok || world.Value == 0)
+                throw new InvalidOperationException("server world is unavailable");
+            return new World(0, world);
+        }
+
         internal static (World.EntityHandle? Player, bool Ok) ServerPlayer(Guid uuid)
         {
             var api = Api;
@@ -2361,7 +2372,7 @@ internal static unsafe class PluginBridge
     {
         if (host is null) return Abi.Error;
         var header = (HostHeader*)host;
-        if (header->Version != Abi.HostVersion || header->Size < 816) return Abi.Error;
+        if (header->Version != Abi.HostVersion || header->Size < 824) return Abi.Error;
         Host.Api = (HostApi*)host;
         return Abi.Ok;
     }

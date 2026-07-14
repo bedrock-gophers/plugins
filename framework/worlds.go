@@ -605,6 +605,21 @@ func (m *WorldManager) finishWorldClose(entry *managedWorld, closeWorld func() e
 }
 
 // Native Host implementation.
+func (m *WorldManager) ServerWorld(dimension native.WorldDimension) (native.WorldID, bool) {
+	var name WorldID
+	switch dimension {
+	case native.WorldDimensionOverworld:
+		name = OverworldID
+	case native.WorldDimensionNether:
+		name = NetherID
+	case native.WorldDimensionEnd:
+		name = EndID
+	default:
+		return 0, false
+	}
+	return m.WorldByName(0, string(name))
+}
+
 func (m *WorldManager) WorldByName(_ native.InvocationID, name string) (native.WorldID, bool) {
 	entry, ok := m.entryByName(WorldID(name))
 	if !ok {

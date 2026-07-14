@@ -9,6 +9,9 @@ import (
 )
 
 var selectedServerMethods = []string{
+	"World",
+	"Nether",
+	"End",
 	"MaxPlayerCount",
 	"PlayerCount",
 	"Players",
@@ -57,6 +60,11 @@ func selectedServerMethod(name string) bool {
 func translateServerMethod(function *ast.FuncDecl) (commandMethod, error) {
 	method := commandMethod{Name: function.Name.Name}
 	switch function.Name.Name {
+	case "World", "Nether", "End":
+		if !noParameters(function.Type.Params) || !serverWorldResult(function.Type.Results) {
+			return method, fmt.Errorf("signature changed")
+		}
+		method.ReturnType = "World"
 	case "MaxPlayerCount", "PlayerCount":
 		if !noParameters(function.Type.Params) || !singleFieldType(function.Type.Results, "int") {
 			return method, fmt.Errorf("signature changed")
@@ -90,6 +98,22 @@ func translateServerMethod(function *ast.FuncDecl) (commandMethod, error) {
 		return method, fmt.Errorf("unsupported method")
 	}
 	return method, nil
+}
+
+func serverWorldResult(fields *ast.FieldList) bool {
+	if fields == nil || len(fields.List) != 1 || len(fields.List[0].Names) != 0 {
+		return false
+	}
+	pointer, ok := fields.List[0].Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	selector, ok := pointer.X.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "World" {
+		return false
+	}
+	pkg, ok := selector.X.(*ast.Ident)
+	return ok && pkg.Name == "world"
 }
 
 func noParameters(fields *ast.FieldList) bool {
@@ -181,10 +205,16 @@ func serverPlayerLookupResults(fields *ast.FieldList) bool {
 func generateServer(methods []commandMethod) []byte {
 	var output bytes.Buffer
 	output.WriteString("// Code generated from Dragonfly server/server.go Go AST. DO NOT EDIT.\n")
-	output.WriteString("#nullable enable\nusing System;\nusing System.Collections.Generic;\n\nnamespace Dragonfly;\n\n")
+	output.WriteString("#nullable enable\nusing System;\nusing System.Collections.Generic;\nusing Dragonfly.Native;\n\nnamespace Dragonfly;\n\n")
 	output.WriteString("public sealed partial class Server\n{\n    internal Server() { }\n\n")
 	for index, method := range methods {
 		switch method.Name {
+		case "World":
+			output.WriteString("    public World World() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionOverworld);\n")
+		case "Nether":
+			output.WriteString("    public World Nether() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionNether);\n")
+		case "End":
+			output.WriteString("    public World End() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionEnd);\n")
 		case "MaxPlayerCount":
 			output.WriteString("    public int MaxPlayerCount() => PluginBridge.Host.ServerMaxPlayerCount();\n")
 		case "PlayerCount":

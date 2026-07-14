@@ -717,6 +717,7 @@ public sealed class KitchenSink : Plugin
         public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
         {
             var server = plugin.Server();
+            _ = (server.World(), server.Nether(), server.End());
             var count = 0;
             World.EntityHandle? first = null;
             foreach (var connected in server.Players(tx))

@@ -24,6 +24,7 @@ type csharpServerHost struct {
 	maximumCountCalls      int
 	playerCountCalls       int
 	playerXUIDInvocations  []InvocationID
+	serverWorldDimensions  []WorldDimension
 	entityHandleUUIDs      map[EntityHandleID][16]byte
 	entityHandleCalls      []EntityID
 	entityHandleInvocation []InvocationID
@@ -84,6 +85,11 @@ func (h *csharpServerHost) PlayerXUID(invocation InvocationID, player PlayerID) 
 	h.playerXUIDInvocations = append(h.playerXUIDInvocations, invocation)
 	xuid, ok := h.playerXUIDs[player]
 	return xuid, ok
+}
+
+func (h *csharpServerHost) ServerWorld(dimension WorldDimension) (WorldID, bool) {
+	h.serverWorldDimensions = append(h.serverWorldDimensions, dimension)
+	return WorldID(dimension) + 10, dimension <= WorldDimensionEnd
 }
 
 func (h *csharpServerHost) EntityHandle(invocation InvocationID, entity EntityID) (EntityHandleID, bool) {
@@ -171,6 +177,9 @@ func TestCSharpServerPlayersAndLookup(t *testing.T) {
 	}
 	if host.lookupUUID != source.UUID || host.lookupName != "Danick" ||
 		host.lookupXUID != "xuid-danick" || host.maximumCountCalls != 1 || host.playerCountCalls != 1 ||
+		!slices.Equal(host.serverWorldDimensions, []WorldDimension{
+			WorldDimensionOverworld, WorldDimensionNether, WorldDimensionEnd,
+		}) ||
 		!slices.Equal(host.playerXUIDInvocations, []InvocationID{42}) ||
 		!slices.Equal(host.entityHandleInvocation, []InvocationID{101, 42}) ||
 		!slices.Equal(host.entityHandleCalls, []EntityID{

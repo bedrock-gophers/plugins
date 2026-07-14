@@ -10,6 +10,9 @@ import (
 )
 
 const serverSource = `package server
+func (srv *Server) World() *world.World { return nil }
+func (srv *Server) Nether() *world.World { return nil }
+func (srv *Server) End() *world.World { return nil }
 func (srv *Server) MaxPlayerCount() int { return 0 }
 func (srv *Server) PlayerCount() int { return 0 }
 func (srv *Server) Players(tx *world.Tx) iter.Seq[*player.Player] { return nil }
@@ -29,6 +32,9 @@ func TestServerUsesGoAST(t *testing.T) {
 	}
 	generated := string(generateServer(methods))
 	for _, expected := range []string{
+		"public World World() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionOverworld)",
+		"public World Nether() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionNether)",
+		"public World End() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionEnd)",
 		"public int MaxPlayerCount() => PluginBridge.Host.ServerMaxPlayerCount()",
 		"public int PlayerCount() => PluginBridge.Host.ServerPlayerCount()",
 		"public IEnumerable<Player> Players(World.Tx? tx = null)",
@@ -49,6 +55,9 @@ func TestServerUsesGoAST(t *testing.T) {
 
 func TestServerRejectsSignatureDrift(t *testing.T) {
 	tests := map[string][2]string{
+		"World":          {"World() *world.World", "World() world.World"},
+		"Nether":         {"Nether() *world.World", "Nether() *world.Tx"},
+		"End":            {"End() *world.World", "End(extra int) *world.World"},
 		"MaxPlayerCount": {"MaxPlayerCount() int", "MaxPlayerCount() int64"},
 		"PlayerCount":    {"PlayerCount() int", "PlayerCount(extra int) int"},
 		"Players":        {"Players(tx *world.Tx)", "Players(tx world.Tx)"},
@@ -81,6 +90,9 @@ func TestPinnedDragonflyServerHasExactSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []commandMethod{
+		{Name: "World", ReturnType: "World"},
+		{Name: "Nether", ReturnType: "World"},
+		{Name: "End", ReturnType: "World"},
 		{Name: "MaxPlayerCount", ReturnType: "int"},
 		{Name: "PlayerCount", ReturnType: "int"},
 		{Name: "Players", Parameters: []parameter{{Name: "tx", Type: "World.Tx?"}}, ReturnType: "IEnumerable<Player>"},

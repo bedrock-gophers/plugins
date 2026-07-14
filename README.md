@@ -190,6 +190,9 @@ Server-wide player access follows Dragonfly's `Server` directly:
 
 ```csharp
 var server = Server();
+var overworld = server.World();
+var nether = server.Nether();
+var end = server.End();
 var online = server.PlayerCount();
 var capacity = server.MaxPlayerCount();
 foreach (var player in server.Players(tx))
@@ -223,7 +226,7 @@ Dragonfly field and cause.
 
 Public block, liquid, biome, particle, colour, instrument, sound, and item types come from Dragonfly's Go AST.
 Live registries feed internal generated codecs, so Minecraft identifiers, state NBT, numeric biome
-IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 38 preserves the
+IDs, particle kinds, and instrument IDs never enter plugin code. Private host ABI 39 preserves the
 separate “no liquid” result, nullable liquid removal, signed nanosecond scheduling delays,
 biome/weather queries, particle payloads, registered/custom game-mode capabilities, and full
 callback-scoped player snapshots for form responses. Structurally valid form contexts receive
@@ -236,7 +239,7 @@ instruments, music discs, goat horns, crossbow stages, and scalar values.
 
 The generated effect slice exposes all 28 registered Dragonfly effects, `Effect.Value`, the five
 constructors, value methods, colour mixing, registry lookup, and `Player.AddEffect`, `RemoveEffect`,
-`Effect`, and `Effects`. ABI 38 carries effect duration, potency, ambient/particle/infinite flags,
+`Effect`, and `Effects`. ABI 39 carries effect duration, potency, ambient/particle/infinite flags,
 and the current tick; C# exposes duration at `TimeSpan`'s 100 ns precision. Custom effect callbacks,
 registration, and concrete effect-specific multiplier methods wait for the entity and damage-source
 slices; no identifier-based fallback is exposed.

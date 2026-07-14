@@ -2,12 +2,19 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using Dragonfly.Native;
 
 namespace Dragonfly;
 
 public sealed partial class Server
 {
     internal Server() { }
+
+    public World World() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionOverworld);
+
+    public World Nether() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionNether);
+
+    public World End() => PluginBridge.Host.ServerWorld(Abi.WorldDimensionEnd);
 
     public int MaxPlayerCount() => PluginBridge.Host.ServerMaxPlayerCount();
 

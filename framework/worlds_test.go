@@ -23,9 +23,35 @@ import (
 func TestWorldManagerRegistersCoreWorlds(t *testing.T) {
 	manager := NewWorldManager()
 	overworld := world.Config{Synchronous: true}.New()
-	t.Cleanup(func() { _ = overworld.Close() })
+	nether := world.Config{Synchronous: true}.New()
+	end := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() {
+		_ = overworld.Close()
+		_ = nether.Close()
+		_ = end.Close()
+	})
 	if err := manager.RegisterCore(OverworldID, overworld); err != nil {
 		t.Fatal(err)
+	}
+	if err := manager.RegisterCore(NetherID, nether); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.RegisterCore(EndID, end); err != nil {
+		t.Fatal(err)
+	}
+	for dimension, name := range map[native.WorldDimension]WorldID{
+		native.WorldDimensionOverworld: OverworldID,
+		native.WorldDimensionNether:    NetherID,
+		native.WorldDimensionEnd:       EndID,
+	} {
+		id, ok := manager.ServerWorld(dimension)
+		registered, registeredOK := manager.WorldByName(0, string(name))
+		if !ok || !registeredOK || id != registered {
+			t.Fatalf("ServerWorld(%d) = %d, %v; want %d", dimension, id, ok, registered)
+		}
+	}
+	if _, ok := manager.ServerWorld(native.WorldDimension(99)); ok {
+		t.Fatal("invalid server world dimension succeeded")
 	}
 	if _, ok := overworld.Handler().(*host.WorldHandler); !ok {
 		t.Fatalf("handler type = %T", overworld.Handler())

@@ -210,8 +210,8 @@ _Static_assert(offsetof(DfWorldOpenSpecV1, read_only) == 76, "DfWorldOpenSpecV1.
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
 _Static_assert(sizeof(DfEntityHandleId) == 16, "DfEntityHandleId ABI layout changed");
 _Static_assert(sizeof(DfUuid) == 16, "DfUuid ABI layout changed");
-_Static_assert(sizeof(DfHostApiV27) == 816, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 38u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 824, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 39u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -222,6 +222,7 @@ _Static_assert(offsetof(DfHostApiV27, server_players_open) == 744, "DfHostApiV27
 _Static_assert(offsetof(DfHostApiV27, server_player_by_name) == 776, "DfHostApiV27.server_player_by_name ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, server_max_player_count) == 784, "DfHostApiV27.server_max_player_count ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_xuid) == 808, "DfHostApiV27.player_xuid ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, server_world) == 816, "DfHostApiV27.server_world ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_hurt) == 408, "DfHostApiV27.player_hurt ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, skin_snapshot_info) == 416, "DfHostApiV27.skin_snapshot_info ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, skin_snapshot_set) == 424, "DfHostApiV27.skin_snapshot_set ABI offset changed");
@@ -368,6 +369,7 @@ extern DfStatus bg_go_server_max_player_count(uint64_t context, int64_t *count);
 extern DfStatus bg_go_server_player_count(uint64_t context, int64_t *count);
 extern DfStatus bg_go_server_player_by_xuid(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found);
 extern DfStatus bg_go_player_xuid(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid);
+extern DfStatus bg_go_server_world(uint64_t context, uint32_t dimension, DfWorldId *world);
 
 static DfStatus host_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message) {
     return bg_go_player_text(context, invocation, player, kind, message);
@@ -534,6 +536,7 @@ static DfStatus host_server_max_player_count(uint64_t context, int64_t *count) {
 static DfStatus host_server_player_count(uint64_t context, int64_t *count) { return bg_go_server_player_count(context, count); }
 static DfStatus host_server_player_by_xuid(uint64_t context, DfStringView xuid, DfEntityHandleId *player, uint8_t *found) { return bg_go_server_player_by_xuid(context, xuid, player, found); }
 static DfStatus host_player_xuid(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringBuffer *xuid) { return bg_go_player_xuid(context, invocation, player, xuid); }
+static DfStatus host_server_world(uint64_t context, uint32_t dimension, DfWorldId *world) { return bg_go_server_world(context, dimension, world); }
 
 typedef DfStatus (*RuntimeCreateFn)(const DfRuntimeConfig *, DfRuntime **, uint8_t *, uint64_t);
 typedef void (*RuntimeDestroyFn)(DfRuntime *);
@@ -758,6 +761,7 @@ DfStatus bg_runtime_open(
         .server_player_count = host_server_player_count,
         .server_player_by_xuid = host_server_player_by_xuid,
         .player_xuid = host_player_xuid,
+        .server_world = host_server_world,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

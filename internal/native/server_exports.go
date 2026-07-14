@@ -135,6 +135,20 @@ func bg_go_player_xuid(context C.uint64_t, invocation C.DfInvocationId, player C
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_server_world
+func bg_go_server_world(context C.uint64_t, dimension C.uint32_t, output *C.DfWorldId) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil || uint64(dimension) > uint64(WorldDimensionEnd) {
+		return C.DF_STATUS_ERROR
+	}
+	id, ok := host.ServerWorld(WorldDimension(dimension))
+	if !ok || id == 0 {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.DfWorldId{value: C.uint64_t(id)}
+	return C.DF_STATUS_OK
+}
+
 func writeServerPlayerLookup(id EntityHandleID, hasValue, valid bool, output *C.DfEntityHandleId, found *C.uint8_t) C.DfStatus {
 	*output = C.DfEntityHandleId{}
 	*found = 0
