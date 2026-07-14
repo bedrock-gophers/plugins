@@ -187,7 +187,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    callback completion, or runtime shutdown.
    `World.Schedule(Action<World.Tx>)` is the current fire-and-forget C# adaptation of Dragonfly's
    owner-scheduled `World.Do`. The generator validates the exact upstream `Do(func(*Tx)) *Task`
-   shape. The private ABI 42 callback trampoline keeps delegates plugin-owned, executes them on the
+   shape. The private callback trampoline keeps delegates plugin-owned, executes them on the
    selected world owner with a fresh borrowed transaction, and removes them on execution or task
    failure. Framework teardown stops admission and drains every accepted callback before closing
    the NativeAOT runtime. Managed `Task` cancellation, waiting, and completion callbacks remain a
@@ -196,7 +196,12 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    selected upstream config fields atomically; `MCDB.Config.Open(path)` selects a writable,
    persistent provider rooted below the configured worlds directory. Created worlds are owned and
    closed by the framework, but internal registry keys and provider handles never enter plugin
-   code. `World.Name()` remains Dragonfly's display name.
+   code. `World.Name()` remains Dragonfly's display name. ABI 43 adds the AST-pinned package-level
+   `World.BlockByName(string, Dictionary<string, object?>?)` surface. Its private property codec
+   preserves Dragonfly's exact `bool`, `uint8`, `int32`, and `string` state types, and the host
+   resolves them through `world.BlockByName`; failed names or state hashes return `(null, false)`.
+   This is the dynamic block path needed by VAP-style arena data, while generated concrete block
+   types remain the normal compile-time path.
    The sound slice AST-generates all 87 concrete `server/world/sound` structs as `Sound.*` values
    implementing `World.Sound`. `HandleSound` materialises their exported bool, scalar, block, item,
    liquid, instrument, disc, horn, pitch, and stage fields. Bucket sounds preserve the exact typed

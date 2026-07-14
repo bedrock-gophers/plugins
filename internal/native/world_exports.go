@@ -66,6 +66,28 @@ func bg_go_world_block_get(context C.uint64_t, invocation C.DfInvocationId, worl
 	return writeWorldBlock(output, block, ok)
 }
 
+//export bg_go_block_by_name
+func bg_go_block_by_name(context C.uint64_t, name C.DfStringView, properties C.DfStringView, found *C.uint8_t, output *C.DfBlockData) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || found == nil || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	*found = 0
+	output.identifier.len = 0
+	output.properties_nbt.len = 0
+	identifier, validIdentifier := copyWorldBytes(name, maxBlockIdentifierBytes)
+	encodedProperties, validProperties := copyWorldBytes(properties, maxBlockPropertiesBytes)
+	if !validIdentifier || !validProperties || len(identifier) == 0 || !utf8.Valid(identifier) {
+		return C.DF_STATUS_ERROR
+	}
+	block, ok := host.BlockByName(string(identifier), encodedProperties)
+	if !ok {
+		return C.DF_STATUS_OK
+	}
+	*found = 1
+	return writeWorldBlock(output, block, true)
+}
+
 //export bg_go_world_block_loaded
 func bg_go_world_block_loaded(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, loaded *C.uint8_t, output *C.DfBlockData) C.DfStatus {
 	host, ok := resolveHost(uint64(context))

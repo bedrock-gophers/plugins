@@ -206,8 +206,8 @@ _Static_assert(sizeof(DfWorldCloseInput) == 8, "DfWorldCloseInput ABI layout cha
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
 _Static_assert(sizeof(DfEntityHandleId) == 16, "DfEntityHandleId ABI layout changed");
 _Static_assert(sizeof(DfUuid) == 16, "DfUuid ABI layout changed");
-_Static_assert(sizeof(DfHostApiV27) == 824, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 42u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 832, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 43u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -222,6 +222,7 @@ _Static_assert(offsetof(DfHostApiV27, server_world) == 792, "DfHostApiV27.server
 _Static_assert(offsetof(DfHostApiV27, world_schedule) == 800, "DfHostApiV27.world_schedule ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_new) == 808, "DfHostApiV27.world_new ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_entities_within_open) == 816, "DfHostApiV27.world_entities_within_open ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, block_by_name) == 824, "DfHostApiV27.block_by_name ABI offset changed");
 _Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
 _Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
 _Static_assert(offsetof(DfBBox, max) == 24, "DfBBox.max ABI offset changed");
@@ -312,6 +313,7 @@ extern DfStatus bg_go_world_name(uint64_t context, DfInvocationId invocation, Df
 extern DfStatus bg_go_world_unload(uint64_t context, DfInvocationId invocation, DfWorldId world);
 extern DfStatus bg_go_world_save(uint64_t context, DfInvocationId invocation, DfWorldId world);
 extern DfStatus bg_go_world_block_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, DfBlockData *block);
+extern DfStatus bg_go_block_by_name(uint64_t context, DfStringView name, DfStringView properties_nbt, uint8_t *found, DfBlockData *block);
 extern DfStatus bg_go_world_block_loaded(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *loaded, DfBlockData *block);
 extern DfStatus bg_go_world_liquid_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *found, DfBlockData *block);
 extern DfStatus bg_go_world_liquid_set(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, const DfBlockView *liquid);
@@ -479,6 +481,7 @@ static DfStatus host_world_name(uint64_t context, DfInvocationId invocation, DfW
 static DfStatus host_world_unload(uint64_t context, DfInvocationId invocation, DfWorldId world) { return bg_go_world_unload(context, invocation, world); }
 static DfStatus host_world_save(uint64_t context, DfInvocationId invocation, DfWorldId world) { return bg_go_world_save(context, invocation, world); }
 static DfStatus host_world_block_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, DfBlockData *block) { return bg_go_world_block_get(context, invocation, world, position, block); }
+static DfStatus host_block_by_name(uint64_t context, DfStringView name, DfStringView properties_nbt, uint8_t *found, DfBlockData *block) { return bg_go_block_by_name(context, name, properties_nbt, found, block); }
 static DfStatus host_world_block_loaded(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *loaded, DfBlockData *block) { return bg_go_world_block_loaded(context, invocation, world, position, loaded, block); }
 static DfStatus host_world_liquid_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *found, DfBlockData *block) { return bg_go_world_liquid_get(context, invocation, world, position, found, block); }
 static DfStatus host_world_liquid_set(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, const DfBlockView *liquid) { return bg_go_world_liquid_set(context, invocation, world, position, liquid); }
@@ -767,6 +770,7 @@ DfStatus bg_runtime_open(
         .world_schedule = host_world_schedule,
         .world_new = host_world_new,
         .world_entities_within_open = host_world_entities_within_open,
+        .block_by_name = host_block_by_name,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

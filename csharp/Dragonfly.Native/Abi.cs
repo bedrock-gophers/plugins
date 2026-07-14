@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 8;
-    public const uint HostVersion = 42;
+    public const uint HostVersion = 43;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint WorldDimensionOverworld = 0;
@@ -376,6 +376,7 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, WorldId, ulong, ulong, int> WorldSchedule;
     public delegate* unmanaged[Cdecl]<ulong, WorldConfigV1*, WorldId*, int> WorldNew;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BBox, ulong*, int> WorldEntitiesWithinOpen;
+    public delegate* unmanaged[Cdecl]<ulong, StringView, StringView, byte*, BlockData*, int> BlockByName;
 }
 
 [StructLayout(LayoutKind.Sequential)]

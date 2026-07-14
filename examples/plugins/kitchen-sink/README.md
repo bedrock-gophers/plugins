@@ -19,7 +19,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
   queries, and block access through `World.Tx`;
 - direct lazy server-wide player iteration, global messaging, stable handle retention, and UUID/name
   lookup in `/kitchen server`;
-- generated `Cube.Pos`, `Block.Sand`, and all `World.SetOpts` flags in `/kitchen block`;
+- generated `Cube.Pos`, `Block.Sand`, all `World.SetOpts` flags, and registry-backed
+  `World.BlockByName` lookups covering bool/byte/int/string state properties in `/kitchen block`;
 - promoted Dragonfly crop state through typed `Block.WheatSeeds(Growth: 7)` in `/kitchen crop`;
 - typed `World.Liquid`, `Block.Water`, liquid inspection, placement, and nullable removal;
 - typed `ScheduleBlockUpdate` with a matching water ticker and C# `TimeSpan` delay;

@@ -612,6 +612,9 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	if err := inspectWorldBlockByName(filepath.Join(directory, "server", "world", "block.go")); err != nil {
+		fatal(err)
+	}
 	setOpts, err := inspectSetOpts(filepath.Join(directory, "server", "world", "world.go"))
 	if err != nil {
 		fatal(err)
@@ -4971,10 +4974,12 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 			break
 		}
 	}
-	output.WriteByte('\n')
+	output.WriteString("using System.Collections.Generic;\n\n")
 	output.WriteString("namespace Dragonfly;\n\n")
 	output.WriteString("public sealed partial class World\n{\n")
 	output.WriteString("    public interface Block { }\n\n")
+	output.WriteString("    public static (Block? Block, bool Ok) BlockByName(string name, Dictionary<string, object?>? properties) =>\n")
+	output.WriteString("        PluginBridge.Host.BlockByName(name, properties);\n\n")
 	output.WriteString("    public interface Biome { }\n\n")
 	output.WriteString("    public interface Particle { }\n\n")
 	output.WriteString("    public interface Liquid : Block { string LiquidType(); }\n\n")

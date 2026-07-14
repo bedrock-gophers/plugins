@@ -1,12 +1,16 @@
 // Code generated from Dragonfly server/world Go AST. DO NOT EDIT.
 #nullable enable
 using System;
+using System.Collections.Generic;
 
 namespace Dragonfly;
 
 public sealed partial class World
 {
     public interface Block { }
+
+    public static (Block? Block, bool Ok) BlockByName(string name, Dictionary<string, object?>? properties) =>
+        PluginBridge.Host.BlockByName(name, properties);
 
     public interface Biome { }
 

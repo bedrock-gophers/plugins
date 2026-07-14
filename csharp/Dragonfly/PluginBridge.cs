@@ -1339,6 +1339,57 @@ internal static unsafe class PluginBridge
             return BlockCodec.Decode(Encoding.UTF8.GetString(identifierBytes), propertyBytes);
         }
 
+        internal static (World.Block? Block, bool Ok) BlockByName(
+            string name,
+            IReadOnlyDictionary<string, object?>? properties)
+        {
+            ArgumentNullException.ThrowIfNull(name);
+            var api = Api;
+            if (api is null || api->BlockByName == null) return (null, false);
+            var nameBytes = Encoding.UTF8.GetBytes(name);
+            if (nameBytes.Length == 0 || nameBytes.Length > 256) return (null, false);
+            var encodedProperties = BlockPropertyCodec.Encode(properties);
+            if (encodedProperties.Length > 64 * 1024) return (null, false);
+
+            fixed (byte* nameData = nameBytes)
+            fixed (byte* propertiesData = encodedProperties)
+            {
+                var nameView = new StringView { Data = nameData, Length = (ulong)nameBytes.Length };
+                var propertiesView = new StringView
+                {
+                    Data = propertiesData,
+                    Length = (ulong)encodedProperties.Length,
+                };
+                byte found;
+                var data = new BlockData();
+                var status = api->BlockByName(
+                    api->Context, nameView, propertiesView, &found, &data);
+                if (found == 0) return (null, false);
+                if (found != 1 || data.Identifier.Length == 0 || data.Identifier.Length > 256 ||
+                    data.PropertiesNbt.Length > 64 * 1024) return (null, false);
+                var identifierBytes = new byte[checked((int)data.Identifier.Length)];
+                var propertyBytes = new byte[checked((int)data.PropertiesNbt.Length)];
+                fixed (byte* identifierData = identifierBytes)
+                fixed (byte* propertyData = propertyBytes)
+                {
+                    data.Identifier = new StringBuffer
+                    {
+                        Data = identifierData,
+                        Capacity = (ulong)identifierBytes.Length,
+                    };
+                    data.PropertiesNbt = new StringBuffer
+                    {
+                        Data = propertyData,
+                        Capacity = (ulong)propertyBytes.Length,
+                    };
+                    if (api->BlockByName(
+                            api->Context, nameView, propertiesView, &found, &data) != Abi.Ok || found != 1)
+                        return (null, false);
+                }
+                return (BlockCodec.Decode(Encoding.UTF8.GetString(identifierBytes), propertyBytes), true);
+            }
+        }
+
         internal static Cube.Range WorldRange(ulong invocation)
         {
             var api = Api;
@@ -2371,7 +2422,7 @@ internal static unsafe class PluginBridge
     {
         if (host is null) return Abi.Error;
         var header = (HostHeader*)host;
-        if (header->Version != Abi.HostVersion || header->Size < 816) return Abi.Error;
+        if (header->Version != Abi.HostVersion || header->Size < (uint)sizeof(HostApi)) return Abi.Error;
         Host.Api = (HostApi*)host;
         return Abi.Ok;
     }

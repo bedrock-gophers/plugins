@@ -456,6 +456,8 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 	}, methods))
 	for _, expected := range []string{
 		"public interface Block { }",
+		"public static (Block? Block, bool Ok) BlockByName(string name, Dictionary<string, object?>? properties)",
+		"PluginBridge.Host.BlockByName(name, properties)",
 		"public World World()",
 		"PluginBridge.Host.TransactionWorld(Invocation)",
 		"public Cube.Range Range()",

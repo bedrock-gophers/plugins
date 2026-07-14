@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 8u
-// Version 42 adds world.Tx.EntitiesWithin.
-#define DF_HOST_ABI_VERSION 42u
+// Version 43 adds world.BlockByName.
+#define DF_HOST_ABI_VERSION 43u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -384,6 +384,7 @@ typedef DfStatus (*DfHostWorldNameFn)(uint64_t context, DfInvocationId invocatio
 typedef DfStatus (*DfHostWorldUnloadFn)(uint64_t context, DfInvocationId invocation, DfWorldId world);
 typedef DfStatus (*DfHostWorldSaveFn)(uint64_t context, DfInvocationId invocation, DfWorldId world);
 typedef DfStatus (*DfHostWorldBlockGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, DfBlockData *block);
+typedef DfStatus (*DfHostBlockByNameFn)(uint64_t context, DfStringView name, DfStringView properties_nbt, uint8_t *found, DfBlockData *block);
 typedef DfStatus (*DfHostWorldBlockLoadedFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *loaded, DfBlockData *block);
 typedef DfStatus (*DfHostWorldLiquidGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *found, DfBlockData *block);
 typedef DfStatus (*DfHostWorldLiquidSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, const DfBlockView *liquid);
@@ -543,6 +544,7 @@ typedef struct {
     DfHostWorldScheduleFn world_schedule;
     DfHostWorldNewFn world_new;
     DfHostWorldEntitiesWithinOpenFn world_entities_within_open;
+    DfHostBlockByNameFn block_by_name;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u

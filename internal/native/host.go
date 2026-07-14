@@ -391,6 +391,7 @@ type Host interface {
 	WorldName(InvocationID, WorldID) (string, bool)
 	CreateWorld(WorldConfig) (WorldID, bool)
 	UnloadWorld(InvocationID, WorldID) bool
+	BlockByName(string, []byte) (WorldBlock, bool)
 	WorldBlock(InvocationID, WorldID, BlockPos) (WorldBlock, bool)
 	WorldBlockLoaded(InvocationID, WorldID, BlockPos) (WorldBlock, bool, bool)
 	OpenWorldBlocksWithin(InvocationID, WorldID, BlockPos, int32, []WorldBlock) (BlockIteratorID, bool)
@@ -507,6 +508,7 @@ func (noopHost) CurrentWorld(InvocationID) (WorldID, bool)                      
 func (noopHost) WorldName(InvocationID, WorldID) (string, bool)                 { return "", false }
 func (noopHost) CreateWorld(WorldConfig) (WorldID, bool)                        { return 0, false }
 func (noopHost) UnloadWorld(InvocationID, WorldID) bool                         { return false }
+func (noopHost) BlockByName(string, []byte) (WorldBlock, bool)                  { return WorldBlock{}, false }
 func (noopHost) WorldBlock(InvocationID, WorldID, BlockPos) (WorldBlock, bool) {
 	return WorldBlock{}, false
 }

@@ -525,6 +525,25 @@ public sealed class KitchenSink : Plugin
                 return;
             }
             var position = Cube.PosFromVec3(source.Position()).Side(Cube.Face.Down);
+            var (_, wheatOK) = World.BlockByName("minecraft:wheat", new()
+            {
+                ["growth"] = 7,
+            });
+            var (_, candleOK) = World.BlockByName("minecraft:candle", new()
+            {
+                ["candles"] = 0,
+                ["lit"] = false,
+            });
+            var (_, barrelOK) = World.BlockByName("minecraft:barrel", new()
+            {
+                ["open_bit"] = (byte)0,
+                ["facing_direction"] = 2,
+            });
+            var (_, quartzOK) = World.BlockByName("minecraft:quartz_block", new()
+            {
+                ["pillar_axis"] = "y",
+            });
+            var lookupOK = wheatOK && candleOK && barrelOK && quartzOK;
             var range = tx.Range();
             var (block, loaded) = tx.BlockLoaded(position);
             var previous = loaded ? block : tx.Block(position);
@@ -559,10 +578,11 @@ public sealed class KitchenSink : Plugin
                 break;
             }
             output.Printf(
-                "block={0}, range={1}..{2}, loaded={3}, was_sand={4}, nearby_sand={5}, " +
-                "highest_light_blocker={6}, highest_block={7}, light={8}, sky_light={9}, " +
-                "liquid_before={10}, liquid={11}:{12}, scheduled_update=water:{13}ms",
+                "block={0}, lookup={1}, range={2}..{3}, loaded={4}, was_sand={5}, nearby_sand={6}, " +
+                "highest_light_blocker={7}, highest_block={8}, light={9}, sky_light={10}, " +
+                "liquid_before={11}, liquid={12}:{13}, scheduled_update=water:{14}ms",
                 position,
+                lookupOK ? "true" : "false",
                 range.Min(),
                 range.Max(),
                 loaded ? "true" : "false",

@@ -897,12 +897,53 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	host.worldBlockLoaded.PropertiesNBT = properties
+	host.blockByName = WorldBlock{Identifier: "minecraft:wheat", PropertiesNBT: properties}
+	host.blockByNameOK = true
 	input := base
 	input.Overload = 7
 	input.Arguments = []string{"block"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=false, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=false, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
 		t.Fatalf("block output=%#v error=%v", output, err)
+	}
+	wantUniqueLookups := []struct {
+		name       string
+		properties map[string]any
+	}{
+		{"minecraft:wheat", map[string]any{"growth": map[string]any{"kind": int32(2), "value": int32(7)}}},
+		{"minecraft:candle", map[string]any{
+			"candles": map[string]any{"kind": int32(2), "value": int32(0)},
+			"lit":     map[string]any{"kind": int32(0), "value": uint8(0)},
+		}},
+		{"minecraft:barrel", map[string]any{
+			"open_bit":         map[string]any{"kind": int32(1), "value": uint8(0)},
+			"facing_direction": map[string]any{"kind": int32(2), "value": int32(2)},
+		}},
+		{"minecraft:quartz_block", map[string]any{
+			"pillar_axis": map[string]any{"kind": int32(3), "value": "y"},
+		}},
+	}
+	wantLookups := make([]struct {
+		name       string
+		properties map[string]any
+	}, 0, len(wantUniqueLookups)*2)
+	for _, want := range wantUniqueLookups {
+		wantLookups = append(wantLookups, want, want)
+	}
+	if !slices.Equal(host.blockByNameNames, []string{
+		"minecraft:wheat", "minecraft:wheat",
+		"minecraft:candle", "minecraft:candle",
+		"minecraft:barrel", "minecraft:barrel",
+		"minecraft:quartz_block", "minecraft:quartz_block",
+	}) || len(host.blockByNameProps) != len(wantLookups) {
+		t.Fatalf("BlockByName calls = %v", host.blockByNameNames)
+	}
+	for index, want := range wantLookups {
+		var lookupProperties map[string]any
+		if err := nbt.UnmarshalEncoding(host.blockByNameProps[index], &lookupProperties, nbt.LittleEndian); err != nil ||
+			!reflect.DeepEqual(lookupProperties, want.properties) {
+			t.Fatalf("BlockByName(%q, %#v): %v", want.name, lookupProperties, err)
+		}
 	}
 	if host.worldRangeCalls != 1 || host.worldRangeInvocation != 42 || host.worldRangeWorld != 0 {
 		t.Fatalf("range host calls: calls=%d invocation=%d world=%d", host.worldRangeCalls, host.worldRangeInvocation, host.worldRangeWorld)
@@ -970,7 +1011,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	host.worldBlockLoadedOK = false
 	host.worldBlock, host.worldBlockOK = host.worldBlockLoaded, true
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=true, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=true, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
 		t.Fatalf("unloaded block output=%#v error=%v", output, err)
 	}
 	if host.worldRangeCalls != 2 || host.worldBlockLoadedCalls != 3 || host.worldBlockCalls != 2 {

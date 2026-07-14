@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -58,6 +59,46 @@ func TestWorldManagerRegistersCoreWorlds(t *testing.T) {
 	}
 	if err := manager.Unload(OverworldID); err == nil {
 		t.Fatal("core world unload succeeded")
+	}
+}
+
+func TestWorldManagerBlockByName(t *testing.T) {
+	manager := NewWorldManager()
+	w := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	if err := manager.RegisterCore(OverworldID, w); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name       string
+		properties map[string]any
+	}{
+		{"minecraft:wheat", map[string]any{"growth": int32(7)}},
+		{"minecraft:candle", map[string]any{"candles": int32(0), "lit": false}},
+		{"minecraft:barrel", map[string]any{"open_bit": uint8(0), "facing_direction": int32(2)}},
+		{"minecraft:quartz_block", map[string]any{"pillar_axis": "y"}},
+	}
+	for _, test := range tests {
+		properties, ok := encodeBlockProperties(test.properties)
+		if !ok {
+			t.Fatalf("encode %s properties", test.name)
+		}
+		resolved, ok := manager.BlockByName(test.name, properties)
+		if !ok || resolved.Identifier != test.name {
+			t.Fatalf("BlockByName(%q) = %#v, %v", test.name, resolved, ok)
+		}
+		decoded, ok := decodeBlockProperties(resolved.PropertiesNBT)
+		if !ok || !reflect.DeepEqual(decoded, test.properties) {
+			t.Fatalf("resolved %s properties = %#v, %v", test.name, decoded, ok)
+		}
+	}
+	properties, _ := encodeBlockProperties(map[string]any{"growth": int32(7)})
+	if _, ok := manager.BlockByName("minecraft:not_a_block", properties); ok {
+		t.Fatal("unknown block resolved")
+	}
+	mismatch, _ := encodeBlockProperties(map[string]any{"growth": "seven"})
+	if _, ok := manager.BlockByName("minecraft:wheat", mismatch); ok {
+		t.Fatal("mismatched block properties resolved")
 	}
 }
 

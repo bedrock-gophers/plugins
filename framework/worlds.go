@@ -913,6 +913,29 @@ func (m *WorldManager) UnloadWorld(invocation native.InvocationID, id native.Wor
 	return ok && m.unload(invocation, entry) == nil
 }
 
+// BlockByName resolves a block using the registry shared by the managed server worlds.
+func (m *WorldManager) BlockByName(name string, encodedProperties []byte) (result native.WorldBlock, ok bool) {
+	defer func() {
+		if recover() != nil {
+			result, ok = native.WorldBlock{}, false
+		}
+	}()
+	properties, ok := decodeBlockProperties(encodedProperties)
+	if !ok || name == "" {
+		return native.WorldBlock{}, false
+	}
+	block, ok := world.BlockByName(name, properties)
+	if !ok {
+		return native.WorldBlock{}, false
+	}
+	identifier, state := block.EncodeBlock()
+	encodedState, ok := encodeBlockProperties(state)
+	if !ok {
+		return native.WorldBlock{}, false
+	}
+	return native.WorldBlock{Identifier: identifier, PropertiesNBT: encodedState}, true
+}
+
 func (m *WorldManager) WorldBlock(invocation native.InvocationID, id native.WorldID, position native.BlockPos) (native.WorldBlock, bool) {
 	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {
