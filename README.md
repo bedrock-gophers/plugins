@@ -14,7 +14,8 @@ Every C# project under `plugins/*/` is discovered automatically. Adding another 
 requires a `.csproj` and its C# source.
 
 The kitchen-sink plugin includes `/kitchen block`, demonstrating generated `World.Tx` range,
-loaded-block, lazy block-search, height/light, typed block, and typed liquid APIs. It probes an
+loaded-block, lazy block-search, height/light, typed block/liquid APIs, and registry-backed
+`World.BlockByName` lookups for bool, byte, int, and string state properties. It probes an
 empty liquid result, places/reads/removes typed water, then leaves matching water present and
 schedules its update after 250 ms with `ScheduleBlockUpdate` and `TimeSpan`.
 Its `/kitchen crop` overload round-trips promoted Dragonfly crop state through
