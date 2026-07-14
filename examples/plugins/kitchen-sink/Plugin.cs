@@ -514,6 +514,46 @@ public sealed class KitchenSink : Plugin
                         return;
                     }
                 }
+
+                var writable = new Dragonfly.Item.BookAndQuill("alpha")
+                    .InsertPage(1, "beta")
+                    .SetPage(0, "first")
+                    .SwapPages(0, 1);
+                var (writablePage, writablePageFound) = writable.Page(1);
+                if (!writablePageFound || writablePage != "first" || writable.TotalPages() != 2 ||
+                    writable.DeletePage(1).TotalPages() != 1)
+                {
+                    output.Error("Writable book behavior failed.");
+                    return;
+                }
+                var writableStack = Dragonfly.Item.NewStack(writable, 1);
+                var otherWritableStack = Dragonfly.Item.NewStack(new Dragonfly.Item.BookAndQuill("different"), 1);
+                var (unchangedWritable, remainingWritable) = writableStack.AddStack(otherWritableStack);
+                if (writableStack.Comparable(otherWritableStack) ||
+                    unchangedWritable.Count() != 1 || remainingWritable.Count() != 1)
+                {
+                    output.Error("Writable book comparison failed.");
+                    return;
+                }
+                inventory.SetItem(0, writableStack);
+                if (inventory.Item(0).Item() is not Dragonfly.Item.BookAndQuill storedWritable ||
+                    storedWritable.Page(0) != ("beta", true) || storedWritable.Page(1) != ("first", true))
+                {
+                    output.Error("Writable book round-trip failed.");
+                    return;
+                }
+
+                var written = new Dragonfly.Item.WrittenBook(
+                    "Kitchen", "bedrock-gophers", Dragonfly.Item.CopyGeneration(), "page one", "page two");
+                inventory.SetItem(0, Dragonfly.Item.NewStack(written, 1));
+                if (inventory.Item(0).Item() is not Dragonfly.Item.WrittenBook storedWritten ||
+                    storedWritten.Title != "Kitchen" || storedWritten.Author != "bedrock-gophers" ||
+                    storedWritten.Generation != Dragonfly.Item.CopyGeneration() ||
+                    storedWritten.Page(1) != ("page two", true))
+                {
+                    output.Error("Written book round-trip failed.");
+                    return;
+                }
                 output.Printf(
                     "item=Sword, tier={0}, count={1}, held={2}, armour_slots={3}, added_empty={4}, variants={5}",
                     typed.Tier.Name,
@@ -521,7 +561,7 @@ public sealed class KitchenSink : Plugin
                     held.Item() is Dragonfly.Item.Sword ? "true" : "false",
                     armour.Inventory().Size(),
                     addedEmpty,
-                    variants.Length);
+                    variants.Length + 2);
             }
             finally
             {

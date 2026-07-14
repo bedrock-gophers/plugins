@@ -69,7 +69,7 @@ var (mainHand, offHand) = player.HeldItems();
 player.SetHeldItems(sword, offHand);
 ```
 
-The current generated item slice contains 121 concrete Dragonfly item structs: stateless items,
+The current generated item slice contains 123 concrete Dragonfly item structs: stateless items,
 boolean variants, five tool types, and the finite stateful families for colours, potions, banner
 patterns, smithing templates, suspicious stews, pottery sherds, goat horns, and music discs.
 Their exact factory values come from Dragonfly's Go AST and live registries. NBT-backed item
@@ -78,6 +78,9 @@ metadata, NBT, enchantment IDs, snapshots, and host statuses stay private.
 Generated value methods include colour conversions, numeric IDs, horn names, and music-disc
 identifiers, display names, and authors. Effect-returning potion and stew methods wait for the
 typed effect API.
+`BookAndQuill`, `WrittenBook`, and `WrittenBookGeneration` mirror Dragonfly fields and page
+operations. Private bounded LittleEndian NBT transport preserves typed pages, title, author, and
+generation without exposing NBT to plugins.
 `Item.Stack` also exposes Dragonfly's generated max-count, durability, unbreakable, attack-damage,
 anvil-cost, comparison, equality, and stack-merging behavior. Capability tables are derived from
 the live item implementations; they are not duplicated in a public adapter model.

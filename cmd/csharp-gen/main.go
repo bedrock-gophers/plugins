@@ -156,6 +156,7 @@ type itemTypeSpec struct {
 	Name   string
 	Fields []itemFieldSpec
 	States []itemStateSpec
+	NBT    bool
 }
 
 type toolTierSpec struct {
@@ -1532,6 +1533,7 @@ func inspectItems(directory string) (itemSpec, error) {
 	types := map[string]*ast.TypeSpec{}
 	variables := map[string]bool{}
 	functions := map[string]*ast.FuncDecl{}
+	methods := map[string]map[string]*ast.FuncDecl{}
 	for _, file := range pkg.Files {
 		for _, declaration := range file.Decls {
 			switch value := declaration.(type) {
@@ -1549,7 +1551,16 @@ func inspectItems(directory string) (itemSpec, error) {
 			case *ast.FuncDecl:
 				if value.Recv == nil {
 					functions[value.Name.Name] = value
+					continue
 				}
+				receiver, ok := receiverName(value)
+				if !ok {
+					continue
+				}
+				if methods[receiver] == nil {
+					methods[receiver] = map[string]*ast.FuncDecl{}
+				}
+				methods[receiver][value.Name.Name] = value
 			}
 		}
 	}
@@ -1597,6 +1608,22 @@ func inspectItems(directory string) (itemSpec, error) {
 
 	for typeOf, values := range registered {
 		declaration := types[typeOf.Name()]
+		if typeOf.Name() == "BookAndQuill" || typeOf.Name() == "WrittenBook" {
+			if len(values) != 1 {
+				return itemSpec{}, fmt.Errorf("Dragonfly item.%s registry states changed: %d", typeOf.Name(), len(values))
+			}
+			if err := validateBookItemType(declaration, typeOf.Name(), methods[typeOf.Name()]); err != nil {
+				return itemSpec{}, err
+			}
+			definition := itemTypeSpec{Name: typeOf.Name(), NBT: true}
+			state, err := inspectItemState(typeOf, values[0], nil, liveTiers, valueTypes)
+			if err != nil {
+				return itemSpec{}, err
+			}
+			definition.States = []itemStateSpec{state}
+			result.Types = append(result.Types, definition)
+			continue
+		}
 		fields, supported, err := inspectItemFields(declaration, typeOf.Name(), valueTypes)
 		if err != nil {
 			return itemSpec{}, err
@@ -1654,6 +1681,60 @@ func inspectItems(directory string) (itemSpec, error) {
 	return result, nil
 }
 
+func validateBookItemType(spec *ast.TypeSpec, name string, methods map[string]*ast.FuncDecl) error {
+	structure, ok := biomeEmptyStruct(spec)
+	if !ok {
+		return fmt.Errorf("Dragonfly item.%s is not a struct", name)
+	}
+	var fields []string
+	for _, field := range structure.Fields.List {
+		for _, fieldName := range field.Names {
+			if fieldName.IsExported() {
+				fields = append(fields, fieldName.Name+" "+formatGoExpression(field.Type))
+			}
+		}
+	}
+	want := map[string][]string{
+		"BookAndQuill": {"Pages []string"},
+		"WrittenBook":  {"Title string", "Author string", "Generation WrittenBookGeneration", "Pages []string"},
+	}[name]
+	if !reflect.DeepEqual(fields, want) {
+		return fmt.Errorf("Dragonfly item.%s fields changed: %v", name, fields)
+	}
+	wantMethods := map[string]map[string]goSignature{
+		"BookAndQuill": {
+			"MaxCount": {Results: "int"}, "TotalPages": {Results: "int"},
+			"Page":       {Parameters: "int", Results: "string,bool"},
+			"DeletePage": {Parameters: "int", Results: "BookAndQuill"},
+			"InsertPage": {Parameters: "int,string", Results: "BookAndQuill"},
+			"SetPage":    {Parameters: "int,string", Results: "BookAndQuill"},
+			"SwapPages":  {Parameters: "int,int", Results: "BookAndQuill"},
+			"DecodeNBT":  {Parameters: "map[string]any", Results: "any"},
+			"EncodeNBT":  {Results: "map[string]any"},
+			"EncodeItem": {Results: "string,int16"},
+		},
+		"WrittenBook": {
+			"MaxCount": {Results: "int"}, "TotalPages": {Results: "int"},
+			"Page":       {Parameters: "int", Results: "string,bool"},
+			"DecodeNBT":  {Parameters: "map[string]any", Results: "any"},
+			"EncodeNBT":  {Results: "map[string]any"},
+			"EncodeItem": {Results: "string,int16"},
+		},
+	}[name]
+	for methodName, signature := range wantMethods {
+		method := methods[methodName]
+		if method == nil || !valueReceiver(method, name) ||
+			rawParameterTypes(method.Type.Params) != signature.Parameters || rawResultTypes(method.Type.Results) != signature.Results {
+			if method == nil {
+				return fmt.Errorf("Dragonfly item.%s.%s missing", name, methodName)
+			}
+			return fmt.Errorf("Dragonfly item.%s.%s signature changed: (%s) (%s)", name, methodName,
+				rawParameterTypes(method.Type.Params), rawResultTypes(method.Type.Results))
+		}
+	}
+	return nil
+}
+
 func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncDecl) ([]itemValueTypeSpec, error) {
 	potionFunctions, err := packageFunctions(filepath.Join(directory, "potion"), "potion")
 	if err != nil {
@@ -1669,6 +1750,7 @@ func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncD
 		{GoType: "BannerPatternType", CSharpType: "BannerPatternType", Container: "Item", Name: "BannerPatternType", Values: anySlice(dfitem.BannerPatterns())},
 		{GoType: "StewType", CSharpType: "StewType", Container: "Item", Name: "StewType", Values: anySlice(dfitem.StewTypes())},
 		{GoType: "SherdType", CSharpType: "SherdType", Container: "Item", Name: "SherdType", Values: anySlice(dfitem.SherdTypes())},
+		{GoType: "WrittenBookGeneration", CSharpType: "WrittenBookGeneration", Container: "Item", Name: "WrittenBookGeneration", Values: []any{dfitem.OriginalGeneration(), dfitem.CopyGeneration(), dfitem.CopyOfCopyGeneration()}},
 		{GoType: "potion.Potion", CSharpType: "global::Dragonfly.Potion.Value", Container: "Potion", Name: "Value", Values: anySlice(dfpotion.All())},
 		{GoType: "sound.Horn", CSharpType: "Sound.Horn", Container: "Sound", Name: "Horn", Values: anySlice(dfsound.GoatHorns())},
 		{GoType: "sound.DiscType", CSharpType: "Sound.DiscType", Container: "Sound", Name: "DiscType", Values: anySlice(dfsound.MusicDiscs())},
@@ -1687,8 +1769,15 @@ func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncD
 		"sound.DiscType":       {soundFunctions, "MusicDiscs"},
 	}
 	for index := range specs {
-		collection := collections[specs[index].GoType]
-		factories, err := collectionFactoryNames(collection.functions[collection.name])
+		collection, listed := collections[specs[index].GoType]
+		var factories []string
+		var err error
+		if listed {
+			factories, err = collectionFactoryNames(collection.functions[collection.name])
+		} else {
+			factories, err = indexedFactoryNames(itemFunctions, specs[index].GoType, len(specs[index].Values))
+			collection.name = specs[index].GoType
+		}
 		if err != nil {
 			return nil, fmt.Errorf("Dragonfly %s: %w", collection.name, err)
 		}
@@ -1703,6 +1792,40 @@ func inspectItemValueTypes(directory string, itemFunctions map[string]*ast.FuncD
 		specs[index].Methods = methods
 	}
 	return specs, nil
+}
+
+func indexedFactoryNames(functions map[string]*ast.FuncDecl, resultType string, count int) ([]string, error) {
+	names := make([]string, count)
+	for _, function := range functions {
+		if function.Recv != nil || function.Type.Params == nil || function.Type.Params.NumFields() != 0 ||
+			function.Type.Results == nil || len(function.Type.Results.List) != 1 ||
+			formatGoExpression(function.Type.Results.List[0].Type) != resultType || function.Body == nil || len(function.Body.List) != 1 {
+			continue
+		}
+		statement, ok := function.Body.List[0].(*ast.ReturnStmt)
+		if !ok || len(statement.Results) != 1 {
+			continue
+		}
+		literal, ok := statement.Results[0].(*ast.CompositeLit)
+		if !ok || formatGoExpression(literal.Type) != resultType || len(literal.Elts) != 1 {
+			continue
+		}
+		indexLiteral, ok := literal.Elts[0].(*ast.BasicLit)
+		if !ok || indexLiteral.Kind != token.INT {
+			continue
+		}
+		value, err := strconv.Atoi(indexLiteral.Value)
+		if err != nil || value < 0 || value >= count || names[value] != "" {
+			return nil, fmt.Errorf("Dragonfly %s factory index changed", resultType)
+		}
+		names[value] = function.Name.Name
+	}
+	for index, name := range names {
+		if name == "" {
+			return nil, fmt.Errorf("Dragonfly %s factory %d missing", resultType, index)
+		}
+	}
+	return names, nil
 }
 
 func inspectItemValueMethods(spec itemValueTypeSpec) ([]itemValueMethodSpec, error) {
@@ -1722,8 +1845,12 @@ func inspectItemValueMethods(spec itemValueTypeSpec) ([]itemValueMethodSpec, err
 			{Name: "Uint8", ReturnType: "byte"},
 			{Name: "String", ReturnType: "string"},
 		},
-		"StewType":      {{Name: "Uint8", ReturnType: "byte"}},
-		"SherdType":     {{Name: "String", ReturnType: "string"}, {Name: "Uint8", ReturnType: "byte"}},
+		"StewType":  {{Name: "Uint8", ReturnType: "byte"}},
+		"SherdType": {{Name: "String", ReturnType: "string"}, {Name: "Uint8", ReturnType: "byte"}},
+		"WrittenBookGeneration": {
+			{Name: "Uint8", ReturnType: "byte"},
+			{Name: "String", ReturnType: "string"},
+		},
 		"potion.Potion": {{Name: "Uint8", ReturnType: "byte"}},
 		"sound.Horn":    {{Name: "Uint8", ReturnType: "byte"}, {Name: "Name", ReturnType: "string"}},
 		"sound.DiscType": {
@@ -2935,6 +3062,8 @@ func formatGoExpression(expression ast.Expr) string {
 		return "[]" + formatGoExpression(value.Elt)
 	case *ast.Ellipsis:
 		return "..." + formatGoExpression(value.Elt)
+	case *ast.MapType:
+		return "map[" + formatGoExpression(value.Key) + "]" + formatGoExpression(value.Value)
 	default:
 		return fmt.Sprintf("%T", expression)
 	}
@@ -3540,7 +3669,7 @@ func generateBiomes(biomes []encodedBiome) []byte {
 func generateItems(spec itemSpec) []byte {
 	var output bytes.Buffer
 	output.WriteString("// Code generated from Dragonfly server/item Go AST and live registry. DO NOT EDIT.\n")
-	output.WriteString("#nullable enable\nusing System;\n\nnamespace Dragonfly\n{\n")
+	output.WriteString("#nullable enable\nusing System;\nusing System.Text;\n\nnamespace Dragonfly\n{\n")
 	output.WriteString("    public static partial class Item\n    {\n")
 	fmt.Fprintf(&output, "        public readonly record struct ToolTier(%s);\n\n", formatParameters(spec.ToolTierFields))
 	for _, tier := range spec.ToolTiers {
@@ -3554,6 +3683,10 @@ func generateItems(spec itemSpec) []byte {
 		generateItemValueType(&output, valueType, "        ")
 	}
 	for _, definition := range spec.Types {
+		if definition.NBT {
+			generateBookItemType(&output, definition.Name)
+			continue
+		}
 		if len(definition.Fields) == 0 {
 			fmt.Fprintf(&output, "        public readonly record struct %s : World.Item;\n", definition.Name)
 			continue
@@ -3639,6 +3772,103 @@ func generateItems(spec itemSpec) []byte {
 	generateItemCapabilities(&output, spec)
 	output.WriteString("}\n")
 	return output.Bytes()
+}
+
+func generateBookItemType(output *bytes.Buffer, name string) {
+	if name == "BookAndQuill" {
+		output.WriteString(`        public readonly struct BookAndQuill : World.Item
+        {
+            public BookAndQuill(params string[] pages)
+            {
+                ArgumentNullException.ThrowIfNull(pages);
+                _pages = pages;
+            }
+
+            private readonly string[]? _pages;
+            public string[] Pages => _pages ?? [];
+            public int TotalPages() => Pages.Length;
+
+            public (string Page, bool Ok) Page(int page) => page >= 0 && page < TotalPages()
+                ? (Pages[page], true)
+                : (string.Empty, false);
+
+            public BookAndQuill DeletePage(int page)
+            {
+                if (page is < 0 or >= 50) throw new ArgumentOutOfRangeException(nameof(page));
+                if (page >= TotalPages()) throw new InvalidOperationException("cannot delete nonexistent page");
+                var pages = new string[TotalPages() - 1];
+                if (page != 0) Array.Copy(Pages, 0, pages, 0, page);
+                if (page != pages.Length) Array.Copy(Pages, page + 1, pages, page, pages.Length - page);
+                return new BookAndQuill(pages);
+            }
+
+            public BookAndQuill InsertPage(int page, string text)
+            {
+                if (page is < 0 or >= 50) throw new ArgumentOutOfRangeException(nameof(page));
+                ArgumentNullException.ThrowIfNull(text);
+                if (Encoding.UTF8.GetByteCount(text) > 256) throw new ArgumentOutOfRangeException(nameof(text));
+                if (page > TotalPages()) throw new ArgumentOutOfRangeException(nameof(page));
+                var pages = new string[TotalPages() + 1];
+                if (page != 0) Array.Copy(Pages, 0, pages, 0, page);
+                pages[page] = text;
+                if (page != TotalPages()) Array.Copy(Pages, page, pages, page + 1, TotalPages() - page);
+                return new BookAndQuill(pages);
+            }
+
+            public BookAndQuill SetPage(int page, string text)
+            {
+                if (page is < 0 or >= 50) throw new ArgumentOutOfRangeException(nameof(page));
+                ArgumentNullException.ThrowIfNull(text);
+                if (Encoding.UTF8.GetByteCount(text) > 256) throw new ArgumentOutOfRangeException(nameof(text));
+                var pages = new string[Math.Max(TotalPages(), page + 1)];
+                Array.Fill(pages, string.Empty);
+                if (TotalPages() != 0) Array.Copy(Pages, pages, TotalPages());
+                pages[page] = text;
+                return new BookAndQuill(pages);
+            }
+
+            public BookAndQuill SwapPages(int pageOne, int pageTwo)
+            {
+                if (pageOne < 0) throw new ArgumentOutOfRangeException(nameof(pageOne));
+                if (pageTwo < 0) throw new ArgumentOutOfRangeException(nameof(pageTwo));
+                if (Math.Max(pageOne, pageTwo) >= TotalPages()) throw new ArgumentOutOfRangeException();
+                var pages = (string[])Pages.Clone();
+                (pages[pageOne], pages[pageTwo]) = (pages[pageTwo], pages[pageOne]);
+                return new BookAndQuill(pages);
+            }
+        }
+
+`)
+		return
+	}
+	output.WriteString(`        public readonly struct WrittenBook : World.Item
+        {
+            public WrittenBook(string title, string author, WrittenBookGeneration generation, params string[] pages)
+            {
+                ArgumentNullException.ThrowIfNull(title);
+                ArgumentNullException.ThrowIfNull(author);
+                ArgumentNullException.ThrowIfNull(pages);
+                _title = title;
+                _author = author;
+                Generation = generation;
+                _pages = pages;
+            }
+
+            private readonly string? _title;
+            private readonly string? _author;
+            private readonly string[]? _pages;
+            public string Title => _title ?? string.Empty;
+            public string Author => _author ?? string.Empty;
+            public WrittenBookGeneration Generation { get; }
+            public string[] Pages => _pages ?? [];
+            public int TotalPages() => Pages.Length;
+
+            public (string Page, bool Ok) Page(int page) => page >= 0 && page < TotalPages()
+                ? (Pages[page], true)
+                : (string.Empty, false);
+        }
+
+`)
 }
 
 func generateItemCapabilities(output *bytes.Buffer, spec itemSpec) {

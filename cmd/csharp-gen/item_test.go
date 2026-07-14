@@ -18,7 +18,7 @@ func TestInspectItemsUsesASTAndRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.AirIdentifier != "minecraft:air" || len(spec.ToolTiers) != 7 || len(spec.ValueTypes) != 8 || len(spec.Types) != 121 {
+	if spec.AirIdentifier != "minecraft:air" || len(spec.ToolTiers) != 7 || len(spec.ValueTypes) != 9 || len(spec.Types) != 123 {
 		t.Fatalf("item spec has air=%q tiers=%d types=%d", spec.AirIdentifier, len(spec.ToolTiers), len(spec.Types))
 	}
 	generated := string(generateItems(spec))
@@ -39,6 +39,14 @@ func TestInspectItemsUsesASTAndRegistry(t *testing.T) {
 		"public static DiscType DiscLavaChicken() => new(20)",
 		`20 => "Lava Chicken"`,
 		`20 => "Hyper Potions"`,
+		"public static WrittenBookGeneration CopyOfCopyGeneration() => new(2)",
+		`2 => "copy of copy"`,
+		"public readonly struct BookAndQuill : World.Item",
+		"public BookAndQuill SetPage(int page, string text)",
+		"public readonly struct WrittenBook : World.Item",
+		"public WrittenBook(string title, string author, WrittenBookGeneration generation, params string[] pages)",
+		`identifier = "minecraft:writable_book"; metadata = 0`,
+		`identifier = "minecraft:written_book"; metadata = 0`,
 		"public readonly record struct Arrow(global::Dragonfly.Potion.Value Tip) : World.Item",
 		"public readonly record struct Dye(Colour Colour) : World.Item",
 		"public readonly record struct GoatHorn(Sound.Horn Type) : World.Item",

@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/sandertv/gophertunnel/minecraft/nbt"
 )
 
 type csharpItemHost struct {
@@ -127,14 +129,14 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 			Overload: uint64(overload), Arguments: []string{"item"},
 			OnlinePlayers: []CommandPlayer{{Player: player, Name: "ItemTester"}},
 		})
-		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, added_empty=0, variants=11" {
+		if err != nil || output.Failed || output.Message != "item=Sword, tier=diamond, count=1, held=true, armour_slots=4, added_empty=0, variants=13" {
 			t.Fatalf("iteration %d: output=%#v error=%v", iteration, output, err)
 		}
 	}
 	if !reflect.DeepEqual(host.inventory, previous) || !reflect.DeepEqual(host.held, [2]ItemStack{mainHand, offHand}) {
 		t.Fatalf("command did not restore items: inventory=%#v held=%#v", host.inventory, host.held)
 	}
-	if len(host.sets) != 910 || len(host.heldSets) != 140 {
+	if len(host.sets) != 1050 || len(host.heldSets) != 140 {
 		t.Fatalf("item writes=%d held writes=%d", len(host.sets), len(host.heldSets))
 	}
 	if len(host.armourSets) != 70 || len(host.adds) != 70 || host.adds[0].Identifier != "" || host.adds[0].Count != 0 {
@@ -164,6 +166,27 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 			t.Fatalf("typed variant %d=%#v, want %#v", index, got, want)
 		}
 	}
+	writable := host.sets[12]
+	if writable.Identifier != "minecraft:writable_book" || writable.Count != 1 {
+		t.Fatalf("typed writable book transport=%#v", writable)
+	}
+	writableNBT, ok := decodeTestItemNBT(writable.NBT)
+	if !ok {
+		t.Fatalf("typed writable book NBT invalid: %x", writable.NBT)
+	}
+	writablePages, ok := writableNBT["pages"].([]any)
+	firstPage, firstOK := itemPageText(writablePages, 0)
+	secondPage, secondOK := itemPageText(writablePages, 1)
+	if !ok || len(writablePages) != 2 || !firstOK || !secondOK || firstPage != "beta" || secondPage != "first" {
+		t.Fatalf("typed writable book pages=%#v", writableNBT["pages"])
+	}
+	written := host.sets[13]
+	writtenNBT, ok := decodeTestItemNBT(written.NBT)
+	if !ok || written.Identifier != "minecraft:written_book" || written.Count != 1 ||
+		writtenNBT["title"] != "Kitchen" || writtenNBT["author"] != "bedrock-gophers" ||
+		writtenNBT["generation"] != uint8(1) {
+		t.Fatalf("typed written book transport=%#v nbt=%#v", written, writtenNBT)
+	}
 	host.failWrites = true
 	failed, err := runtime.HandleCommand(kitchen.Index, CommandInput{
 		Invocation: 55, Source: "ItemTester", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
@@ -173,4 +196,22 @@ func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 	if err == nil && !failed.Failed {
 		t.Fatalf("failed inventory mutation was silently accepted: %#v", failed)
 	}
+}
+
+func itemPageText(pages []any, index int) (string, bool) {
+	if index < 0 || index >= len(pages) {
+		return "", false
+	}
+	page, ok := pages[index].(map[string]any)
+	if !ok {
+		return "", false
+	}
+	text, ok := page["text"].(string)
+	return text, ok
+}
+
+func decodeTestItemNBT(data []byte) (map[string]any, bool) {
+	var value map[string]any
+	err := nbt.UnmarshalEncoding(data, &value, nbt.LittleEndian)
+	return value, err == nil
 }

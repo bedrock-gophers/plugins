@@ -135,14 +135,14 @@ public static partial class Item
                 !SequenceEqual(_lore, other._lore) ||
                 !EnchantmentsEqual(_enchantments, other._enchantments) ||
                 !SequenceEqual(_valuesNbt, other._valuesNbt) ||
-                !SequenceEqual(_itemNbt, other._itemNbt)) return false;
+                !SequenceEqual(ItemNbt, other.ItemNbt)) return false;
             return true;
         }
 
         internal uint DamageValue => _damage;
         internal bool IsUnbreakable => _unbreakable;
         internal int AnvilCostValue => _anvilCost;
-        internal byte[] ItemNbt => _itemNbt ?? [];
+        internal byte[] ItemNbt => ItemNbtCodec.TryEncode(_item, out var encoded) ? encoded : _itemNbt ?? [];
         internal byte[] ValuesNbt => _valuesNbt ?? [];
         internal ItemEnchantment[] Enchantments => _enchantments ?? [];
 

@@ -211,6 +211,7 @@ internal static unsafe class PluginBridge
                     lines[index] = Encoding.UTF8.GetString(loreBytes, checked((int)span.Offset), checked((int)span.Length));
                 }
                 var item = ItemCodec.Decode(Encoding.UTF8.GetString(identifier), info.Metadata);
+                item = ItemNbtCodec.Decode(item, itemNbt, out var itemNbtConsumed);
                 return new Item.Stack(
                     item,
                     checked((int)info.Count),
@@ -219,7 +220,7 @@ internal static unsafe class PluginBridge
                     info.AnvilCost,
                     Encoding.UTF8.GetString(customName),
                     lines,
-                    itemNbt,
+                    itemNbtConsumed ? null : itemNbt,
                     valuesNbt,
                     enchantments);
             }
@@ -255,10 +256,13 @@ internal static unsafe class PluginBridge
                     if (!stack.TryEncode(out identifier, out metadata))
                         throw new ArgumentException("item type is not registered", nameof(stack));
                     var lore = stack.Lore();
-                    ValidateItemView(stack, identifier, lore);
+                    var customName = stack.CustomName();
+                    var itemNbt = stack.ItemNbt;
+                    var valuesNbt = stack.ValuesNbt;
+                    var enchantments = stack.Enchantments;
+                    ValidateItemView(stack, identifier, customName, lore, itemNbt, valuesNbt, enchantments);
                     var loreViews = AllocateViews(lore.Length);
                     for (var index = 0; index < lore.Length; index++) loreViews[index] = AllocateUtf8(lore[index]);
-                    var enchantments = stack.Enchantments;
                     var enchantmentData = AllocateArray<ItemEnchantment>(enchantments.Length);
                     if (enchantments.Length != 0) enchantments.CopyTo(new Span<ItemEnchantment>(enchantmentData, enchantments.Length));
                     View = new ItemStackViewV3
@@ -269,11 +273,11 @@ internal static unsafe class PluginBridge
                         Damage = stack.DamageValue,
                         Unbreakable = stack.IsUnbreakable ? (byte)1 : (byte)0,
                         AnvilCost = stack.AnvilCostValue,
-                        CustomName = AllocateUtf8(stack.CustomName()),
+                        CustomName = AllocateUtf8(customName),
                         Lore = loreViews,
                         LoreCount = (ulong)lore.Length,
-                        Nbt = Allocate(stack.ItemNbt),
-                        ValuesNbt = Allocate(stack.ValuesNbt),
+                        Nbt = Allocate(itemNbt),
+                        ValuesNbt = Allocate(valuesNbt),
                         Enchantments = enchantmentData,
                         EnchantmentCount = (ulong)enchantments.Length,
                     };
@@ -285,15 +289,22 @@ internal static unsafe class PluginBridge
                 }
             }
 
-            private static void ValidateItemView(Item.Stack stack, string identifier, string[] lore)
+            private static void ValidateItemView(
+                Item.Stack stack,
+                string identifier,
+                string customName,
+                string[] lore,
+                byte[] itemNbt,
+                byte[] valuesNbt,
+                ItemEnchantment[] enchantments)
             {
                 const int maxData = 16 << 20;
                 if (Encoding.UTF8.GetByteCount(identifier) > 256 ||
-                    Encoding.UTF8.GetByteCount(stack.CustomName()) > 4096 ||
-                    lore.Length > 256 || stack.Enchantments.Length > 256)
+                    Encoding.UTF8.GetByteCount(customName) > 4096 ||
+                    lore.Length > 256 || enchantments.Length > 256)
                     throw new ArgumentException("item stack data exceeds server limits", nameof(stack));
-                long total = Encoding.UTF8.GetByteCount(identifier) + Encoding.UTF8.GetByteCount(stack.CustomName()) +
-                    stack.ItemNbt.Length + stack.ValuesNbt.Length;
+                long total = Encoding.UTF8.GetByteCount(identifier) + Encoding.UTF8.GetByteCount(customName) +
+                    itemNbt.Length + valuesNbt.Length;
                 foreach (var line in lore)
                 {
                     var length = Encoding.UTF8.GetByteCount(line);

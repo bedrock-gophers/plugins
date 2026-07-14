@@ -1,6 +1,7 @@
 // Code generated from Dragonfly server/item Go AST and live registry. DO NOT EDIT.
 #nullable enable
 using System;
+using System.Text;
 
 namespace Dragonfly
 {
@@ -370,6 +371,33 @@ namespace Dragonfly
         public static SherdType SherdTypeGuster() => new(21);
         public static SherdType SherdTypeScrape() => new(22);
 
+        public readonly record struct WrittenBookGeneration
+        {
+            private readonly int _value;
+            internal WrittenBookGeneration(int value) => _value = value;
+            internal int Id => _value;
+
+            public byte Uint8() => _value switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                _ => throw new InvalidOperationException("Invalid WrittenBookGeneration value."),
+            };
+
+            public string String() => _value switch
+            {
+                0 => "original",
+                1 => "copy of original",
+                2 => "copy of copy",
+                _ => throw new InvalidOperationException("Invalid WrittenBookGeneration value."),
+            };
+        }
+
+        public static WrittenBookGeneration OriginalGeneration() => new(0);
+        public static WrittenBookGeneration CopyGeneration() => new(1);
+        public static WrittenBookGeneration CopyOfCopyGeneration() => new(2);
+
         public readonly record struct AmethystShard : World.Item;
         public readonly record struct Apple : World.Item;
         public readonly record struct Arrow(global::Dragonfly.Potion.Value Tip) : World.Item;
@@ -384,6 +412,68 @@ namespace Dragonfly
         public readonly record struct Bone : World.Item;
         public readonly record struct BoneMeal : World.Item;
         public readonly record struct Book : World.Item;
+        public readonly struct BookAndQuill : World.Item
+        {
+            public BookAndQuill(params string[] pages)
+            {
+                ArgumentNullException.ThrowIfNull(pages);
+                _pages = pages;
+            }
+
+            private readonly string[]? _pages;
+            public string[] Pages => _pages ?? [];
+            public int TotalPages() => Pages.Length;
+
+            public (string Page, bool Ok) Page(int page) => page >= 0 && page < TotalPages()
+                ? (Pages[page], true)
+                : (string.Empty, false);
+
+            public BookAndQuill DeletePage(int page)
+            {
+                if (page is < 0 or >= 50) throw new ArgumentOutOfRangeException(nameof(page));
+                if (page >= TotalPages()) throw new InvalidOperationException("cannot delete nonexistent page");
+                var pages = new string[TotalPages() - 1];
+                if (page != 0) Array.Copy(Pages, 0, pages, 0, page);
+                if (page != pages.Length) Array.Copy(Pages, page + 1, pages, page, pages.Length - page);
+                return new BookAndQuill(pages);
+            }
+
+            public BookAndQuill InsertPage(int page, string text)
+            {
+                if (page is < 0 or >= 50) throw new ArgumentOutOfRangeException(nameof(page));
+                ArgumentNullException.ThrowIfNull(text);
+                if (Encoding.UTF8.GetByteCount(text) > 256) throw new ArgumentOutOfRangeException(nameof(text));
+                if (page > TotalPages()) throw new ArgumentOutOfRangeException(nameof(page));
+                var pages = new string[TotalPages() + 1];
+                if (page != 0) Array.Copy(Pages, 0, pages, 0, page);
+                pages[page] = text;
+                if (page != TotalPages()) Array.Copy(Pages, page, pages, page + 1, TotalPages() - page);
+                return new BookAndQuill(pages);
+            }
+
+            public BookAndQuill SetPage(int page, string text)
+            {
+                if (page is < 0 or >= 50) throw new ArgumentOutOfRangeException(nameof(page));
+                ArgumentNullException.ThrowIfNull(text);
+                if (Encoding.UTF8.GetByteCount(text) > 256) throw new ArgumentOutOfRangeException(nameof(text));
+                var pages = new string[Math.Max(TotalPages(), page + 1)];
+                Array.Fill(pages, string.Empty);
+                if (TotalPages() != 0) Array.Copy(Pages, pages, TotalPages());
+                pages[page] = text;
+                return new BookAndQuill(pages);
+            }
+
+            public BookAndQuill SwapPages(int pageOne, int pageTwo)
+            {
+                if (pageOne < 0) throw new ArgumentOutOfRangeException(nameof(pageOne));
+                if (pageTwo < 0) throw new ArgumentOutOfRangeException(nameof(pageTwo));
+                if (Math.Max(pageOne, pageTwo) >= TotalPages()) throw new ArgumentOutOfRangeException();
+                var pages = (string[])Pages.Clone();
+                (pages[pageOne], pages[pageTwo]) = (pages[pageTwo], pages[pageOne]);
+                return new BookAndQuill(pages);
+            }
+        }
+
         public readonly record struct BottleOfEnchanting : World.Item;
         public readonly record struct Bow : World.Item;
         public readonly record struct Bowl : World.Item;
@@ -491,6 +581,33 @@ namespace Dragonfly
         public readonly record struct TurtleShell : World.Item;
         public readonly record struct WarpedFungusOnAStick : World.Item;
         public readonly record struct Wheat : World.Item;
+        public readonly struct WrittenBook : World.Item
+        {
+            public WrittenBook(string title, string author, WrittenBookGeneration generation, params string[] pages)
+            {
+                ArgumentNullException.ThrowIfNull(title);
+                ArgumentNullException.ThrowIfNull(author);
+                ArgumentNullException.ThrowIfNull(pages);
+                _title = title;
+                _author = author;
+                Generation = generation;
+                _pages = pages;
+            }
+
+            private readonly string? _title;
+            private readonly string? _author;
+            private readonly string[]? _pages;
+            public string Title => _title ?? string.Empty;
+            public string Author => _author ?? string.Empty;
+            public WrittenBookGeneration Generation { get; }
+            public string[] Pages => _pages ?? [];
+            public int TotalPages() => Pages.Length;
+
+            public (string Page, bool Ok) Page(int page) => page >= 0 && page < TotalPages()
+                ? (Pages[page], true)
+                : (string.Empty, false);
+        }
+
     }
 
     public static partial class Potion
@@ -925,6 +1042,8 @@ namespace Dragonfly
                     identifier = "minecraft:bone_meal"; metadata = 0; return true;
                 case Item.Book _:
                     identifier = "minecraft:book"; metadata = 0; return true;
+                case Item.BookAndQuill _:
+                    identifier = "minecraft:writable_book"; metadata = 0; return true;
                 case Item.BottleOfEnchanting _:
                     identifier = "minecraft:experience_bottle"; metadata = 0; return true;
                 case Item.Bow _:
@@ -1641,6 +1760,8 @@ namespace Dragonfly
                     identifier = "minecraft:warped_fungus_on_a_stick"; metadata = 0; return true;
                 case Item.Wheat _:
                     identifier = "minecraft:wheat"; metadata = 0; return true;
+                case Item.WrittenBook _:
+                    identifier = "minecraft:written_book"; metadata = 0; return true;
                 case EncodedItem encoded:
                     identifier = encoded.Identifier; metadata = encoded.Metadata; return true;
                 default:
@@ -1722,6 +1843,7 @@ namespace Dragonfly
             if (identifier == "minecraft:bone" && metadata == 0) return new Item.Bone();
             if (identifier == "minecraft:bone_meal" && metadata == 0) return new Item.BoneMeal();
             if (identifier == "minecraft:book" && metadata == 0) return new Item.Book();
+            if (identifier == "minecraft:writable_book" && metadata == 0) return new Item.BookAndQuill();
             if (identifier == "minecraft:experience_bottle" && metadata == 0) return new Item.BottleOfEnchanting();
             if (identifier == "minecraft:bow" && metadata == 0) return new Item.Bow();
             if (identifier == "minecraft:bowl" && metadata == 0) return new Item.Bowl();
@@ -2080,6 +2202,7 @@ namespace Dragonfly
             if (identifier == "minecraft:turtle_helmet" && metadata == 0) return new Item.TurtleShell();
             if (identifier == "minecraft:warped_fungus_on_a_stick" && metadata == 0) return new Item.WarpedFungusOnAStick();
             if (identifier == "minecraft:wheat" && metadata == 0) return new Item.Wheat();
+            if (identifier == "minecraft:written_book" && metadata == 0) return new Item.WrittenBook();
             return new EncodedItem(identifier, metadata);
         }
 
@@ -2113,6 +2236,7 @@ namespace Dragonfly
             Item.BannerPattern value when value.Type == Item.FlowBannerPattern() => 1,
             Item.BannerPattern value when value.Type == Item.GusterBannerPattern() => 1,
             Item.BeetrootSoup _ => 1,
+            Item.BookAndQuill _ => 1,
             Item.Bow _ => 1,
             Item.CarrotOnAStick _ => 1,
             Item.Egg _ => 16,
@@ -2328,6 +2452,7 @@ namespace Dragonfly
             Item.Totem _ => 1,
             Item.TurtleShell _ => 1,
             Item.WarpedFungusOnAStick _ => 1,
+            Item.WrittenBook _ => 16,
             _ => 64,
         };
 
