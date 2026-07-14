@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define DF_ABI_VERSION 4u
+#define DF_ABI_VERSION 5u
 #define DF_HOST_ABI_VERSION 20u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
@@ -464,15 +464,16 @@ typedef struct {
 #define DF_COMMAND_PARAMETER_DYNAMIC_ENUM 7u
 #define DF_COMMAND_PARAMETER_PLAYER 8u
 #define DF_COMMAND_PARAMETER_RAW_TEXT 9u
-typedef struct { uint32_t kind; uint8_t optional; DfStringView name; const DfStringView *values; uint64_t value_count; } DfCommandParameter;
+#define DF_COMMAND_PARAMETER_VECTOR 10u
+typedef struct { uint32_t kind; uint8_t optional; DfStringView name; DfStringView suffix; const DfStringView *values; uint64_t value_count; } DfCommandParameter;
 typedef struct { const DfCommandParameter *parameters; uint64_t parameter_count; } DfCommandOverload;
-typedef struct { DfStringView name; DfStringView description; const DfCommandOverload *overloads; uint64_t overload_count; } DfCommandDescriptor;
-typedef struct { DfStringView source; const DfStringView *online_players; uint64_t online_player_count; } DfCommandEnumContext;
-typedef struct { DfPlayerId player; DfStringView name; uint64_t latency_milliseconds; } DfCommandPlayer;
+typedef struct { DfStringView name; DfStringView description; const DfStringView *aliases; uint64_t alias_count; const DfCommandOverload *overloads; uint64_t overload_count; } DfCommandDescriptor;
 #define DF_COMMAND_SOURCE_UNKNOWN 0u
 #define DF_COMMAND_SOURCE_PLAYER 1u
 #define DF_COMMAND_SOURCE_CONSOLE 2u
-typedef struct { DfInvocationId invocation; DfStringView source; DfStringView arguments; uint32_t source_kind; DfPlayerId source_player; const DfCommandPlayer *online_players; uint64_t online_player_count; } DfCommandInput;
+typedef struct { DfPlayerId player; DfStringView name; uint64_t latency_milliseconds; DfVec3 position; } DfCommandPlayer;
+typedef struct { DfStringView source; uint32_t source_kind; DfPlayerId source_player; DfVec3 source_position; const DfCommandPlayer *online_players; uint64_t online_player_count; } DfCommandEnumContext;
+typedef struct { DfInvocationId invocation; uint64_t overload; DfStringView source; const DfStringView *arguments; uint64_t argument_count; uint32_t source_kind; DfPlayerId source_player; DfVec3 source_position; const DfCommandPlayer *online_players; uint64_t online_player_count; } DfCommandInput;
 typedef struct { uint8_t failed; DfStringBuffer output; } DfCommandState;
 
 typedef struct {
@@ -985,9 +986,9 @@ typedef struct {
     DfPluginSetHostFn set_host;
     DfPluginDestroyFn destroy;
     DfHandleEventFn handle_event;
-} DfPluginApiV4;
+} DfPluginApiV5;
 
-typedef const DfPluginApiV4 *(*DfPluginEntryV4Fn)(void);
+typedef const DfPluginApiV5 *(*DfPluginEntryV5Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
 typedef struct { DfStringView plugin_directory; const DfHostApiV20 *host; } DfRuntimeConfig;

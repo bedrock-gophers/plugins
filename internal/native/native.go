@@ -328,6 +328,7 @@ type Command struct {
 	Index       uint64
 	Name        string
 	Description string
+	Aliases     []string
 	Overloads   []CommandOverload
 }
 
@@ -338,6 +339,7 @@ type CommandOverload struct {
 type CommandParameter struct {
 	Kind     CommandParameterKind
 	Name     string
+	Suffix   string
 	Values   []string
 	Optional bool
 }
@@ -354,15 +356,26 @@ const (
 	CommandParameterDynamicEnum CommandParameterKind = 7
 	CommandParameterPlayer      CommandParameterKind = 8
 	CommandParameterRawText     CommandParameterKind = 9
+	CommandParameterVector      CommandParameterKind = 10
 )
 
 type CommandInput struct {
-	Invocation    InvocationID
-	Source        string
-	Arguments     string
-	SourceKind    CommandSourceKind
-	SourcePlayer  *PlayerID
-	OnlinePlayers []CommandPlayer
+	Invocation     InvocationID
+	Overload       uint64
+	Source         string
+	Arguments      []string
+	SourceKind     CommandSourceKind
+	SourcePlayer   *PlayerID
+	SourcePosition Vec3
+	OnlinePlayers  []CommandPlayer
+}
+
+type CommandEnumContext struct {
+	Source         string
+	SourceKind     CommandSourceKind
+	SourcePlayer   *PlayerID
+	SourcePosition Vec3
+	OnlinePlayers  []CommandPlayer
 }
 
 type CommandSourceKind uint32
@@ -377,6 +390,7 @@ type CommandPlayer struct {
 	Player              PlayerID
 	Name                string
 	LatencyMilliseconds uint64
+	Position            Vec3
 }
 
 type CommandOutput struct {
@@ -384,7 +398,7 @@ type CommandOutput struct {
 	Message string
 }
 
-// Runtime owns a loaded Rust runtime and its plugin libraries.
+// Runtime owns a loaded C# NativeAOT runtime and its plugin libraries.
 // Close must not run concurrently with any other method.
 type Runtime struct {
 	ptr         *C.BgRuntimeLibrary
@@ -743,6 +757,12 @@ func (r *Runtime) Commands() ([]Command, error) {
 			Name:        stringView(descriptor.name),
 			Description: stringView(descriptor.description),
 		}
+		if descriptor.alias_count > 0 && descriptor.aliases == nil {
+			return nil, fmt.Errorf("read native command %d: null aliases", index)
+		}
+		for _, alias := range unsafe.Slice(descriptor.aliases, int(descriptor.alias_count)) {
+			command.Aliases = append(command.Aliases, stringView(alias))
+		}
 		if descriptor.overload_count > 0 && descriptor.overloads == nil {
 			return nil, fmt.Errorf("read native command %d: null overloads", index)
 		}
@@ -757,6 +777,7 @@ func (r *Runtime) Commands() ([]Command, error) {
 				parameter := CommandParameter{
 					Kind:     CommandParameterKind(nativeParameter.kind),
 					Name:     stringView(nativeParameter.name),
+					Suffix:   stringView(nativeParameter.suffix),
 					Optional: nativeParameter.optional != 0,
 				}
 				if nativeParameter.value_count > 0 && nativeParameter.values == nil {
@@ -782,8 +803,27 @@ func (r *Runtime) HandleCommand(index uint64, input CommandInput) (CommandOutput
 	}
 	source := C.CBytes([]byte(input.Source))
 	defer C.free(source)
-	arguments := C.CBytes([]byte(input.Arguments))
-	defer C.free(arguments)
+	var argumentViews *C.DfStringView
+	var argumentValues []unsafe.Pointer
+	if len(input.Arguments) != 0 {
+		memory := C.malloc(C.size_t(len(input.Arguments)) * C.size_t(unsafe.Sizeof(C.DfStringView{})))
+		if memory == nil {
+			return output, errors.New("allocate command argument views")
+		}
+		defer C.free(memory)
+		argumentViews = (*C.DfStringView)(memory)
+		views := unsafe.Slice(argumentViews, len(input.Arguments))
+		for index, argument := range input.Arguments {
+			value := C.CBytes([]byte(argument))
+			argumentValues = append(argumentValues, value)
+			views[index] = C.DfStringView{data: (*C.uint8_t)(value), len: C.uint64_t(len(argument))}
+		}
+		defer func() {
+			for _, value := range argumentValues {
+				C.free(value)
+			}
+		}()
+	}
 	message := C.malloc(MaxCommandOutputBytes)
 	if message == nil {
 		return output, errors.New("allocate command output buffer")
@@ -791,10 +831,13 @@ func (r *Runtime) HandleCommand(index uint64, input CommandInput) (CommandOutput
 	defer C.free(message)
 
 	nativeInput := C.DfCommandInput{
-		invocation:  C.DfInvocationId(input.Invocation),
-		source:      C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))},
-		arguments:   C.DfStringView{data: (*C.uint8_t)(arguments), len: C.uint64_t(len(input.Arguments))},
-		source_kind: C.uint32_t(input.SourceKind),
+		invocation:      C.DfInvocationId(input.Invocation),
+		overload:        C.uint64_t(input.Overload),
+		source:          C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))},
+		arguments:       argumentViews,
+		argument_count:  C.uint64_t(len(input.Arguments)),
+		source_kind:     C.uint32_t(input.SourceKind),
+		source_position: C.DfVec3{x: C.double(input.SourcePosition.X), y: C.double(input.SourcePosition.Y), z: C.double(input.SourcePosition.Z)},
 	}
 	if input.SourcePlayer != nil {
 		fillPlayerID(&nativeInput.source_player, *input.SourcePlayer)
@@ -816,6 +859,7 @@ func (r *Runtime) HandleCommand(index uint64, input CommandInput) (CommandOutput
 			fillPlayerID(&players[index].player, snapshot.Player)
 			players[index].name = C.DfStringView{data: (*C.uint8_t)(name), len: C.uint64_t(len(snapshot.Name))}
 			players[index].latency_milliseconds = C.uint64_t(snapshot.LatencyMilliseconds)
+			players[index].position = C.DfVec3{x: C.double(snapshot.Position.X), y: C.double(snapshot.Position.Y), z: C.double(snapshot.Position.Z)}
 		}
 		defer func() {
 			for _, name := range playerNames {
@@ -834,26 +878,29 @@ func (r *Runtime) HandleCommand(index uint64, input CommandInput) (CommandOutput
 	return output, nil
 }
 
-func (r *Runtime) CommandEnumOptions(index, overload, parameter uint64, sourceName string, onlinePlayers []string) ([]string, error) {
+func (r *Runtime) CommandEnumOptions(index, overload, parameter uint64, input CommandEnumContext) ([]string, error) {
 	if r == nil || r.ptr == nil {
 		return nil, errors.New("native runtime is closed")
 	}
-	source := C.CBytes([]byte(sourceName))
+	source := C.CBytes([]byte(input.Source))
 	defer C.free(source)
-	var viewsPointer *C.DfStringView
+	var playersPointer *C.DfCommandPlayer
 	var playerStrings []unsafe.Pointer
-	if len(onlinePlayers) != 0 {
-		viewsMemory := C.malloc(C.size_t(len(onlinePlayers)) * C.size_t(unsafe.Sizeof(C.DfStringView{})))
-		if viewsMemory == nil {
-			return nil, errors.New("allocate online player views")
+	if len(input.OnlinePlayers) != 0 {
+		playersMemory := C.malloc(C.size_t(len(input.OnlinePlayers)) * C.size_t(unsafe.Sizeof(C.DfCommandPlayer{})))
+		if playersMemory == nil {
+			return nil, errors.New("allocate online player snapshots")
 		}
-		defer C.free(viewsMemory)
-		viewsPointer = (*C.DfStringView)(viewsMemory)
-		views := unsafe.Slice(viewsPointer, len(onlinePlayers))
-		for index, name := range onlinePlayers {
-			value := C.CBytes([]byte(name))
+		defer C.free(playersMemory)
+		playersPointer = (*C.DfCommandPlayer)(playersMemory)
+		players := unsafe.Slice(playersPointer, len(input.OnlinePlayers))
+		for index, snapshot := range input.OnlinePlayers {
+			value := C.CBytes([]byte(snapshot.Name))
 			playerStrings = append(playerStrings, value)
-			views[index] = C.DfStringView{data: (*C.uint8_t)(value), len: C.uint64_t(len(name))}
+			fillPlayerID(&players[index].player, snapshot.Player)
+			players[index].name = C.DfStringView{data: (*C.uint8_t)(value), len: C.uint64_t(len(snapshot.Name))}
+			players[index].latency_milliseconds = C.uint64_t(snapshot.LatencyMilliseconds)
+			players[index].position = C.DfVec3{x: C.double(snapshot.Position.X), y: C.double(snapshot.Position.Y), z: C.double(snapshot.Position.Z)}
 		}
 		defer func() {
 			for _, value := range playerStrings {
@@ -868,9 +915,15 @@ func (r *Runtime) CommandEnumOptions(index, overload, parameter uint64, sourceNa
 	defer C.free(buffer)
 	output := C.DfStringBuffer{data: (*C.uint8_t)(buffer), capacity: MaxCommandEnumBytes}
 	context := C.DfCommandEnumContext{
-		source:              C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(sourceName))},
-		online_players:      viewsPointer,
-		online_player_count: C.uint64_t(len(onlinePlayers)),
+		source:              C.DfStringView{data: (*C.uint8_t)(source), len: C.uint64_t(len(input.Source))},
+		source_kind:         C.uint32_t(input.SourceKind),
+		source_position:     C.DfVec3{x: C.double(input.SourcePosition.X), y: C.double(input.SourcePosition.Y), z: C.double(input.SourcePosition.Z)},
+		online_players:      playersPointer,
+		online_player_count: C.uint64_t(len(input.OnlinePlayers)),
+	}
+	if input.SourcePlayer != nil {
+		fillPlayerID(&context.source_player, *input.SourcePlayer)
+		context.source_kind = C.DF_COMMAND_SOURCE_PLAYER
 	}
 	status := C.bg_runtime_command_enum_options(
 		r.ptr,

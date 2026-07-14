@@ -42,3 +42,73 @@ type Handler interface {
 		}
 	}
 }
+
+func TestCommandInterfacesUseGoAST(t *testing.T) {
+	directory := t.TempDir()
+	source := `package cmd
+type Runnable interface {
+	Run(src Source, o *Output, tx *world.Tx)
+}
+type Allower interface {
+	Allow(src Source) bool
+}
+type Target interface {
+	Position() mgl64.Vec3
+}
+type NamedTarget interface {
+	Target
+	Name() string
+}
+type Source interface {
+	Target
+	SendCommandOutput(o *Output)
+}
+type Enum interface {
+	Type() string
+	Options(source Source) []string
+}`
+	if err := os.WriteFile(filepath.Join(directory, "cmd.go"), []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	interfaces, err := commandInterfaces(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(generateCommandInterfaces(interfaces))
+	for _, expected := range []string{
+		"public static partial class Cmd\n{",
+		"    public interface Runnable\n    {\n        void Run(Source src, Output o, World.Tx? tx);\n    }",
+		"    public interface Allower\n    {\n        bool Allow(Source src);\n    }",
+		"    public interface Target\n    {\n        Vector3 Position();\n    }",
+		"    public interface NamedTarget : Target\n    {\n        string Name();\n    }",
+		"    public interface Source : Target\n    {\n        void SendCommandOutput(Output o);\n    }",
+		"    public interface Enum\n    {\n        string Type();\n        IReadOnlyList<string> Options(Source source);\n    }",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("generated output missing %q:\n%s", expected, output)
+		}
+	}
+}
+
+func TestSyncGeneratedFilesChecksEveryOutput(t *testing.T) {
+	directory := t.TempDir()
+	first := filepath.Join(directory, "first.g.cs")
+	second := filepath.Join(directory, "second.g.cs")
+	files := []generatedFile{
+		{Path: first, Content: []byte("first")},
+		{Path: second, Content: []byte("second")},
+	}
+	if err := syncGeneratedFiles(files, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncGeneratedFiles(files, true); err != nil {
+		t.Fatalf("fresh files reported stale: %v", err)
+	}
+	if err := os.WriteFile(second, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := syncGeneratedFiles(files, true)
+	if err == nil || !strings.Contains(err.Error(), second+" is stale") {
+		t.Fatalf("expected stale second output error, got %v", err)
+	}
+}

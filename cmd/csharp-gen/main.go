@@ -25,6 +25,23 @@ type parameter struct {
 	Type string
 }
 
+type commandInterface struct {
+	Name       string
+	Embeddings []string
+	Methods    []commandMethod
+}
+
+type commandMethod struct {
+	Name       string
+	Parameters []parameter
+	ReturnType string
+}
+
+type generatedFile struct {
+	Path    string
+	Content []byte
+}
+
 var supportedPlayerHandlers = map[string]uint64{
 	"HandleChat":         1 << 1,
 	"HandleFoodLoss":     1 << 8,
@@ -35,6 +52,15 @@ var supportedPlayerHandlers = map[string]uint64{
 	"HandleTeleport":     1 << 15,
 	"HandleToggleSneak":  1 << 13,
 	"HandleToggleSprint": 1 << 12,
+}
+
+var selectedCommandInterfaces = []string{
+	"Runnable",
+	"Allower",
+	"Target",
+	"NamedTarget",
+	"Source",
+	"Enum",
 }
 
 func main() {
@@ -57,21 +83,42 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	generated := generatePlayerHandler(methods)
-	path := filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Handler.g.cs")
-	if *check {
-		current, err := os.ReadFile(path)
-		if err != nil || !bytes.Equal(current, generated) {
-			fatal(fmt.Errorf("%s is stale; run make generate", path))
+	interfaces, err := commandInterfaces(filepath.Join(directory, "server", "cmd"))
+	if err != nil {
+		fatal(err)
+	}
+	files := []generatedFile{
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Handler.g.cs"),
+			Content: generatePlayerHandler(methods),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Cmd.Interfaces.g.cs"),
+			Content: generateCommandInterfaces(interfaces),
+		},
+	}
+	if err := syncGeneratedFiles(files, *check); err != nil {
+		fatal(err)
+	}
+}
+
+func syncGeneratedFiles(files []generatedFile, check bool) error {
+	for _, file := range files {
+		if check {
+			current, err := os.ReadFile(file.Path)
+			if err != nil || !bytes.Equal(current, file.Content) {
+				return fmt.Errorf("%s is stale; run make generate", file.Path)
+			}
+			continue
 		}
-		return
+		if err := os.MkdirAll(filepath.Dir(file.Path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(file.Path, file.Content, 0o644); err != nil {
+			return err
+		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		fatal(err)
-	}
-	if err := os.WriteFile(path, generated, 0o644); err != nil {
-		fatal(err)
-	}
+	return nil
 }
 
 func playerHandlerMethods(path string) ([]method, error) {
@@ -176,6 +223,183 @@ func csharpType(expression ast.Expr) (string, bool) {
 	}
 }
 
+func commandInterfaces(directory string) ([]commandInterface, error) {
+	packages, err := parser.ParseDir(token.NewFileSet(), directory, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	pkg, ok := packages["cmd"]
+	if !ok {
+		return nil, fmt.Errorf("Dragonfly cmd package not found")
+	}
+	found := map[string]commandInterface{}
+	for _, file := range pkg.Files {
+		for _, declaration := range file.Decls {
+			gen, ok := declaration.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok || !selectedCommandInterface(typeSpec.Name.Name) {
+					continue
+				}
+				interfaceType, ok := typeSpec.Type.(*ast.InterfaceType)
+				if !ok {
+					return nil, fmt.Errorf("cmd.%s is not an interface", typeSpec.Name.Name)
+				}
+				translated, err := translateCommandInterface(typeSpec.Name.Name, interfaceType)
+				if err != nil {
+					return nil, err
+				}
+				found[typeSpec.Name.Name] = translated
+			}
+		}
+	}
+	interfaces := make([]commandInterface, 0, len(selectedCommandInterfaces))
+	for _, name := range selectedCommandInterfaces {
+		definition, ok := found[name]
+		if !ok {
+			return nil, fmt.Errorf("Dragonfly cmd.%s interface not found", name)
+		}
+		interfaces = append(interfaces, definition)
+	}
+	return interfaces, nil
+}
+
+func selectedCommandInterface(name string) bool {
+	for _, selected := range selectedCommandInterfaces {
+		if name == selected {
+			return true
+		}
+	}
+	return false
+}
+
+func translateCommandInterface(name string, interfaceType *ast.InterfaceType) (commandInterface, error) {
+	definition := commandInterface{Name: name}
+	for _, field := range interfaceType.Methods.List {
+		if len(field.Names) == 0 {
+			embedding, ok := field.Type.(*ast.Ident)
+			if !ok || !selectedCommandInterface(embedding.Name) {
+				return commandInterface{}, fmt.Errorf("cmd.%s has unsupported embedded interface", name)
+			}
+			definition.Embeddings = append(definition.Embeddings, embedding.Name)
+			continue
+		}
+		if len(field.Names) != 1 {
+			return commandInterface{}, fmt.Errorf("cmd.%s has unnamed method", name)
+		}
+		function, ok := field.Type.(*ast.FuncType)
+		if !ok {
+			return commandInterface{}, fmt.Errorf("cmd.%s.%s is not a method", name, field.Names[0].Name)
+		}
+		parameters, err := translateCommandParameters(function.Params)
+		if err != nil {
+			return commandInterface{}, fmt.Errorf("cmd.%s.%s: %w", name, field.Names[0].Name, err)
+		}
+		returnType, err := translateCommandResult(function.Results)
+		if err != nil {
+			return commandInterface{}, fmt.Errorf("cmd.%s.%s: %w", name, field.Names[0].Name, err)
+		}
+		definition.Methods = append(definition.Methods, commandMethod{
+			Name:       field.Names[0].Name,
+			Parameters: parameters,
+			ReturnType: returnType,
+		})
+	}
+	return definition, nil
+}
+
+func translateCommandParameters(fields *ast.FieldList) ([]parameter, error) {
+	var parameters []parameter
+	if fields == nil {
+		return parameters, nil
+	}
+	for _, field := range fields.List {
+		typeName, ok := commandCSharpType(field.Type)
+		if !ok {
+			return nil, fmt.Errorf("unsupported parameter type %s", formatGoExpression(field.Type))
+		}
+		for _, name := range field.Names {
+			parameters = append(parameters, parameter{Name: name.Name, Type: typeName})
+		}
+	}
+	return parameters, nil
+}
+
+func translateCommandResult(fields *ast.FieldList) (string, error) {
+	if fields == nil || len(fields.List) == 0 {
+		return "void", nil
+	}
+	if len(fields.List) != 1 || len(fields.List[0].Names) > 1 {
+		return "", fmt.Errorf("multiple return values are unsupported")
+	}
+	typeName, ok := commandCSharpType(fields.List[0].Type)
+	if !ok {
+		return "", fmt.Errorf("unsupported return type %s", formatGoExpression(fields.List[0].Type))
+	}
+	return typeName, nil
+}
+
+func commandCSharpType(expression ast.Expr) (string, bool) {
+	switch value := expression.(type) {
+	case *ast.StarExpr:
+		typeName, ok := commandCSharpType(value.X)
+		if !ok {
+			return "", false
+		}
+		if typeName == "World.Tx" {
+			return typeName + "?", true
+		}
+		return typeName, true
+	case *ast.ArrayType:
+		if value.Len != nil {
+			return "", false
+		}
+		element, ok := commandCSharpType(value.Elt)
+		if !ok {
+			return "", false
+		}
+		return "IReadOnlyList<" + element + ">", true
+	case *ast.Ident:
+		typeName, ok := map[string]string{
+			"bool":   "bool",
+			"Output": "Output",
+			"Source": "Source",
+			"string": "string",
+		}[value.Name]
+		return typeName, ok
+	case *ast.SelectorExpr:
+		packageName, ok := value.X.(*ast.Ident)
+		if !ok {
+			return "", false
+		}
+		typeName, ok := map[string]string{
+			"mgl64.Vec3": "Vector3",
+			"world.Tx":   "World.Tx",
+		}[packageName.Name+"."+value.Sel.Name]
+		return typeName, ok
+	default:
+		return "", false
+	}
+}
+
+func formatGoExpression(expression ast.Expr) string {
+	switch value := expression.(type) {
+	case *ast.Ident:
+		return value.Name
+	case *ast.SelectorExpr:
+		return formatGoExpression(value.X) + "." + value.Sel.Name
+	case *ast.StarExpr:
+		return "*" + formatGoExpression(value.X)
+	case *ast.ArrayType:
+		return "[]" + formatGoExpression(value.Elt)
+	default:
+		return fmt.Sprintf("%T", expression)
+	}
+}
+
 func generatePlayerHandler(methods []method) []byte {
 	var output bytes.Buffer
 	output.WriteString("// Code generated from Dragonfly server/player/handler.go. DO NOT EDIT.\n")
@@ -189,6 +413,29 @@ func generatePlayerHandler(methods []method) []byte {
 	for _, method := range methods {
 		fmt.Fprintf(&output, "    [HandlerSubscription(%dUL)]\n", method.Subscription)
 		fmt.Fprintf(&output, "    public virtual void %s(%s) { }\n", method.Name, formatParameters(method.Parameters))
+	}
+	output.WriteString("}\n")
+	return output.Bytes()
+}
+
+func generateCommandInterfaces(interfaces []commandInterface) []byte {
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/cmd Go AST. DO NOT EDIT.\n#nullable enable\n")
+	output.WriteString("namespace Dragonfly;\n\n")
+	output.WriteString("public static partial class Cmd\n{\n")
+	for index, definition := range interfaces {
+		fmt.Fprintf(&output, "    public interface %s", definition.Name)
+		if len(definition.Embeddings) != 0 {
+			fmt.Fprintf(&output, " : %s", strings.Join(definition.Embeddings, ", "))
+		}
+		output.WriteString("\n    {\n")
+		for _, method := range definition.Methods {
+			fmt.Fprintf(&output, "        %s %s(%s);\n", method.ReturnType, method.Name, formatParameters(method.Parameters))
+		}
+		output.WriteString("    }\n")
+		if index != len(interfaces)-1 {
+			output.WriteString("\n")
+		}
 	}
 	output.WriteString("}\n")
 	return output.Bytes()

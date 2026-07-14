@@ -24,6 +24,14 @@ _Static_assert(offsetof(DfSkinView, animations) == 136, "DfSkinView.animations A
 _Static_assert(sizeof(DfPlayerSkinChangeInput) == 40, "DfPlayerSkinChangeInput ABI layout changed");
 _Static_assert(offsetof(DfPlayerSkinChangeInput, snapshot) == 32, "DfPlayerSkinChangeInput.snapshot ABI offset changed");
 _Static_assert(sizeof(DfPlayerSkinChangeState) == 1, "DfPlayerSkinChangeState ABI layout changed");
+_Static_assert(sizeof(DfCommandParameter) == 56, "DfCommandParameter ABI layout changed");
+_Static_assert(offsetof(DfCommandParameter, suffix) == 24, "DfCommandParameter.suffix ABI offset changed");
+_Static_assert(sizeof(DfCommandDescriptor) == 64, "DfCommandDescriptor ABI layout changed");
+_Static_assert(sizeof(DfCommandPlayer) == 72, "DfCommandPlayer ABI layout changed");
+_Static_assert(sizeof(DfCommandEnumContext) == 88, "DfCommandEnumContext ABI layout changed");
+_Static_assert(sizeof(DfCommandInput) == 120, "DfCommandInput ABI layout changed");
+_Static_assert(sizeof(DfCommandState) == 32, "DfCommandState ABI layout changed");
+_Static_assert(sizeof(DfPluginApiV5) == 128, "DfPluginApiV5 ABI layout changed");
 _Static_assert(sizeof(DfInventoryId) == 32, "DfInventoryId ABI layout changed");
 _Static_assert(sizeof(DfItemStackInfo) == 80, "DfItemStackInfo ABI layout changed");
 _Static_assert(sizeof(DfItemStackSnapshot) == 88, "DfItemStackSnapshot ABI layout changed");
@@ -54,9 +62,9 @@ _Static_assert(sizeof(DfEntityTypeDescriptorV2) == 144, "DfEntityTypeDescriptorV
 _Static_assert(offsetof(DfEntityTypeDescriptorV2, type_key) == 80, "DfEntityTypeDescriptorV2.type_key ABI offset changed");
 _Static_assert(sizeof(DfEntitySpawnViewV3) == 200, "DfEntitySpawnViewV3 ABI layout changed");
 _Static_assert(offsetof(DfEntitySpawnViewV3, custom_instance) == 176, "DfEntitySpawnViewV3.custom_instance ABI offset changed");
-_Static_assert(sizeof(DfPluginApiV4) == 128, "DfPluginApiV4 ABI layout changed");
-_Static_assert(offsetof(DfPluginApiV4, entity_type_count) == 64, "DfPluginApiV4.entity_type_count ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV4, handle_entity) == 80, "DfPluginApiV4.handle_entity ABI offset changed");
+_Static_assert(sizeof(DfPluginApiV5) == 128, "DfPluginApiV5 ABI layout changed");
+_Static_assert(offsetof(DfPluginApiV5, entity_type_count) == 64, "DfPluginApiV5.entity_type_count ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV5, handle_entity) == 80, "DfPluginApiV5.handle_entity ABI offset changed");
 _Static_assert(sizeof(DfEntityState) == 128, "DfEntityState ABI layout changed");
 _Static_assert(offsetof(DfEntityState, world) == 72, "DfEntityState.world ABI offset changed");
 _Static_assert(sizeof(DfParticleViewV1) == 40, "DfParticleViewV1 ABI layout changed");

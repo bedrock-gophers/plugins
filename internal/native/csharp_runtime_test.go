@@ -4,11 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 )
 
 func openCSharpRuntime(t testing.TB) *Runtime {
+	return openCSharpRuntimeWithHost(t, nil)
+}
+
+func openCSharpRuntimeWithHost(t testing.TB, host Host) *Runtime {
 	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -25,14 +30,14 @@ func openCSharpRuntime(t testing.TB) *Runtime {
 	if _, err := os.Stat(library); err != nil {
 		t.Skipf("C# runtime not built: run make build-native (%v)", err)
 	}
-	pluginRuntime, err := Open(library, plugins)
+	pluginRuntime, err := OpenWithHost(library, plugins, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(pluginRuntime.Close)
 
-	if got := pluginRuntime.PluginCount(); got != 4 {
-		t.Fatalf("PluginCount() = %d, want 4", got)
+	if got := pluginRuntime.PluginCount(); got != 5 {
+		t.Fatalf("PluginCount() = %d, want 5", got)
 	}
 	wantSubscriptions := PlayerMoveSubscription | PlayerChatSubscription | PlayerQuitSubscription |
 		PlayerFoodLossSubscription | PlayerToggleSprintSubscription | PlayerToggleSneakSubscription |
@@ -44,6 +49,105 @@ func openCSharpRuntime(t testing.TB) *Runtime {
 		t.Fatal(err)
 	}
 	return pluginRuntime
+}
+
+func TestCSharpVanillaGameModeCommand(t *testing.T) {
+	host := &recordingHost{}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := commandNamed(t, commands, "gamemode")
+	if len(command.Overloads) != 1 || len(command.Overloads[0].Parameters) != 2 ||
+		!slices.Equal(command.Overloads[0].Parameters[0].Values, []string{"survival", "creative", "adventure", "spectator"}) {
+		t.Fatalf("gamemode descriptor = %#v", command)
+	}
+	player := PlayerID{UUID: [16]byte{3}, Generation: 9}
+	output, err := pluginRuntime.HandleCommand(command.Index, CommandInput{
+		Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Arguments: []string{"creative"}, OnlinePlayers: []CommandPlayer{{Player: player, Name: "Danick"}},
+	})
+	if err != nil || output.Failed || output.Message != "Set Danick's game mode to creative." {
+		t.Fatalf("output=%#v error=%v", output, err)
+	}
+	if !slices.Equal(host.states, []PlayerStateKind{PlayerStateGameMode}) || len(host.values) != 1 || host.values[0].Integer != 1 {
+		t.Fatalf("game mode host calls: states=%v values=%#v", host.states, host.values)
+	}
+}
+
+func TestCSharpReflectedCommands(t *testing.T) {
+	pluginRuntime := openCSharpRuntime(t)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 6 {
+		t.Fatalf("kitchen descriptor = %#v", kitchen)
+	}
+	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
+		!slices.Equal(kitchen.Overloads[2].Parameters[1].Values, []string{"survival", "creative", "adventure", "spectator"}) {
+		t.Fatalf("command enum values are not lowercase: %#v", kitchen.Overloads)
+	}
+	help := commandNamed(t, commands, "help")
+	ping := commandNamed(t, commands, "ping")
+	position := commandNamed(t, commands, "position")
+	if len(help.Overloads) != 1 || len(help.Overloads[0].Parameters) != 1 || !help.Overloads[0].Parameters[0].Optional {
+		t.Fatalf("help descriptor = %#v", help)
+	}
+	if len(ping.Overloads) != 1 || len(ping.Overloads[0].Parameters) != 1 || ping.Overloads[0].Parameters[0].Kind != CommandParameterPlayer {
+		t.Fatalf("ping descriptor = %#v", ping)
+	}
+	if !slices.Contains(position.Aliases, "pos") || len(position.Overloads) != 1 || len(position.Overloads[0].Parameters) != 0 {
+		t.Fatalf("position descriptor = %#v", position)
+	}
+
+	player := PlayerID{UUID: [16]byte{1}, Generation: 7}
+	base := CommandInput{
+		Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		SourcePosition: Vec3{X: 1, Y: 64, Z: 2},
+		OnlinePlayers: []CommandPlayer{{
+			Player: player, Name: "Danick", LatencyMilliseconds: 37,
+			Position: Vec3{X: 1, Y: 64, Z: 2},
+		}},
+	}
+	tests := []struct {
+		overload  uint64
+		arguments []string
+		want      string
+	}{
+		{0, nil, "jumps=0, punches=0, sprints=0, sneaks=0, quits=0"},
+		{1, []string{"echo", "hello world"}, "hello world"},
+		{2, []string{"mode", "Creative"}, "mode=Creative"},
+		{3, []string{"ping"}, "Danick's ping: 37ms"},
+		{4, []string{"position", "3 70 -4"}, "position=3,70,-4"},
+		{5, []string{"destination", "source"}, "destination=source"},
+	}
+	for _, test := range tests {
+		input := base
+		input.Overload, input.Arguments = test.overload, test.arguments
+		output, err := pluginRuntime.HandleCommand(kitchen.Index, input)
+		if err != nil || output.Failed || output.Message != test.want {
+			t.Fatalf("overload %d: output=%#v error=%v, want %q", test.overload, output, err, test.want)
+		}
+	}
+	targetArgument := "02000000000000000000000000000000:8:52:4:65:-2:RestartFU"
+	targeted := base
+	targeted.Overload = 3
+	targeted.Arguments = []string{"ping", targetArgument}
+	output, err := pluginRuntime.HandleCommand(kitchen.Index, targeted)
+	if err != nil || output.Failed || output.Message != "RestartFU's ping: 52ms" {
+		t.Fatalf("targeted player: output=%#v error=%v", output, err)
+	}
+
+	options, err := pluginRuntime.CommandEnumOptions(kitchen.Index, 5, 1, CommandEnumContext{
+		Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		SourcePosition: base.SourcePosition, OnlinePlayers: base.OnlinePlayers,
+	})
+	if err != nil || !slices.Equal(options, []string{"spawn", "source"}) {
+		t.Fatalf("dynamic enum options=%q error=%v", options, err)
+	}
 }
 
 func TestCSharpRuntimeLifecycleAndQuit(t *testing.T) {

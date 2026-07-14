@@ -4,7 +4,7 @@ namespace Dragonfly.Native;
 
 public static class Abi
 {
-    public const uint PluginVersion = 4;
+    public const uint PluginVersion = 5;
     public const uint HostVersion = 20;
     public const int Ok = 0;
     public const int Error = 1;
@@ -26,6 +26,19 @@ public static class Abi
     public const ulong PlayerTeleportSubscription = 1UL << 15;
     public const uint PlayerPunchAirEvent = 18;
     public const ulong PlayerPunchAirSubscription = 1UL << 17;
+    public const uint CommandParameterSubcommand = 1;
+    public const uint CommandParameterEnum = 2;
+    public const uint CommandParameterString = 3;
+    public const uint CommandParameterInteger = 4;
+    public const uint CommandParameterFloat = 5;
+    public const uint CommandParameterBool = 6;
+    public const uint CommandParameterDynamicEnum = 7;
+    public const uint CommandParameterPlayer = 8;
+    public const uint CommandParameterRawText = 9;
+    public const uint CommandParameterVector = 10;
+    public const uint CommandSourceUnknown = 0;
+    public const uint CommandSourcePlayer = 1;
+    public const uint CommandSourceConsole = 2;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -67,6 +80,27 @@ public unsafe struct HostHeader
 }
 
 [StructLayout(LayoutKind.Sequential)]
+public struct PlayerStateValue
+{
+    public double Number;
+    public long Integer;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct HostApi
+{
+    public uint Version;
+    public uint Size;
+    public ulong Context;
+    public void* PlayerText;
+    public void* PlayerTitle;
+    public void* PlayerTransform;
+    public void* PlayerRotation;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, PlayerStateValue, int> PlayerStateSet;
+    public void* PlayerStateGet;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 public unsafe struct PluginApi
 {
     public AbiHeader Header;
@@ -74,12 +108,12 @@ public unsafe struct PluginApi
     public delegate* unmanaged[Cdecl]<void*> Create;
     public delegate* unmanaged[Cdecl]<void*, StringBuffer*, int> Enable;
     public delegate* unmanaged[Cdecl]<void*, int> Disable;
-    public void* Commands;
+    public delegate* unmanaged[Cdecl]<void*, ulong*, CommandDescriptor*> Commands;
     public void* EntityTypeCount;
     public void* EntityTypeAt;
     public void* HandleEntity;
-    public void* HandleCommand;
-    public void* CommandEnumOptions;
+    public delegate* unmanaged[Cdecl]<void*, ulong, CommandInput*, CommandState*, int> HandleCommand;
+    public delegate* unmanaged[Cdecl]<void*, ulong, ulong, ulong, CommandEnumContext*, StringBuffer*, int> CommandEnumOptions;
     public delegate* unmanaged[Cdecl]<void*, void*, int> SetHost;
     public delegate* unmanaged[Cdecl]<void*, void> Destroy;
     public delegate* unmanaged[Cdecl]<void*, uint, void*, void*, int> HandleEvent;
@@ -195,4 +229,75 @@ public struct PlayerTeleportInput
     public ulong Invocation;
     public PlayerId Player;
     public Vec3 Position;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct CommandParameter
+{
+    public uint Kind;
+    public byte Optional;
+    public StringView Name;
+    public StringView Suffix;
+    public StringView* Values;
+    public ulong ValueCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct CommandOverload
+{
+    public CommandParameter* Parameters;
+    public ulong ParameterCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct CommandDescriptor
+{
+    public StringView Name;
+    public StringView Description;
+    public StringView* Aliases;
+    public ulong AliasCount;
+    public CommandOverload* Overloads;
+    public ulong OverloadCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct CommandPlayer
+{
+    public PlayerId Player;
+    public StringView Name;
+    public ulong LatencyMilliseconds;
+    public Vec3 Position;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct CommandEnumContext
+{
+    public StringView Source;
+    public uint SourceKind;
+    public PlayerId SourcePlayer;
+    public Vec3 SourcePosition;
+    public CommandPlayer* OnlinePlayers;
+    public ulong OnlinePlayerCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct CommandInput
+{
+    public ulong Invocation;
+    public ulong Overload;
+    public StringView Source;
+    public StringView* Arguments;
+    public ulong ArgumentCount;
+    public uint SourceKind;
+    public PlayerId SourcePlayer;
+    public Vec3 SourcePosition;
+    public CommandPlayer* OnlinePlayers;
+    public ulong OnlinePlayerCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct CommandState
+{
+    public byte Failed;
+    public StringBuffer Output;
 }

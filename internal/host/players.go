@@ -34,10 +34,11 @@ type Players struct {
 }
 
 type playerEntry struct {
-	id      native.PlayerID
-	handle  *world.EntityHandle
-	name    string
-	latency uint64
+	id       native.PlayerID
+	handle   *world.EntityHandle
+	name     string
+	latency  uint64
+	position mgl64.Vec3
 }
 
 func NewPlayers() *Players {
@@ -55,7 +56,8 @@ func (p *Players) Register(player *player.Player, generation uint64) native.Play
 	id := native.PlayerID{UUID: entityID.UUID, Generation: entityID.Generation}
 	entry := &playerEntry{
 		id: id, handle: player.H(), name: player.Name(),
-		latency: uint64(max(player.Latency().Milliseconds(), 0)),
+		latency:  uint64(max(player.Latency().Milliseconds(), 0)),
+		position: player.Position(),
 	}
 	p.mu.Lock()
 	p.entries[player.H()] = entry
@@ -150,7 +152,7 @@ func (p *Players) ID(player *player.Player) (native.PlayerID, bool) {
 		return native.PlayerID{}, false
 	}
 	p.mu.Lock()
-	entry.name, entry.latency = player.Name(), uint64(max(player.Latency().Milliseconds(), 0))
+	entry.name, entry.latency, entry.position = player.Name(), uint64(max(player.Latency().Milliseconds(), 0)), player.Position()
 	p.mu.Unlock()
 	return entry.id, true
 }
@@ -168,14 +170,15 @@ func (p *Players) Names() []string {
 
 func (p *Players) CommandSnapshots() []native.CommandPlayer {
 	type cachedPlayer struct {
-		id      native.PlayerID
-		name    string
-		latency uint64
+		id       native.PlayerID
+		name     string
+		latency  uint64
+		position mgl64.Vec3
 	}
 	p.mu.RLock()
 	entries := make([]cachedPlayer, 0, len(p.entries))
 	for _, entry := range p.entries {
-		entries = append(entries, cachedPlayer{id: entry.id, name: entry.name, latency: entry.latency})
+		entries = append(entries, cachedPlayer{id: entry.id, name: entry.name, latency: entry.latency, position: entry.position})
 	}
 	p.mu.RUnlock()
 	snapshots := make([]native.CommandPlayer, 0, len(entries))
@@ -183,6 +186,7 @@ func (p *Players) CommandSnapshots() []native.CommandPlayer {
 		name, latency := entry.name, entry.latency
 		snapshots = append(snapshots, native.CommandPlayer{
 			Player: entry.id, Name: name, LatencyMilliseconds: latency,
+			Position: native.Vec3{X: entry.position[0], Y: entry.position[1], Z: entry.position[2]},
 		})
 	}
 	slices.SortFunc(snapshots, func(left, right native.CommandPlayer) int {

@@ -30,10 +30,21 @@ internal unsafe sealed class PluginLibrary : IDisposable
     }
 }
 
+internal readonly unsafe struct RuntimeCommand(
+    PluginLibrary plugin,
+    ulong localIndex,
+    CommandDescriptor descriptor)
+{
+    internal PluginLibrary Plugin { get; } = plugin;
+    internal ulong LocalIndex { get; } = localIndex;
+    internal CommandDescriptor Descriptor { get; } = descriptor;
+}
+
 internal unsafe sealed class RuntimeState : IDisposable
 {
     internal readonly object Gate = new();
     internal readonly List<PluginLibrary> Plugins = [];
+    internal readonly List<RuntimeCommand> Commands = [];
     internal ulong Subscriptions;
     private volatile bool _running;
     private int _activeCalls;
@@ -64,7 +75,7 @@ internal unsafe sealed class RuntimeState : IDisposable
         var library = NativeLibrary.Load(path);
         try
         {
-            var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v4");
+            var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v5");
             var api = entry();
             if (api is null || api->Header.Version != Abi.PluginVersion || api->Header.Size < sizeof(PluginApi))
                 throw new InvalidOperationException($"{path} has an incompatible plugin API");
@@ -108,10 +119,48 @@ internal unsafe sealed class RuntimeState : IDisposable
                     continue;
                 }
                 for (var previous = index - 1; previous >= 0; previous--) Plugins[previous].Disable();
-                throw new InvalidOperationException($"plugin {Utf8(plugin.Api->Id)} failed to enable");
+                var detail = error is null || error->Length == 0
+                    ? string.Empty
+                    : Encoding.UTF8.GetString(new ReadOnlySpan<byte>(error->Data, checked((int)error->Length)));
+                var suffix = detail.Length == 0 ? string.Empty : $": {detail}";
+                throw new InvalidOperationException($"plugin {Utf8(plugin.Api->Id)} failed to enable{suffix}");
+            }
+            try
+            {
+                PublishCommands();
+            }
+            catch
+            {
+                Commands.Clear();
+                for (var index = Plugins.Count - 1; index >= 0; index--) Plugins[index].Disable();
+                throw;
             }
             _running = true;
         }
+    }
+
+    private void PublishCommands()
+    {
+        var commands = new List<RuntimeCommand>();
+        foreach (var plugin in Plugins)
+        {
+            if (plugin.Api->Commands == null) continue;
+            ulong count = 0;
+            var descriptors = plugin.Api->Commands(plugin.Instance, &count);
+            if (count == 0) continue;
+            var id = Utf8(plugin.Api->Id);
+            if (descriptors is null) throw new InvalidOperationException($"plugin {id} returned null command descriptors");
+            if (plugin.Api->HandleCommand == null)
+                throw new InvalidOperationException($"plugin {id} has commands but no command handler");
+            for (var index = 0UL; index < count; index++)
+            {
+                var descriptor = descriptors[checked((int)index)];
+                if (descriptor.Name.Length == 0 || descriptor.Name.Data is null)
+                    throw new InvalidOperationException($"plugin {id} returned a command with an empty name");
+                commands.Add(new RuntimeCommand(plugin, index, descriptor));
+            }
+        }
+        Commands.AddRange(commands);
     }
 
     internal void Disable()
@@ -121,7 +170,76 @@ internal unsafe sealed class RuntimeState : IDisposable
             _running = false;
             var spin = new SpinWait();
             while (Volatile.Read(ref _activeCalls) != 0) spin.SpinOnce();
+            Commands.Clear();
             for (var index = Plugins.Count - 1; index >= 0; index--) Plugins[index].Disable();
+        }
+    }
+
+    internal ulong CommandCount()
+    {
+        lock (Gate) return _running ? (ulong)Commands.Count : 0;
+    }
+
+    internal int CommandAt(ulong index, CommandDescriptor* output)
+    {
+        if (output is null || !_running) return Abi.Error;
+        Interlocked.Increment(ref _activeCalls);
+        try
+        {
+            if (!_running || index >= (ulong)Commands.Count) return Abi.Error;
+            *output = Commands[checked((int)index)].Descriptor;
+            return Abi.Ok;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeCalls);
+        }
+    }
+
+    internal int HandleCommand(ulong index, CommandInput* input, CommandState* state)
+    {
+        if (input is null || state is null || !_running) return Abi.Error;
+        Interlocked.Increment(ref _activeCalls);
+        try
+        {
+            if (!_running || index >= (ulong)Commands.Count) return Abi.Error;
+            var command = Commands[checked((int)index)];
+            var plugin = command.Plugin;
+            if (!plugin.Enabled || plugin.Api->HandleCommand == null) return Abi.Error;
+            return plugin.Api->HandleCommand(plugin.Instance, command.LocalIndex, input, state);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeCalls);
+        }
+    }
+
+    internal int CommandEnumOptions(
+        ulong index,
+        ulong overload,
+        ulong parameter,
+        CommandEnumContext* context,
+        StringBuffer* output)
+    {
+        if (context is null || output is null || !_running) return Abi.Error;
+        Interlocked.Increment(ref _activeCalls);
+        try
+        {
+            if (!_running || index >= (ulong)Commands.Count) return Abi.Error;
+            var command = Commands[checked((int)index)];
+            var plugin = command.Plugin;
+            if (!plugin.Enabled || plugin.Api->CommandEnumOptions == null) return Abi.Error;
+            return plugin.Api->CommandEnumOptions(
+                plugin.Instance,
+                command.LocalIndex,
+                overload,
+                parameter,
+                context,
+                output);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeCalls);
         }
     }
 
@@ -150,6 +268,7 @@ internal unsafe sealed class RuntimeState : IDisposable
     {
         Disable();
         for (var index = Plugins.Count - 1; index >= 0; index--) Plugins[index].Dispose();
+        Commands.Clear();
         Plugins.Clear();
     }
 
@@ -243,16 +362,38 @@ public static unsafe class Exports
     public static int EntityDestroy(void* runtime, ulong instance) => Abi.Error;
 
     [UnmanagedCallersOnly(EntryPoint = "df_runtime_command_count", CallConvs = [typeof(CallConvCdecl)])]
-    public static ulong CommandCount(void* runtime) => 0;
+    public static ulong CommandCount(void* runtime)
+    {
+        try { return State(runtime).CommandCount(); }
+        catch { return 0; }
+    }
 
     [UnmanagedCallersOnly(EntryPoint = "df_runtime_command_at", CallConvs = [typeof(CallConvCdecl)])]
-    public static int CommandAt(void* runtime, ulong index, void* output) => Abi.Error;
+    public static int CommandAt(void* runtime, ulong index, CommandDescriptor* output)
+    {
+        try { return State(runtime).CommandAt(index, output); }
+        catch { return Abi.Error; }
+    }
 
     [UnmanagedCallersOnly(EntryPoint = "df_runtime_handle_command", CallConvs = [typeof(CallConvCdecl)])]
-    public static int HandleCommand(void* runtime, ulong index, void* input, void* state) => Abi.Error;
+    public static int HandleCommand(void* runtime, ulong index, CommandInput* input, CommandState* state)
+    {
+        try { return State(runtime).HandleCommand(index, input, state); }
+        catch { return Abi.Error; }
+    }
 
     [UnmanagedCallersOnly(EntryPoint = "df_runtime_command_enum_options", CallConvs = [typeof(CallConvCdecl)])]
-    public static int CommandEnumOptions(void* runtime, ulong index, ulong overload, ulong parameter, void* context, void* output) => Abi.Error;
+    public static int CommandEnumOptions(
+        void* runtime,
+        ulong index,
+        ulong overload,
+        ulong parameter,
+        CommandEnumContext* context,
+        StringBuffer* output)
+    {
+        try { return State(runtime).CommandEnumOptions(index, overload, parameter, context, output); }
+        catch { return Abi.Error; }
+    }
 
     [UnmanagedCallersOnly(EntryPoint = "df_runtime_handle_event", CallConvs = [typeof(CallConvCdecl)])]
     public static int HandleEvent(void* runtime, uint eventId, void* input, void* state)

@@ -723,7 +723,7 @@ func TestPlayerTransformHostCalls(t *testing.T) {
 	for _, arguments := range []string{"velocity 1 2 3", "face 90 20", "teleport 10 64 20", "move 1 0 -1"} {
 		output, err := runtime.HandleCommand(commandNamed(t, commands, "player").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
-			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: commandArguments(arguments),
 		})
 		if err != nil || output.Failed {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
@@ -763,7 +763,7 @@ func TestPlayerStateHostCalls(t *testing.T) {
 	for _, arguments := range []string{"gamemode creative", "heal 4", "hurt 3", "food 15", "max-health 40", "experience-level 12", "experience-progress 0.5", "experience 30 0.75"} {
 		output, err := runtime.HandleCommand(commandNamed(t, commands, "player").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
-			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: commandArguments(arguments),
 		})
 		if err != nil || output.Failed {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
@@ -780,7 +780,7 @@ func TestPlayerStateHostCalls(t *testing.T) {
 	} {
 		output, err := runtime.HandleCommand(commandNamed(t, commands, "player").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
-			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}, {Player: target, Name: "Target"}}, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}, {Player: target, Name: "Target"}}, Arguments: commandArguments(arguments),
 		})
 		if err != nil || output.Failed {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
@@ -847,7 +847,7 @@ func TestPlayerEffectHostCalls(t *testing.T) {
 	for _, arguments := range []string{"speed 2 30", "instant-health 1 0.5", "clear-speed"} {
 		output, err := runtime.HandleCommand(commandNamed(t, commands, "player").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
-			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: commandArguments(arguments),
 		})
 		if err != nil || output.Failed {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
@@ -883,7 +883,7 @@ func TestPlayerIdentityHostCalls(t *testing.T) {
 	for _, arguments := range []string{"name-tag Rust Player", "scale 1.5", "invisible true", "immobile true"} {
 		output, err := runtime.HandleCommand(commandNamed(t, commands, "player").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
-			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: commandArguments(arguments),
 		})
 		if err != nil || output.Failed {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
@@ -923,7 +923,7 @@ func TestPlayerSoundAndDisconnectHostCalls(t *testing.T) {
 	for _, arguments := range []string{"sound", "disconnect", "kick"} {
 		output, err := runtime.HandleCommand(commandNamed(t, commands, "player").Index, CommandInput{
 			Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
-			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: commandArguments(arguments),
 		})
 		if err != nil || output.Failed {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
@@ -961,7 +961,7 @@ func TestPlayerEntityVisibilityHostCalls(t *testing.T) {
 	for _, arguments := range []string{"hide " + encoded, "show " + encoded} {
 		output, err := runtime.HandleCommand(commandNamed(t, commands, "player").Index, CommandInput{
 			Source: "Viewer", SourceKind: CommandSourcePlayer, SourcePlayer: &viewer,
-			OnlinePlayers: []CommandPlayer{{Player: viewer, Name: "Viewer"}, {Player: target, Name: "Target"}}, Arguments: arguments,
+			OnlinePlayers: []CommandPlayer{{Player: viewer, Name: "Viewer"}, {Player: target, Name: "Target"}}, Arguments: commandArguments(arguments),
 		})
 		if err != nil || output.Failed {
 			t.Fatalf("%s: output=%+v error=%v", arguments, output, err)
@@ -1074,7 +1074,7 @@ func TestPlayerSkinRoundTrip(t *testing.T) {
 	id := PlayerID{Generation: 14}
 	output, err := runtime.HandleCommand(commandNamed(t, commands, "player").Index, CommandInput{
 		Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
-		OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: "skin-copy",
+		OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: commandArguments("skin-copy"),
 	})
 	if err != nil || output.Failed {
 		t.Fatalf("output=%+v error=%v", output, err)
@@ -1110,7 +1110,7 @@ func TestPlayerInventoryItemRoundTrip(t *testing.T) {
 	id := PlayerID{Generation: 15}
 	input := CommandInput{
 		Source: "TestPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &id,
-		OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: "copy 3 4",
+		OnlinePlayers: []CommandPlayer{{Player: id, Name: "TestPlayer"}}, Arguments: commandArguments("copy 3 4"),
 	}
 	output, err := runtime.HandleCommand(items.Index, input)
 	if err != nil || output.Failed {
@@ -1119,7 +1119,7 @@ func TestPlayerInventoryItemRoundTrip(t *testing.T) {
 	if len(host.inventorySets) != 1 || host.inventorySets[0].Slot != 4 || !reflect.DeepEqual(host.inventorySets[0].Item, want) {
 		t.Fatalf("set items=%#v want=%#v", host.inventorySets, want)
 	}
-	input.Arguments = "give-sword"
+	input.Arguments = commandArguments("give-sword")
 	output, err = runtime.HandleCommand(items.Index, input)
 	if err != nil || output.Failed {
 		t.Fatalf("give output=%+v error=%v", output, err)
@@ -1163,7 +1163,7 @@ func TestCommand(t *testing.T) {
 	}
 	output, err := runtime.HandleCommand(hello.Index, CommandInput{
 		Source:    "Danick",
-		Arguments: "say excited dragonfly plugins rock",
+		Arguments: commandArguments("say excited dragonfly plugins rock"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1200,7 +1200,7 @@ func TestWorldCommandHostCalls(t *testing.T) {
 	output, err := runtime.HandleCommand(world.Index, CommandInput{
 		Source: "WorldTester", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
 		OnlinePlayers: []CommandPlayer{{Player: player, Name: "WorldTester"}},
-		Arguments:     "open example:arena",
+		Arguments:     commandArguments("open example:arena"),
 	})
 	if err != nil || output.Failed {
 		t.Fatalf("output=%+v error=%v", output, err)
@@ -1217,7 +1217,7 @@ func TestWorldCommandHostCalls(t *testing.T) {
 	output, err = runtime.HandleCommand(world.Index, CommandInput{
 		Source: "WorldTester", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
 		OnlinePlayers: []CommandPlayer{{Player: player, Name: "WorldTester"}},
-		Arguments:     "inspect 2 3 4",
+		Arguments:     commandArguments("inspect 2 3 4"),
 	})
 	if err != nil || output.Failed {
 		t.Fatalf("inspect output=%+v error=%v", output, err)
@@ -1231,7 +1231,7 @@ func TestWorldCommandHostCalls(t *testing.T) {
 	output, err = runtime.HandleCommand(world.Index, CommandInput{
 		Source: "WorldTester", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
 		OnlinePlayers: []CommandPlayer{{Player: player, Name: "WorldTester"}},
-		Arguments:     "set-stone -2 70 9",
+		Arguments:     commandArguments("set-stone -2 70 9"),
 	})
 	if err != nil || output.Failed {
 		t.Fatalf("set output=%+v error=%v", output, err)
@@ -1266,7 +1266,7 @@ func TestEntityCommandHostCalls(t *testing.T) {
 	host.worldPlayerIDs = []PlayerID{player}
 	for _, arguments := range []string{"text", "sword", "list"} {
 		output, err := runtime.HandleCommand(command.Index, CommandInput{
-			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: arguments,
+			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: commandArguments(arguments),
 			OnlinePlayers: []CommandPlayer{{Player: player, Name: "Spawner"}},
 		})
 		if err != nil || output.Failed {
@@ -1274,7 +1274,7 @@ func TestEntityCommandHostCalls(t *testing.T) {
 		}
 	}
 	output, err := runtime.HandleCommand(command.Index, CommandInput{
-		Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: "dummy",
+		Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: commandArguments("dummy"),
 		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Spawner"}},
 	})
 	if err != nil || output.Failed {
@@ -1345,7 +1345,7 @@ func TestParticleCommandHostCalls(t *testing.T) {
 	player := PlayerID{UUID: [16]byte{1, 2}, Generation: 17}
 	for _, arguments := range []string{"coloured-flame", "block-break", "note"} {
 		output, err := runtime.HandleCommand(command.Index, CommandInput{
-			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: arguments,
+			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: commandArguments(arguments),
 			OnlinePlayers: []CommandPlayer{{Player: player, Name: "Spawner"}},
 		})
 		if err != nil || output.Failed {
@@ -1394,7 +1394,7 @@ func TestSoundCommandHostCalls(t *testing.T) {
 	arguments := []string{"player", "explosion", "door", "note", "equip", "bucket", "disc", "horn", "attack", "crossbow"}
 	for _, argument := range arguments {
 		output, err := runtime.HandleCommand(command.Index, CommandInput{
-			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: argument,
+			Source: "Spawner", SourceKind: CommandSourcePlayer, SourcePlayer: &player, Arguments: commandArguments(argument),
 			OnlinePlayers: []CommandPlayer{{Player: player, Name: "Spawner"}},
 		})
 		if err != nil || output.Failed {
@@ -1464,7 +1464,7 @@ func TestWorldCommandRejectsFailedAndMalformedHostReads(t *testing.T) {
 	player := PlayerID{Generation: 24}
 	input := CommandInput{
 		Source: "WorldTester", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
-		OnlinePlayers: []CommandPlayer{{Player: player, Name: "WorldTester"}}, Arguments: "inspect 0 64 0",
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "WorldTester"}}, Arguments: commandArguments("inspect 0 64 0"),
 	}
 	run := func(t *testing.T, want string) {
 		t.Helper()
@@ -1512,6 +1512,8 @@ func commandNamed(t *testing.T, commands []Command, name string) Command {
 	return Command{}
 }
 
+func commandArguments(value string) []string { return strings.Fields(value) }
+
 func TestPingCommandUsesPlayerLatency(t *testing.T) {
 	library, plugins := nativeArtifacts(t)
 	host := &recordingHost{}
@@ -1558,7 +1560,9 @@ func TestDynamicCommandEnum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	options, err := runtime.CommandEnumOptions(commandNamed(t, commands, "hello").Index, 6, 1, "Danick", []string{"Danick", "RestartFU"})
+	options, err := runtime.CommandEnumOptions(commandNamed(t, commands, "hello").Index, 6, 1, CommandEnumContext{
+		Source: "Danick", OnlinePlayers: []CommandPlayer{{Name: "Danick"}, {Name: "RestartFU"}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

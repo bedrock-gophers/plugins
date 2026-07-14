@@ -23,10 +23,14 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
 
 1. NativeAOT loading and `OnEnable`/`OnDisable`.
 2. `player.Handler` events. Movement, chat, food loss, jump, teleport, sprint/sneak toggles, punch-air, and quit are implemented.
-3. Player methods and commands.
+3. Player methods and commands. Command interfaces are generated from Dragonfly's `server/cmd` AST. C# uses `Cmd.New`/`Cmd.Register`, one `Cmd.Runnable` per overload, and reflected public fields as Dragonfly uses reflected Go struct fields. Supported command fields include subcommands, native enums, dynamic `Cmd.Enum` values, players, vectors, optional values, and `Cmd.Varargs`. The generator roots runnable fields and field types for NativeAOT; runnable types use `internal` visibility and require no linker annotations. Bedrock-facing subcommands and enum/player suggestions are always lowercase. `Player.SetGameMode(World.GameMode)` and Dragonfly's four built-in game-mode values are available.
 4. Worlds, items, blocks, forms, entities, particles, and sounds.
 5. Convert practice-core and expand parity tests against Dragonfly.
 
 Each slice removes the replaced legacy implementation. Unsupported API remains absent rather than gaining a parallel abstraction.
 
 `examples/plugins/kitchen-sink` must use every exposed API. Its NativeAOT build is the compile-time parity canary for handlers, commands, worlds, items, blocks, forms, entities, particles, and sounds as those slices land.
+
+`examples/plugins/vanilla-commands` keeps its plugin entry tiny and one command per file. It currently exercises `/gamemode`, `/help`, `/ping`, and `/position`, and expands with each gameplay parity slice.
+
+Practice remains out of the parity loop until the framework API needed by practice exists. Feature work lands and is tested in this repository first.
