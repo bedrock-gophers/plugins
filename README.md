@@ -20,6 +20,7 @@ schedules its update after 250 ms with `ScheduleBlockUpdate` and `TimeSpan`.
 Its `/kitchen biome` overload uses the generated vanilla biome types and exercises biome,
 temperature, rain, snow, and thunder transaction queries before restoring the original biome.
 `/kitchen tick` reads the transaction owner's current tick, not the world's day-time.
+`/kitchen particle` emits every typed Dragonfly particle and exercises all typed note instruments.
 Compatible precompiled `.so` plugins remain supported by the loader; because the source build
 clears `plugins/*.so`, stage binary-only plugins after `make build` and start `.build/bin/server`
 directly.
