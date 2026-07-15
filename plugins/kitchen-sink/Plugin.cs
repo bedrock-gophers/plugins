@@ -781,6 +781,8 @@ public sealed class KitchenSink : Plugin
         Jukebox,
         NameTag,
         Disconnect,
+        Chat,
+        ExecuteCommand,
     }
 
     internal sealed class KitchenText : Cmd.Runnable
@@ -817,6 +819,12 @@ public sealed class KitchenSink : Plugin
                     break;
                 case TextAction.Disconnect:
                     player.Disconnect(Content);
+                    break;
+                case TextAction.Chat:
+                    player.Chat(Content);
+                    break;
+                case TextAction.ExecuteCommand:
+                    player.ExecuteCommand(Content);
                     break;
             }
         }
