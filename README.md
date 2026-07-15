@@ -240,7 +240,7 @@ World callbacks now carry Dragonfly-shaped transactions. `Player.Context` inheri
 `World.Block`, `World.Liquid`, `World.Biome`, `World.SetOpts`, and the current `World.Tx` block and
 biome surface are generated from Dragonfly source. This includes `Range`, `Block`, `BlockLoaded`,
 `Liquid`, `SetLiquid`, `ScheduleBlockUpdate`, `HighestLightBlocker`, `HighestBlock`, `Light`, and
-`SkyLight`, `Event`, `CurrentTick`, `AddParticle`, `PlaySound`, plus 118 concrete non-liquid block types covering 314
+`SkyLight`, all seven redstone power queries, `Event`, `CurrentTick`, `AddParticle`, `PlaySound`, plus 118 concrete non-liquid block types covering 314
 canonical primitive-state registry entries, `Block.Water`, `Block.Lava`, all 88 registered vanilla
 biome types, and all 20 Dragonfly particle types with typed colours, blocks, faces, positions, and
 note instruments. Promoted Dragonfly fields remain visible, so crops use typed growth stages:

@@ -433,6 +433,13 @@ func (tx *Tx) HighestLightBlocker(x, z int) int { return 0 }
 func (tx *Tx) HighestBlock(x, z int) int { return 0 }
 func (tx *Tx) Light(pos cube.Pos) uint8 { return 0 }
 func (tx *Tx) SkyLight(pos cube.Pos) uint8 { return 0 }
+func (tx *Tx) RedstonePower(pos cube.Pos) int { return 0 }
+func (tx *Tx) RedstoneDirectPower(pos cube.Pos) int { return 0 }
+func (tx *Tx) RedstoneStrongPower(pos cube.Pos) int { return 0 }
+func (tx *Tx) RedstoneConductivePower(pos cube.Pos) int { return 0 }
+func (tx *Tx) RedstonePowerFrom(pos cube.Pos, face cube.Face) int { return 0 }
+func (tx *Tx) RedstoneDirectPowerFrom(pos cube.Pos, face cube.Face) int { return 0 }
+func (tx *Tx) RedstoneStrongPowerFrom(pos cube.Pos, face cube.Face) int { return 0 }
 func (tx *Tx) SetBiome(pos cube.Pos, b Biome) {}
 func (tx *Tx) Biome(pos cube.Pos) Biome { return nil }
 func (tx *Tx) Temperature(pos cube.Pos) float64 { return 0 }
@@ -482,6 +489,15 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 		"public int HighestBlock(int x, int z)",
 		"public byte Light(Cube.Pos pos)",
 		"public byte SkyLight(Cube.Pos pos)",
+		"public int RedstonePower(Cube.Pos pos)",
+		"WorldRedstonePower(Invocation, pos, Cube.Face.Down, PluginBridge.Host.RedstonePowerKind.RedstonePower)",
+		"public int RedstoneDirectPower(Cube.Pos pos)",
+		"public int RedstoneStrongPower(Cube.Pos pos)",
+		"public int RedstoneConductivePower(Cube.Pos pos)",
+		"public int RedstonePowerFrom(Cube.Pos pos, Cube.Face face)",
+		"WorldRedstonePower(Invocation, pos, face, PluginBridge.Host.RedstonePowerKind.RedstonePowerFrom)",
+		"public int RedstoneDirectPowerFrom(Cube.Pos pos, Cube.Face face)",
+		"public int RedstoneStrongPowerFrom(Cube.Pos pos, Cube.Face face)",
 		"public interface Biome { }",
 		"public void SetBiome(Cube.Pos pos, Biome b)",
 		"public Biome Biome(Cube.Pos pos)",
@@ -633,6 +649,26 @@ func TestInspectWorldTxRejectsScheduleBlockUpdateDrift(t *testing.T) {
 			_, err := inspectWorldTx(path)
 			if err == nil || !strings.Contains(err.Error(), "world.Tx.ScheduleBlockUpdate: signature changed") {
 				t.Fatalf("expected ScheduleBlockUpdate signature drift error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestInspectWorldTxRejectsRedstoneDrift(t *testing.T) {
+	for name, declaration := range map[string]string{
+		"position type": "func (tx *Tx) RedstonePower(pos mgl64.Vec3) int { return 0 }",
+		"face name":     "func (tx *Tx) RedstonePowerFrom(pos cube.Pos, side cube.Face) int { return 0 }",
+		"face type":     "func (tx *Tx) RedstonePowerFrom(pos cube.Pos, face int) int { return 0 }",
+		"return type":   "func (tx *Tx) RedstoneStrongPower(pos cube.Pos) uint8 { return 0 }",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "tx_redstone.go")
+			if err := os.WriteFile(path, []byte("package world\n"+declaration), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := inspectWorldTx(path)
+			if err == nil || !strings.Contains(err.Error(), "signature changed") {
+				t.Fatalf("expected redstone signature drift error, got %v", err)
 			}
 		})
 	}

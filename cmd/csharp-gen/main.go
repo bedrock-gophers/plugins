@@ -490,6 +490,13 @@ var selectedWorldTxMethods = []string{
 	"HighestBlock",
 	"Light",
 	"SkyLight",
+	"RedstonePower",
+	"RedstoneDirectPower",
+	"RedstoneStrongPower",
+	"RedstoneConductivePower",
+	"RedstonePowerFrom",
+	"RedstoneDirectPowerFrom",
+	"RedstoneStrongPowerFrom",
 	"SetBiome",
 	"Biome",
 	"Temperature",
@@ -747,7 +754,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	worldTx, err := inspectWorldTx(filepath.Join(directory, "server", "world", "tx.go"))
+	worldTx, err := inspectWorldTx(
+		filepath.Join(directory, "server", "world", "tx.go"),
+		filepath.Join(directory, "server", "world", "tx_redstone.go"),
+	)
 	if err != nil {
 		fatal(err)
 	}
@@ -1688,30 +1698,32 @@ func inspectSetOpts(path string) ([]string, error) {
 	return nil, fmt.Errorf("world.SetOpts not found")
 }
 
-func inspectWorldTx(path string) ([]commandMethod, error) {
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-	if err != nil {
-		return nil, err
-	}
+func inspectWorldTx(paths ...string) ([]commandMethod, error) {
 	found := map[string]commandMethod{}
-	for _, declaration := range file.Decls {
-		function, ok := declaration.(*ast.FuncDecl)
-		if !ok || !selectedWorldTxMethod(function.Name.Name) || !pointerReceiver(function, "Tx") {
-			continue
-		}
-		parameters, err := translateWorldTxParameters(function.Name.Name, function.Type.Params)
+	for _, path := range paths {
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {
-			return nil, fmt.Errorf("world.Tx.%s: %w", function.Name.Name, err)
+			return nil, err
 		}
-		result, err := translateWorldTxResult(function.Name.Name, function.Type.Results)
-		if err != nil {
-			return nil, fmt.Errorf("world.Tx.%s: %w", function.Name.Name, err)
-		}
-		found[function.Name.Name] = commandMethod{
-			Name: function.Name.Name, Parameters: parameters, ReturnType: result,
-		}
-		if err := validateWorldTxMethod(found[function.Name.Name]); err != nil {
-			return nil, fmt.Errorf("world.Tx.%s: %w", function.Name.Name, err)
+		for _, declaration := range file.Decls {
+			function, ok := declaration.(*ast.FuncDecl)
+			if !ok || !selectedWorldTxMethod(function.Name.Name) || !pointerReceiver(function, "Tx") {
+				continue
+			}
+			parameters, err := translateWorldTxParameters(function.Name.Name, function.Type.Params)
+			if err != nil {
+				return nil, fmt.Errorf("world.Tx.%s: %w", function.Name.Name, err)
+			}
+			result, err := translateWorldTxResult(function.Name.Name, function.Type.Results)
+			if err != nil {
+				return nil, fmt.Errorf("world.Tx.%s: %w", function.Name.Name, err)
+			}
+			found[function.Name.Name] = commandMethod{
+				Name: function.Name.Name, Parameters: parameters, ReturnType: result,
+			}
+			if err := validateWorldTxMethod(found[function.Name.Name]); err != nil {
+				return nil, fmt.Errorf("world.Tx.%s: %w", function.Name.Name, err)
+			}
 		}
 	}
 	methods := make([]commandMethod, 0, len(selectedWorldTxMethods))
@@ -1762,6 +1774,27 @@ func validateWorldTxMethod(method commandMethod) error {
 		}},
 		"SkyLight": {Name: "SkyLight", ReturnType: "byte", Parameters: []parameter{
 			{Name: "pos", Type: "Cube.Pos"},
+		}},
+		"RedstonePower": {Name: "RedstonePower", ReturnType: "int", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"},
+		}},
+		"RedstoneDirectPower": {Name: "RedstoneDirectPower", ReturnType: "int", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"},
+		}},
+		"RedstoneStrongPower": {Name: "RedstoneStrongPower", ReturnType: "int", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"},
+		}},
+		"RedstoneConductivePower": {Name: "RedstoneConductivePower", ReturnType: "int", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"},
+		}},
+		"RedstonePowerFrom": {Name: "RedstonePowerFrom", ReturnType: "int", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"}, {Name: "face", Type: "Cube.Face"},
+		}},
+		"RedstoneDirectPowerFrom": {Name: "RedstoneDirectPowerFrom", ReturnType: "int", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"}, {Name: "face", Type: "Cube.Face"},
+		}},
+		"RedstoneStrongPowerFrom": {Name: "RedstoneStrongPowerFrom", ReturnType: "int", Parameters: []parameter{
+			{Name: "pos", Type: "Cube.Pos"}, {Name: "face", Type: "Cube.Face"},
 		}},
 		"SetBiome": {Name: "SetBiome", ReturnType: "void", Parameters: []parameter{
 			{Name: "pos", Type: "Cube.Pos"}, {Name: "b", Type: "Biome"},
@@ -1948,6 +1981,7 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 		}
 		typeName, ok := map[string]string{
 			"cube.BBox":     "Cube.BBox",
+			"cube.Face":     "Cube.Face",
 			"cube.Pos":      "Cube.Pos",
 			"cube.Range":    "Cube.Range",
 			"mgl64.Vec3":    "Vector3",
@@ -5385,6 +5419,12 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 			fmt.Fprintf(&output, "            PluginBridge.Host.WorldLight(Invocation, %s);\n", method.Parameters[0].Name)
 		case "SkyLight":
 			fmt.Fprintf(&output, "            PluginBridge.Host.WorldSkyLight(Invocation, %s);\n", method.Parameters[0].Name)
+		case "RedstonePower", "RedstoneDirectPower", "RedstoneStrongPower", "RedstoneConductivePower":
+			fmt.Fprintf(&output, "            PluginBridge.Host.WorldRedstonePower(Invocation, %s, Cube.Face.Down, PluginBridge.Host.RedstonePowerKind.%s);\n",
+				method.Parameters[0].Name, method.Name)
+		case "RedstonePowerFrom", "RedstoneDirectPowerFrom", "RedstoneStrongPowerFrom":
+			fmt.Fprintf(&output, "            PluginBridge.Host.WorldRedstonePower(Invocation, %s, %s, PluginBridge.Host.RedstonePowerKind.%s);\n",
+				method.Parameters[0].Name, method.Parameters[1].Name, method.Name)
 		case "SetBiome":
 			fmt.Fprintf(&output, "            PluginBridge.Host.SetWorldBiome(Invocation, %s, %s);\n",
 				method.Parameters[0].Name, method.Parameters[1].Name)

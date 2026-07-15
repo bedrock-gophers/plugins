@@ -236,6 +236,26 @@ func bg_go_world_sky_light(context C.uint64_t, invocation C.DfInvocationId, worl
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_world_redstone_power
+func bg_go_world_redstone_power(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, face C.int32_t, kind C.uint32_t, output *C.int32_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := host.WorldRedstonePower(
+		InvocationID(invocation),
+		WorldID(world.value),
+		nativeBlockPosition(position),
+		int32(face),
+		WorldRedstonePowerKind(kind),
+	)
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.int32_t(value)
+	return C.DF_STATUS_OK
+}
+
 //export bg_go_world_liquid_get
 func bg_go_world_liquid_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, found *C.uint8_t, output *C.DfBlockData) C.DfStatus {
 	host, ok := resolveHost(uint64(context))

@@ -835,6 +835,8 @@ type csharpWorldHost struct {
 	light                      uint8
 	skyLightCall               csharpWorldQueryCall
 	skyLight                   uint8
+	redstonePower              [7]int32
+	redstonePowerCalls         []csharpWorldRedstoneCall
 	worldQueryOperations       []string
 	worldLiquid                WorldBlock
 	worldLiquidOK              bool
@@ -902,6 +904,14 @@ type csharpWorldQueryCall struct {
 	position   BlockPos
 	x          int32
 	z          int32
+}
+
+type csharpWorldRedstoneCall struct {
+	invocation InvocationID
+	world      WorldID
+	position   BlockPos
+	face       int32
+	kind       WorldRedstonePowerKind
 }
 
 type csharpWorldLiquidSetCall struct {
@@ -1137,6 +1147,17 @@ func (h *csharpWorldHost) WorldSkyLight(invocation InvocationID, world WorldID, 
 	return h.skyLight, true
 }
 
+func (h *csharpWorldHost) WorldRedstonePower(invocation InvocationID, world WorldID, position BlockPos, face int32, kind WorldRedstonePowerKind) (int32, bool) {
+	if kind > WorldRedstoneStrongPowerFrom {
+		return 0, false
+	}
+	h.redstonePowerCalls = append(h.redstonePowerCalls, csharpWorldRedstoneCall{
+		invocation: invocation, world: world, position: position, face: face, kind: kind,
+	})
+	h.worldQueryOperations = append(h.worldQueryOperations, "redstone")
+	return h.redstonePower[kind], true
+}
+
 func (h *csharpWorldHost) WorldLiquid(invocation InvocationID, world WorldID, position BlockPos) (WorldBlock, bool, bool) {
 	h.worldLiquidInvocation, h.worldLiquidWorld, h.worldLiquidPosition = invocation, world, position
 	h.worldLiquidCalls++
@@ -1283,6 +1304,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		highestBlock:        72,
 		light:               9,
 		skyLight:            15,
+		redstonePower:       [7]int32{15, 14, 13, 12, 11, 10, 9},
 		worldBiome:          1,
 		worldTemperature:    0.75,
 		worldRainingAt:      true,
@@ -1566,7 +1588,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	input.Overload = 7
 	input.Arguments = []string{"block"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=false, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, redstone=15/14/13/12/11/10/9, liquid_before=false, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
 		t.Fatalf("block output=%#v error=%v", output, err)
 	}
 	wantUniqueLookups := []struct {
@@ -1642,6 +1664,18 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatalf("scalar query calls: highest_light=%+v highest=%+v light=%+v sky_light=%+v",
 			host.highestLightBlockerCall, host.highestBlockCall, host.lightCall, host.skyLightCall)
 	}
+	wantRedstoneCalls := []csharpWorldRedstoneCall{
+		{invocation: 42, position: queryPosition, face: 0, kind: WorldRedstonePower},
+		{invocation: 42, position: queryPosition, face: 0, kind: WorldRedstoneDirectPower},
+		{invocation: 42, position: queryPosition, face: 0, kind: WorldRedstoneStrongPower},
+		{invocation: 42, position: queryPosition, face: 0, kind: WorldRedstoneConductivePower},
+		{invocation: 42, position: queryPosition, face: 5, kind: WorldRedstonePowerFrom},
+		{invocation: 42, position: queryPosition, face: 5, kind: WorldRedstoneDirectPowerFrom},
+		{invocation: 42, position: queryPosition, face: 5, kind: WorldRedstoneStrongPowerFrom},
+	}
+	if !slices.Equal(host.redstonePowerCalls, wantRedstoneCalls) {
+		t.Fatalf("redstone query calls=%+v", host.redstonePowerCalls)
+	}
 	if host.blockIteratorOpenCalls != 1 || host.blockIteratorNextCalls != 1 || host.blockIteratorCloseCalls != 1 ||
 		host.blockIteratorInvocation != 42 || host.blockIteratorClosed != 7 || host.blockIteratorIndex != 1 {
 		t.Fatalf("block iterator: open=%d next=%d close=%d invocation=%d closed=%d index=%d",
@@ -1650,7 +1684,9 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	}
 	if !slices.Equal(host.worldQueryOperations, []string{
 		"highest-light-blocker", "highest-light-blocker",
-		"highest-light-blocker", "highest-block", "light", "sky-light", "open", "next", "close",
+		"highest-light-blocker", "highest-block", "light", "sky-light",
+		"redstone", "redstone", "redstone", "redstone", "redstone", "redstone", "redstone",
+		"open", "next", "close",
 	}) {
 		t.Fatalf("world query operations=%v", host.worldQueryOperations)
 	}
@@ -1675,7 +1711,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	host.worldBlockLoadedOK = false
 	host.worldBlock, host.worldBlockOK = host.worldBlockLoaded, true
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=true, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, redstone=15/14/13/12/11/10/9, liquid_before=true, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
 		t.Fatalf("unloaded block output=%#v error=%v", output, err)
 	}
 	if host.worldRangeCalls != 4 || host.worldBlockLoadedCalls != 3 || host.worldBlockCalls != 2 {

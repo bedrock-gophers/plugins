@@ -901,6 +901,11 @@ public sealed class KitchenSink : Plugin
             var highestBlock = tx.HighestBlock(position.X(), position.Z());
             var light = tx.Light(position);
             var skyLight = tx.SkyLight(position);
+            var redstone = $"{tx.RedstonePower(position)}/{tx.RedstoneDirectPower(position)}/" +
+                $"{tx.RedstoneStrongPower(position)}/{tx.RedstoneConductivePower(position)}/" +
+                $"{tx.RedstonePowerFrom(position, Cube.Face.East)}/" +
+                $"{tx.RedstoneDirectPowerFrom(position, Cube.Face.East)}/" +
+                $"{tx.RedstoneStrongPowerFrom(position, Cube.Face.East)}";
             var (_, liquidBeforeFound) = tx.Liquid(position);
             tx.SetBlock(position, new Block.Sand(), new World.SetOpts
             {
@@ -928,7 +933,7 @@ public sealed class KitchenSink : Plugin
             output.Printf(
                 "block={0}, lookup={1}, range={2}..{3}, loaded={4}, was_sand={5}, nearby_sand={6}, " +
                 "highest_light_blocker={7}, highest_block={8}, light={9}, sky_light={10}, " +
-                "liquid_before={11}, liquid={12}:{13}, scheduled_update=water:{14}ms",
+                "redstone={11}, liquid_before={12}, liquid={13}:{14}, scheduled_update=water:{15}ms",
                 position,
                 lookupOK ? "true" : "false",
                 range.Min(),
@@ -940,6 +945,7 @@ public sealed class KitchenSink : Plugin
                 highestBlock,
                 light,
                 skyLight,
+                redstone,
                 liquidBeforeFound ? "true" : "false",
                 liquidFound ? "true" : "false",
                 liquidState,

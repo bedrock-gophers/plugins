@@ -69,6 +69,27 @@ public sealed partial class World
         public byte SkyLight(Cube.Pos pos) =>
             PluginBridge.Host.WorldSkyLight(Invocation, pos);
 
+        public int RedstonePower(Cube.Pos pos) =>
+            PluginBridge.Host.WorldRedstonePower(Invocation, pos, Cube.Face.Down, PluginBridge.Host.RedstonePowerKind.RedstonePower);
+
+        public int RedstoneDirectPower(Cube.Pos pos) =>
+            PluginBridge.Host.WorldRedstonePower(Invocation, pos, Cube.Face.Down, PluginBridge.Host.RedstonePowerKind.RedstoneDirectPower);
+
+        public int RedstoneStrongPower(Cube.Pos pos) =>
+            PluginBridge.Host.WorldRedstonePower(Invocation, pos, Cube.Face.Down, PluginBridge.Host.RedstonePowerKind.RedstoneStrongPower);
+
+        public int RedstoneConductivePower(Cube.Pos pos) =>
+            PluginBridge.Host.WorldRedstonePower(Invocation, pos, Cube.Face.Down, PluginBridge.Host.RedstonePowerKind.RedstoneConductivePower);
+
+        public int RedstonePowerFrom(Cube.Pos pos, Cube.Face face) =>
+            PluginBridge.Host.WorldRedstonePower(Invocation, pos, face, PluginBridge.Host.RedstonePowerKind.RedstonePowerFrom);
+
+        public int RedstoneDirectPowerFrom(Cube.Pos pos, Cube.Face face) =>
+            PluginBridge.Host.WorldRedstonePower(Invocation, pos, face, PluginBridge.Host.RedstonePowerKind.RedstoneDirectPowerFrom);
+
+        public int RedstoneStrongPowerFrom(Cube.Pos pos, Cube.Face face) =>
+            PluginBridge.Host.WorldRedstonePower(Invocation, pos, face, PluginBridge.Host.RedstonePowerKind.RedstoneStrongPowerFrom);
+
         public void SetBiome(Cube.Pos pos, Biome b) =>
             PluginBridge.Host.SetWorldBiome(Invocation, pos, b);
 

@@ -1261,6 +1261,44 @@ func (m *WorldManager) WorldSkyLight(invocation native.InvocationID, id native.W
 	return m.worldLight(invocation, id, position, (*world.Tx).SkyLight)
 }
 
+func (m *WorldManager) WorldRedstonePower(invocation native.InvocationID, id native.WorldID, position native.BlockPos, face int32, kind native.WorldRedstonePowerKind) (int32, bool) {
+	entry, ok := m.entryForInvocation(invocation, id)
+	if !ok {
+		return 0, false
+	}
+	entry.lifecycle.RLock()
+	defer entry.lifecycle.RUnlock()
+	if entry.closed {
+		return 0, false
+	}
+	tx := m.currentTx(invocation, entry.world)
+	if tx == nil {
+		return 0, false
+	}
+	pos := blockPosition(position)
+	side := cube.Face(face)
+	var power int
+	switch kind {
+	case native.WorldRedstonePower:
+		power = tx.RedstonePower(pos)
+	case native.WorldRedstoneDirectPower:
+		power = tx.RedstoneDirectPower(pos)
+	case native.WorldRedstoneStrongPower:
+		power = tx.RedstoneStrongPower(pos)
+	case native.WorldRedstoneConductivePower:
+		power = tx.RedstoneConductivePower(pos)
+	case native.WorldRedstonePowerFrom:
+		power = tx.RedstonePowerFrom(pos, side)
+	case native.WorldRedstoneDirectPowerFrom:
+		power = tx.RedstoneDirectPowerFrom(pos, side)
+	case native.WorldRedstoneStrongPowerFrom:
+		power = tx.RedstoneStrongPowerFrom(pos, side)
+	default:
+		return 0, false
+	}
+	return int32(power), true
+}
+
 func (m *WorldManager) worldLight(invocation native.InvocationID, id native.WorldID, position native.BlockPos, read func(*world.Tx, cube.Pos) uint8) (uint8, bool) {
 	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {

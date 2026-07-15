@@ -319,6 +319,28 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 		if got, ok := manager.WorldSkyLight(invocation, 0, blockPosition); !ok || got != tx.SkyLight(cube.Pos{2, 3, 4}) {
 			t.Fatalf("WorldSkyLight() = %d, %v", got, ok)
 		}
+		pos, face := cube.Pos{2, 3, 4}, cube.FaceEast
+		redstoneQueries := []struct {
+			kind native.WorldRedstonePowerKind
+			want int
+		}{
+			{native.WorldRedstonePower, tx.RedstonePower(pos)},
+			{native.WorldRedstoneDirectPower, tx.RedstoneDirectPower(pos)},
+			{native.WorldRedstoneStrongPower, tx.RedstoneStrongPower(pos)},
+			{native.WorldRedstoneConductivePower, tx.RedstoneConductivePower(pos)},
+			{native.WorldRedstonePowerFrom, tx.RedstonePowerFrom(pos, face)},
+			{native.WorldRedstoneDirectPowerFrom, tx.RedstoneDirectPowerFrom(pos, face)},
+			{native.WorldRedstoneStrongPowerFrom, tx.RedstoneStrongPowerFrom(pos, face)},
+		}
+		for _, query := range redstoneQueries {
+			got, ok := manager.WorldRedstonePower(invocation, 0, blockPosition, int32(face), query.kind)
+			if !ok || got != int32(query.want) {
+				t.Fatalf("WorldRedstonePower(%d) = %d, %v; want %d", query.kind, got, ok, query.want)
+			}
+		}
+		if _, ok := manager.WorldRedstonePower(invocation, 0, blockPosition, int32(face), 99); ok {
+			t.Fatal("unknown redstone query succeeded")
+		}
 		plains, ok := world.BiomeByName("plains")
 		if !ok {
 			t.Fatal("plains biome is not registered")
@@ -408,6 +430,9 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 	}
 	if _, ok := manager.WorldRange(9999, 0); ok {
 		t.Fatal("stale invocation resolved a world range")
+	}
+	if _, ok := manager.WorldRedstonePower(9999, 0, native.BlockPos{}, 0, native.WorldRedstonePower); ok {
+		t.Fatal("stale invocation resolved redstone power")
 	}
 	if _, ok := manager.WorldBiome(9999, 0, native.BlockPos{}); ok {
 		t.Fatal("stale invocation resolved a biome")

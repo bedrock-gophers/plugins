@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 12u
-// Host version 65 carries concrete and custom sounds through one V2 view.
-#define DF_HOST_ABI_VERSION 65u
+// Host version 66 adds exact transaction redstone power queries.
+#define DF_HOST_ABI_VERSION 66u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -440,6 +440,14 @@ typedef DfStatus (*DfHostWorldBlocksWithinNextFn)(uint64_t context, DfInvocation
 typedef void (*DfHostWorldBlocksWithinCloseFn)(uint64_t context, DfInvocationId invocation, DfBlockIteratorId iterator);
 typedef DfStatus (*DfHostWorldHeightFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int32_t x, int32_t z, int32_t *height);
 typedef DfStatus (*DfHostWorldLightFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *level);
+#define DF_WORLD_REDSTONE_POWER 0u
+#define DF_WORLD_REDSTONE_DIRECT_POWER 1u
+#define DF_WORLD_REDSTONE_STRONG_POWER 2u
+#define DF_WORLD_REDSTONE_CONDUCTIVE_POWER 3u
+#define DF_WORLD_REDSTONE_POWER_FROM 4u
+#define DF_WORLD_REDSTONE_DIRECT_POWER_FROM 5u
+#define DF_WORLD_REDSTONE_STRONG_POWER_FROM 6u
+typedef DfStatus (*DfHostWorldRedstonePowerFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, int32_t face, uint32_t kind, int32_t *power);
 typedef DfStatus (*DfHostWorldTimeGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t *time);
 typedef DfStatus (*DfHostWorldTimeSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time);
 typedef DfStatus (*DfHostWorldSpawnGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
@@ -666,6 +674,7 @@ typedef struct {
     DfHostPlayerEntityActionFn player_entity_action;
     DfHostPlayerItemActionFn player_item_action;
     DfHostWorldTxDeferFn world_tx_defer;
+    DfHostWorldRedstonePowerFn world_redstone_power;
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u

@@ -214,6 +214,18 @@ type WorldSetOpts struct {
 	DisableRedstoneUpdates    bool
 }
 
+type WorldRedstonePowerKind uint32
+
+const (
+	WorldRedstonePower WorldRedstonePowerKind = iota
+	WorldRedstoneDirectPower
+	WorldRedstoneStrongPower
+	WorldRedstoneConductivePower
+	WorldRedstonePowerFrom
+	WorldRedstoneDirectPowerFrom
+	WorldRedstoneStrongPowerFrom
+)
+
 type WorldTaskPhase uint32
 
 const (
@@ -505,6 +517,7 @@ type Host interface {
 	WorldHighestBlock(InvocationID, WorldID, int32, int32) (int32, bool)
 	WorldLight(InvocationID, WorldID, BlockPos) (uint8, bool)
 	WorldSkyLight(InvocationID, WorldID, BlockPos) (uint8, bool)
+	WorldRedstonePower(InvocationID, WorldID, BlockPos, int32, WorldRedstonePowerKind) (int32, bool)
 	WorldTime(InvocationID, WorldID) (int64, bool)
 	SetWorldTime(InvocationID, WorldID, int64) bool
 	WorldSpawn(InvocationID, WorldID) (BlockPos, bool)
@@ -700,10 +713,13 @@ func (noopHost) WorldHighestBlock(InvocationID, WorldID, int32, int32) (int32, b
 }
 func (noopHost) WorldLight(InvocationID, WorldID, BlockPos) (uint8, bool)    { return 0, false }
 func (noopHost) WorldSkyLight(InvocationID, WorldID, BlockPos) (uint8, bool) { return 0, false }
-func (noopHost) WorldTime(InvocationID, WorldID) (int64, bool)               { return 0, false }
-func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool              { return false }
-func (noopHost) WorldSpawn(InvocationID, WorldID) (BlockPos, bool)           { return BlockPos{}, false }
-func (noopHost) SetWorldSpawn(InvocationID, WorldID, BlockPos) bool          { return false }
+func (noopHost) WorldRedstonePower(InvocationID, WorldID, BlockPos, int32, WorldRedstonePowerKind) (int32, bool) {
+	return 0, false
+}
+func (noopHost) WorldTime(InvocationID, WorldID) (int64, bool)      { return 0, false }
+func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool     { return false }
+func (noopHost) WorldSpawn(InvocationID, WorldID) (BlockPos, bool)  { return BlockPos{}, false }
+func (noopHost) SetWorldSpawn(InvocationID, WorldID, BlockPos) bool { return false }
 func (noopHost) WorldPlayerSpawn(InvocationID, WorldID, [16]byte) (BlockPos, bool) {
 	return BlockPos{}, false
 }
