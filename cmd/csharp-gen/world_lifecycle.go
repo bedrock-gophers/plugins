@@ -10,6 +10,10 @@ import (
 
 var selectedWorldLifecycleMethods = []string{
 	"Name",
+	"Range",
+	"HighestLightBlocker",
+	"Time",
+	"SetTime",
 	"Spawn",
 	"SetSpawn",
 	"Save",
@@ -34,14 +38,19 @@ func inspectWorldLifecycleMethods(path string) ([]worldLifecycleMethod, error) {
 		}
 	}
 	want := map[string]goSignature{
-		"Name":     {Results: "string"},
-		"Spawn":    {Results: "cube.Pos"},
-		"SetSpawn": {Parameters: "cube.Pos"},
-		"Save":     {},
-		"Close":    {Results: "error"},
+		"Name":                {Results: "string"},
+		"Range":               {Results: "cube.Range"},
+		"HighestLightBlocker": {Parameters: "int, int", Results: "int"},
+		"Time":                {Results: "int"},
+		"SetTime":             {Parameters: "int"},
+		"Spawn":               {Results: "cube.Pos"},
+		"SetSpawn":            {Parameters: "cube.Pos"},
+		"Save":                {},
+		"Close":               {Results: "error"},
 	}
 	wantParameterCount := map[string]int{
-		"Name": 0, "Spawn": 0, "SetSpawn": 1, "Save": 0, "Close": 0,
+		"Name": 0, "Range": 0, "HighestLightBlocker": 2, "Time": 0, "SetTime": 1,
+		"Spawn": 0, "SetSpawn": 1, "Save": 0, "Close": 0,
 	}
 	methods := make([]worldLifecycleMethod, 0, len(selectedWorldLifecycleMethods))
 	for _, name := range selectedWorldLifecycleMethods {
@@ -76,6 +85,15 @@ func generateWorldLifecycleMethods(methods []worldLifecycleMethod) []byte {
 		switch method.Name {
 		case "Name":
 			output.WriteString("    public string Name() => PluginBridge.Host.WorldName(_invocation, Id) ?? string.Empty;\n")
+		case "Range":
+			output.WriteString("    public Cube.Range Range() => PluginBridge.Host.WorldRange(_invocation, Id);\n")
+		case "HighestLightBlocker":
+			fmt.Fprintf(&output, "    public int HighestLightBlocker(int %s, int %s) =>\n        PluginBridge.Host.WorldHighestLightBlocker(_invocation, Id, %s, %s);\n", method.Parameters[0], method.Parameters[1], method.Parameters[0], method.Parameters[1])
+		case "Time":
+			output.WriteString("    public int Time() => PluginBridge.Host.WorldTime(_invocation, Id);\n")
+		case "SetTime":
+			parameter := csharpIdentifier(method.Parameters[0])
+			fmt.Fprintf(&output, "    public void SetTime(int %s) => PluginBridge.Host.SetWorldTime(_invocation, Id, %s);\n", parameter, parameter)
 		case "Spawn":
 			output.WriteString("    public Cube.Pos Spawn() => PluginBridge.Host.WorldSpawn(_invocation, Id);\n")
 		case "SetSpawn":

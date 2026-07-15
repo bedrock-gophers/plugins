@@ -375,8 +375,8 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, int> WorldSave;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, BlockData*, int> WorldBlockGet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, BlockView*, uint, int> WorldBlockSet;
-    public void* WorldTimeGet;
-    public void* WorldTimeSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, long*, int> WorldTimeGet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, long, int> WorldTimeSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos*, int> WorldSpawnGet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, int> WorldSpawnSet;
     public void* WorldEntitySpawn;

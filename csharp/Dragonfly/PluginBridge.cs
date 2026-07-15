@@ -1686,6 +1686,36 @@ internal static unsafe class PluginBridge
             return new Cube.Range(range.Min, range.Max);
         }
 
+        internal static Cube.Range WorldRange(ulong invocation, WorldId world)
+        {
+            var api = Api;
+            if (api is null || api->WorldRange == null)
+                throw new InvalidOperationException("world is unavailable");
+            BlockRange range;
+            if (api->WorldRange(api->Context, invocation, world, &range) != Abi.Ok || range.Min > range.Max)
+                throw new InvalidOperationException("world is no longer valid");
+            return new Cube.Range(range.Min, range.Max);
+        }
+
+        internal static int WorldTime(ulong invocation, WorldId world)
+        {
+            var api = Api;
+            if (api is null || api->WorldTimeGet == null)
+                throw new InvalidOperationException("world is unavailable");
+            long value;
+            if (api->WorldTimeGet(api->Context, invocation, world, &value) != Abi.Ok)
+                throw new InvalidOperationException("world is no longer valid");
+            return checked((int)value);
+        }
+
+        internal static void SetWorldTime(ulong invocation, WorldId world, int value)
+        {
+            var api = Api;
+            if (api is null || api->WorldTimeSet == null ||
+                api->WorldTimeSet(api->Context, invocation, world, value) != Abi.Ok)
+                return;
+        }
+
         internal static (World.Block? Block, bool Loaded) WorldBlockLoaded(
             ulong invocation,
             Cube.Pos position)
@@ -2475,6 +2505,17 @@ internal static unsafe class PluginBridge
             int y;
             if (api->WorldHighestLightBlocker(api->Context, invocation, default, x, z, &y) != Abi.Ok)
                 throw new InvalidOperationException("world transaction is no longer valid");
+            return y;
+        }
+
+        internal static int WorldHighestLightBlocker(ulong invocation, WorldId world, int x, int z)
+        {
+            var api = Api;
+            if (api is null || api->WorldHighestLightBlocker == null)
+                throw new InvalidOperationException("world is unavailable");
+            int y;
+            if (api->WorldHighestLightBlocker(api->Context, invocation, world, x, z, &y) != Abi.Ok)
+                throw new InvalidOperationException("world is no longer valid");
             return y;
         }
 

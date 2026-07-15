@@ -57,7 +57,8 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    block types covering all 314 registered states whose varying registry-state fields are primitive,
    plus `Block.Water` and `Block.Lava`. Promoted fields are expanded through Dragonfly's AST, so
    all eight growth stages of `BeetrootSeeds`, `Carrot`, `Potato`, and `WheatSeeds` remain typed.
-   The biome slice adds
+   World values also expose AST-generated `Range`, `HighestLightBlocker`, `Time`, and `SetTime`
+   through the same typed world transport used by transactions. The biome slice adds
    `World.Biome`, all 88 registered vanilla biome types, `SetBiome`, `Biome`, `Temperature`,
    `RainingAt`, `SnowingAt`, `ThunderingAt`, `Raining`, `Thundering`, and `CurrentTick`.
    The particle slice adds `World.Particle`, `World.Tx.AddParticle`, all 20 concrete Dragonfly

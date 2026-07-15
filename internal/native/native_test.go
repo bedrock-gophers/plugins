@@ -505,6 +505,9 @@ func (h *recordingHost) SetWorldTime(_ InvocationID, _ WorldID, value int64) boo
 	h.worldTime = value
 	return true
 }
+func (h *recordingHost) WorldTime(_ InvocationID, id WorldID) (int64, bool) {
+	return h.worldTime, id == 0 || id == h.worldID
+}
 func (h *recordingHost) SetWorldSpawn(_ InvocationID, _ WorldID, position BlockPos) bool {
 	h.worldSpawn = position
 	return true

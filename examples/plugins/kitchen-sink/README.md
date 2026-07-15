@@ -33,7 +33,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - food, health, experience, scale, visibility, and mobility state round-trips in `/kitchen state`;
 - direct typed healing in `/kitchen heal`;
 - in-memory `World.New()`, writable MCDB-backed `World.Config.New()`, owner scheduling,
-  AST-generated world name/spawn/save methods, and safe cross-world player movement in
+  AST-generated world name/range/height/time/spawn/save methods, and safe cross-world player movement in
   `/kitchen world`;
 - generated typed items (including finite stateful families, NBT-backed books, typed fireworks,
   seven armour tiers, four armour pieces, and 11 trim materials), firework explosions and shapes,

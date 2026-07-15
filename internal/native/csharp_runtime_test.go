@@ -695,6 +695,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 			Velocity: Vec3{X: 0.25, Y: 0.5, Z: -0.25},
 			Rotation: Rotation{Yaw: 90, Pitch: -15},
 		}, worldID: 91, worldName: "kitchen:arena", worldSpawn: BlockPos{X: 8, Y: 70, Z: -4},
+			worldTime:  6000,
 			healed:     4,
 			hurtResult: PlayerHurtResult{Damage: 1, Vulnerable: true},
 			stateValues: map[PlayerStateKind]PlayerStateValue{
@@ -853,7 +854,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	configuredWorld.Overload = 21
 	configuredWorld.Arguments = []string{"world"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, configuredWorld)
-	if err != nil || output.Failed || output.Message != "memory=World, persistent=kitchen:arena, spawn=8,70,-4" {
+	if err != nil || output.Failed || output.Message != "memory=World, persistent=kitchen:arena, spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000" {
 		t.Fatalf("configured world output=%#v error=%v", output, err)
 	}
 	if len(host.worldConfigs) != 2 || host.worldConfigs[0] != (WorldConfig{
@@ -869,15 +870,22 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		host.worldSpawn != (BlockPos{X: 8, Y: 70, Z: -4}) || host.transferInvocation != 42 ||
 		host.transferPlayer != player || host.transferWorld != 91 ||
 		host.transferPosition != (Vec3{X: 8.5, Y: 70, Z: -3.5}) ||
+		host.worldRangeCalls != 1 || host.worldRangeInvocation != 0 || host.worldRangeWorld != 91 ||
+		host.highestLightBlockerCall != (csharpWorldQueryCall{world: 91, x: 8, z: -4}) ||
+		host.worldTime != 6000 ||
 		!slices.Equal(host.scheduledWorlds, []WorldID{90}) || len(host.scheduledPlugins) != 1 ||
 		len(host.scheduledCallbacks) != 1 {
-		t.Fatalf("configured world host state: %+v", host.recordingHost)
+		t.Fatalf("configured world host state: configs=%+v saved=%v spawn=%+v transfer=%d/%+v/%d/%+v range=%d/%d/%d highest=%+v time=%d scheduled=%v/%v/%v",
+			host.worldConfigs, host.worldSaved, host.worldSpawn, host.transferInvocation, host.transferPlayer,
+			host.transferWorld, host.transferPosition, host.worldRangeCalls, host.worldRangeInvocation,
+			host.worldRangeWorld, host.highestLightBlockerCall, host.worldTime, host.scheduledWorlds,
+			host.scheduledPlugins, host.scheduledCallbacks)
 	}
 	longWorldName := strings.Repeat("arena", 80)
 	host.worldName = longWorldName
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, configuredWorld)
 	if err != nil || output.Failed || output.Message !=
-		"memory=World, persistent="+longWorldName+", spawn=8,70,-4" {
+		"memory=World, persistent="+longWorldName+", spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000" {
 		t.Fatalf("long world name output=%#v error=%v", output, err)
 	}
 	host.worldName = "kitchen:arena"
@@ -1009,7 +1017,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 			t.Fatalf("BlockByName(%q, %#v): %v", want.name, lookupProperties, err)
 		}
 	}
-	if host.worldRangeCalls != 1 || host.worldRangeInvocation != 42 || host.worldRangeWorld != 0 {
+	if host.worldRangeCalls != 3 || host.worldRangeInvocation != 42 || host.worldRangeWorld != 0 {
 		t.Fatalf("range host calls: calls=%d invocation=%d world=%d", host.worldRangeCalls, host.worldRangeInvocation, host.worldRangeWorld)
 	}
 	if host.worldBlockLoadedCalls != 2 || host.worldBlockLoadedInvocation != 42 || host.worldBlockLoadedWorld != 0 ||
@@ -1050,6 +1058,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 			host.blockIteratorInvocation, host.blockIteratorClosed, host.blockIteratorIndex)
 	}
 	if !slices.Equal(host.worldQueryOperations, []string{
+		"highest-light-blocker", "highest-light-blocker",
 		"highest-light-blocker", "highest-block", "light", "sky-light", "open", "next", "close",
 	}) {
 		t.Fatalf("world query operations=%v", host.worldQueryOperations)
@@ -1078,7 +1087,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, liquid_before=true, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
 		t.Fatalf("unloaded block output=%#v error=%v", output, err)
 	}
-	if host.worldRangeCalls != 2 || host.worldBlockLoadedCalls != 3 || host.worldBlockCalls != 2 {
+	if host.worldRangeCalls != 4 || host.worldBlockLoadedCalls != 3 || host.worldBlockCalls != 2 {
 		t.Fatalf("unloaded fallback host calls: range=%d loaded=%d block=%d",
 			host.worldRangeCalls, host.worldBlockLoadedCalls, host.worldBlockCalls)
 	}

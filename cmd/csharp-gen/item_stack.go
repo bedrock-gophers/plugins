@@ -196,7 +196,7 @@ func writeItemStackWrapper(output *bytes.Buffer, function itemStackFunction, res
 		if parameter.Variadic {
 			output.WriteString("params ")
 		}
-		fmt.Fprintf(output, "%s%s %s", parameter.Type, map[bool]string{true: "[]"}[parameter.Variadic], csharpItemStackIdentifier(parameter.Name))
+		fmt.Fprintf(output, "%s%s %s", parameter.Type, map[bool]string{true: "[]"}[parameter.Variadic], csharpIdentifier(parameter.Name))
 	}
 	output.WriteString(") =>\n")
 	if static {
@@ -209,12 +209,12 @@ func writeItemStackWrapper(output *bytes.Buffer, function itemStackFunction, res
 		if index != 0 {
 			output.WriteString(", ")
 		}
-		output.WriteString(csharpItemStackIdentifier(parameter.Name))
+		output.WriteString(csharpIdentifier(parameter.Name))
 	}
 	output.WriteString(");\n")
 }
 
-func csharpItemStackIdentifier(name string) string {
+func csharpIdentifier(name string) string {
 	if _, keyword := map[string]struct{}{
 		"abstract": {}, "as": {}, "base": {}, "bool": {}, "break": {}, "byte": {}, "case": {}, "catch": {},
 		"char": {}, "checked": {}, "class": {}, "const": {}, "continue": {}, "decimal": {}, "default": {},

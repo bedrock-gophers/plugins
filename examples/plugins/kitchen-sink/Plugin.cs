@@ -521,12 +521,18 @@ public sealed class KitchenSink : Plugin
                 RandomTickSpeed = -1,
             }.New();
             var spawn = arena.Spawn();
+            var range = arena.Range();
+            var highestLightBlocker = arena.HighestLightBlocker(spawn.X(), spawn.Z());
+            var time = arena.Time();
+            arena.SetTime(time);
             arena.SetSpawn(spawn);
             arena.Save();
             player.ChangeWorld(arena, spawn.Vec3Middle());
             output.Printf(
-                "memory={0}, persistent={1}, spawn={2},{3},{4}",
-                memory.Name(), arena.Name(), spawn.X(), spawn.Y(), spawn.Z());
+                "memory={0}, persistent={1}, spawn={2},{3},{4}, range={5}..{6}, " +
+                "highest_light_blocker={7}, time={8}",
+                memory.Name(), arena.Name(), spawn.X(), spawn.Y(), spawn.Z(),
+                range.Min(), range.Max(), highestLightBlocker, time);
         }
     }
 
