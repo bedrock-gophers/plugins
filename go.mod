@@ -2,10 +2,11 @@ module example.com/bedrock-gophers-minimal
 
 go 1.26.0
 
-require github.com/bedrock-gophers/plugins v0.0.0-20260715145557-273cc247c58b
+require github.com/bedrock-gophers/plugins v0.0.0-20260715151226-768308cb0d06
 
 require (
 	github.com/bedrock-gophers/intercept v0.3.0 // indirect
+	github.com/bedrock-gophers/unsafe v0.1.1 // indirect
 	github.com/brentp/intintmap v0.0.0-20251106190759-56907b1f8479 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
