@@ -31,6 +31,7 @@ leaving the player changed.
 `/kitchen presentation` sends an AST-generated typed `Title` with subtitle, action text, and
 durations.
 `/kitchen cooldown` exercises typed `Player.HasCooldown` and `SetCooldown` with a diamond sword.
+`/kitchen scoreboard` builds and sends an AST-generated typed scoreboard.
 `/kitchen item` builds a typed diamond sword, round-trips inventory, armour, and held-item APIs,
 then restores every changed slot.
 `/kitchen form` covers reflected menu, custom, and modal forms with every typed element;
