@@ -256,6 +256,25 @@ func bg_go_world_redstone_power(context C.uint64_t, invocation C.DfInvocationId,
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_world_redstone_transaction
+func bg_go_world_redstone_transaction(context C.uint64_t, invocation C.DfInvocationId, position C.DfBlockPos, kind C.uint32_t, first, second *C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || first == nil || second == nil {
+		return C.DF_STATUS_ERROR
+	}
+	firstValue, secondValue, ok := host.WorldRedstoneTransaction(
+		InvocationID(invocation),
+		nativeBlockPosition(position),
+		WorldRedstoneTransactionKind(kind),
+	)
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	*first = C.uint8_t(boolByte(firstValue))
+	*second = C.uint8_t(boolByte(secondValue))
+	return C.DF_STATUS_OK
+}
+
 //export bg_go_world_liquid_get
 func bg_go_world_liquid_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, position C.DfBlockPos, found *C.uint8_t, output *C.DfBlockData) C.DfStatus {
 	host, ok := resolveHost(uint64(context))

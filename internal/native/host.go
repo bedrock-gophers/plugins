@@ -226,6 +226,17 @@ const (
 	WorldRedstoneStrongPowerFrom
 )
 
+type WorldRedstoneTransactionKind uint32
+
+const (
+	WorldRedstoneScheduleUpdate WorldRedstoneTransactionKind = iota
+	WorldRedstoneBurnoutStatus
+	WorldRedstoneRecordTurnOff
+	WorldRedstoneMarkSelfTriggered
+	WorldRedstoneConsumeSelfTriggered
+	WorldRedstoneClearBurnout
+)
+
 type WorldTaskPhase uint32
 
 const (
@@ -518,6 +529,7 @@ type Host interface {
 	WorldLight(InvocationID, WorldID, BlockPos) (uint8, bool)
 	WorldSkyLight(InvocationID, WorldID, BlockPos) (uint8, bool)
 	WorldRedstonePower(InvocationID, WorldID, BlockPos, int32, WorldRedstonePowerKind) (int32, bool)
+	WorldRedstoneTransaction(InvocationID, BlockPos, WorldRedstoneTransactionKind) (bool, bool, bool)
 	WorldTime(InvocationID, WorldID) (int64, bool)
 	SetWorldTime(InvocationID, WorldID, int64) bool
 	WorldSpawn(InvocationID, WorldID) (BlockPos, bool)
@@ -715,6 +727,9 @@ func (noopHost) WorldLight(InvocationID, WorldID, BlockPos) (uint8, bool)    { r
 func (noopHost) WorldSkyLight(InvocationID, WorldID, BlockPos) (uint8, bool) { return 0, false }
 func (noopHost) WorldRedstonePower(InvocationID, WorldID, BlockPos, int32, WorldRedstonePowerKind) (int32, bool) {
 	return 0, false
+}
+func (noopHost) WorldRedstoneTransaction(InvocationID, BlockPos, WorldRedstoneTransactionKind) (bool, bool, bool) {
+	return false, false, false
 }
 func (noopHost) WorldTime(InvocationID, WorldID) (int64, bool)      { return 0, false }
 func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool     { return false }

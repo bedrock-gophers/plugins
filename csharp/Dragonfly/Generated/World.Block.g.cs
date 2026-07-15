@@ -33,6 +33,9 @@ public sealed partial class World
         public Context Event() =>
             new(Invocation, false);
 
+        public RedstoneTransaction Redstone() =>
+            new(Invocation);
+
         public Cube.Range Range() =>
             PluginBridge.Host.WorldRange(Invocation);
 
@@ -140,5 +143,42 @@ public sealed partial class World
 
         public IEnumerable<Entity> Players() =>
             PluginBridge.Host.TransactionEntities(Invocation, playersOnly: true);
+    }
+
+    public readonly struct RedstoneTransaction
+    {
+        private readonly ulong _invocation;
+
+        internal RedstoneTransaction(ulong invocation) => _invocation = invocation;
+
+        public void ScheduleUpdate(Cube.Pos pos) =>
+            _ = PluginBridge.Host.WorldRedstoneTransaction(_invocation, pos, PluginBridge.Host.RedstoneTransactionKind.ScheduleUpdate);
+
+        public RedstoneTorchTransaction Torch(Cube.Pos pos) =>
+            new(_invocation, pos);
+    }
+
+    public readonly struct RedstoneTorchTransaction
+    {
+        private readonly ulong _invocation;
+        private readonly Cube.Pos _position;
+
+        internal RedstoneTorchTransaction(ulong invocation, Cube.Pos position) =>
+            (_invocation, _position) = (invocation, position);
+
+        public (bool BurnedOut, bool Recoverable) BurnoutStatus() =>
+            PluginBridge.Host.WorldRedstoneTransaction(_invocation, _position, PluginBridge.Host.RedstoneTransactionKind.BurnoutStatus);
+
+        public bool RecordTurnOff() =>
+            PluginBridge.Host.WorldRedstoneTransaction(_invocation, _position, PluginBridge.Host.RedstoneTransactionKind.RecordTurnOff).First;
+
+        public void MarkSelfTriggered() =>
+            _ = PluginBridge.Host.WorldRedstoneTransaction(_invocation, _position, PluginBridge.Host.RedstoneTransactionKind.MarkSelfTriggered);
+
+        public bool ConsumeSelfTriggered() =>
+            PluginBridge.Host.WorldRedstoneTransaction(_invocation, _position, PluginBridge.Host.RedstoneTransactionKind.ConsumeSelfTriggered).First;
+
+        public void ClearBurnout() =>
+            _ = PluginBridge.Host.WorldRedstoneTransaction(_invocation, _position, PluginBridge.Host.RedstoneTransactionKind.ClearBurnout);
     }
 }

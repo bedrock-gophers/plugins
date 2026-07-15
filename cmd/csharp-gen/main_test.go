@@ -421,6 +421,7 @@ func TestGeneratedWorldBlockSurfaceKeepsTransportPrivate(t *testing.T) {
 	source := `package world
 func (tx *Tx) World() *World { return nil }
 func (tx *Tx) Event() *Context { return nil }
+func (tx *Tx) Redstone() RedstoneTransaction { return RedstoneTransaction{} }
 func (tx *Tx) Range() cube.Range { return cube.Range{} }
 func (tx *Tx) SetBlock(pos cube.Pos, b Block, opts *SetOpts) {}
 func (tx *Tx) Block(pos cube.Pos) Block { return nil }
@@ -456,7 +457,16 @@ func (tx *Tx) AddEntityAt(e *EntityHandle, pos mgl64.Vec3) Entity { return nil }
 func (tx *Tx) RemoveEntity(e Entity) *EntityHandle { return nil }
 func (tx *Tx) Entities() iter.Seq[Entity] { return nil }
 func (tx *Tx) EntitiesWithin(box cube.BBox) iter.Seq[Entity] { return nil }
-func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
+func (tx *Tx) Players() iter.Seq[Entity] { return nil }
+type RedstoneTransaction struct{}
+func (r RedstoneTransaction) ScheduleUpdate(pos cube.Pos) {}
+func (r RedstoneTransaction) Torch(pos cube.Pos) RedstoneTorchTransaction { return RedstoneTorchTransaction{} }
+type RedstoneTorchTransaction struct{}
+func (t RedstoneTorchTransaction) BurnoutStatus() (burnedOut, recoverable bool) { return false, false }
+func (t RedstoneTorchTransaction) RecordTurnOff() (burnsOut bool) { return false }
+func (t RedstoneTorchTransaction) MarkSelfTriggered() {}
+func (t RedstoneTorchTransaction) ConsumeSelfTriggered() bool { return false }
+func (t RedstoneTorchTransaction) ClearBurnout() {}`
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -464,9 +474,13 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 	if err != nil {
 		t.Fatal(err)
 	}
+	redstone, err := inspectRedstoneTransactions(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	worldOutput := string(generateWorldBlock([]string{
 		"DisableBlockUpdates", "DisableLiquidDisplacement", "DisableRedstoneUpdates",
-	}, methods))
+	}, methods, redstone))
 	for _, expected := range []string{
 		"public interface Block { }",
 		"public static (Block? Block, bool Ok) BlockByName(string name, Dictionary<string, object?>? properties)",
@@ -478,6 +492,8 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 		"public Block Block(Cube.Pos pos)",
 		"public Context Event()",
 		"new(Invocation, false)",
+		"public RedstoneTransaction Redstone()",
+		"new(Invocation)",
 		"public (Block? Block, bool Ok) BlockLoaded(Cube.Pos pos)",
 		"public IEnumerable<Cube.Pos> BlocksWithin(Cube.Pos pos, int radius, params Block[] blocks)",
 		"public interface Liquid : Block { string LiquidType(); }",
@@ -498,6 +514,15 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 		"WorldRedstonePower(Invocation, pos, face, PluginBridge.Host.RedstonePowerKind.RedstonePowerFrom)",
 		"public int RedstoneDirectPowerFrom(Cube.Pos pos, Cube.Face face)",
 		"public int RedstoneStrongPowerFrom(Cube.Pos pos, Cube.Face face)",
+		"public readonly struct RedstoneTransaction",
+		"public void ScheduleUpdate(Cube.Pos pos)",
+		"public RedstoneTorchTransaction Torch(Cube.Pos pos)",
+		"public readonly struct RedstoneTorchTransaction",
+		"public (bool BurnedOut, bool Recoverable) BurnoutStatus()",
+		"public bool RecordTurnOff()",
+		"public void MarkSelfTriggered()",
+		"public bool ConsumeSelfTriggered()",
+		"public void ClearBurnout()",
 		"public interface Biome { }",
 		"public void SetBiome(Cube.Pos pos, Biome b)",
 		"public Biome Biome(Cube.Pos pos)",
@@ -535,7 +560,7 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 	if strings.Contains(worldOutput, "Identifier") || strings.Contains(worldOutput, "PropertiesNBT") {
 		t.Fatalf("public world surface exposes transport:\n%s", worldOutput)
 	}
-	withoutDuration := string(generateWorldBlock(nil, []commandMethod{{Name: "Range", ReturnType: "Cube.Range"}}))
+	withoutDuration := string(generateWorldBlock(nil, []commandMethod{{Name: "Range", ReturnType: "Cube.Range"}}, redstoneTransactionSpec{}))
 	if strings.Contains(withoutDuration, "using System;") {
 		t.Fatalf("world surface imports System without a System type:\n%s", withoutDuration)
 	}
@@ -669,6 +694,37 @@ func TestInspectWorldTxRejectsRedstoneDrift(t *testing.T) {
 			_, err := inspectWorldTx(path)
 			if err == nil || !strings.Contains(err.Error(), "signature changed") {
 				t.Fatalf("expected redstone signature drift error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestInspectRedstoneTransactionsRejectsDrift(t *testing.T) {
+	valid := `package world
+type RedstoneTransaction struct{}
+func (r RedstoneTransaction) ScheduleUpdate(pos cube.Pos) {}
+func (r RedstoneTransaction) Torch(pos cube.Pos) RedstoneTorchTransaction { return RedstoneTorchTransaction{} }
+type RedstoneTorchTransaction struct{}
+func (t RedstoneTorchTransaction) BurnoutStatus() (burnedOut, recoverable bool) { return false, false }
+func (t RedstoneTorchTransaction) RecordTurnOff() (burnsOut bool) { return false }
+func (t RedstoneTorchTransaction) MarkSelfTriggered() {}
+func (t RedstoneTorchTransaction) ConsumeSelfTriggered() bool { return false }
+func (t RedstoneTorchTransaction) ClearBurnout() {}`
+	for name, source := range map[string]string{
+		"pointer receiver": strings.Replace(valid, "(r RedstoneTransaction) ScheduleUpdate", "(r *RedstoneTransaction) ScheduleUpdate", 1),
+		"position name":    strings.Replace(valid, "ScheduleUpdate(pos cube.Pos)", "ScheduleUpdate(position cube.Pos)", 1),
+		"torch result":     strings.Replace(valid, ") Torch(pos cube.Pos) RedstoneTorchTransaction", ") Torch(pos cube.Pos) *RedstoneTorchTransaction", 1),
+		"unnamed status":   strings.Replace(valid, "(burnedOut, recoverable bool)", "(bool, bool)", 1),
+		"record result":    strings.Replace(valid, "RecordTurnOff() (burnsOut bool)", "RecordTurnOff() int", 1),
+		"missing struct":   strings.Replace(valid, "type RedstoneTorchTransaction struct{}", "type RedstoneTorchTransaction int", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "tx_redstone.go")
+			if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := inspectRedstoneTransactions(path); err == nil {
+				t.Fatal("expected redstone transaction AST drift error")
 			}
 		})
 	}

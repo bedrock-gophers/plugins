@@ -1299,6 +1299,39 @@ func (m *WorldManager) WorldRedstonePower(invocation native.InvocationID, id nat
 	return int32(power), true
 }
 
+func (m *WorldManager) WorldRedstoneTransaction(invocation native.InvocationID, position native.BlockPos, kind native.WorldRedstoneTransactionKind) (bool, bool, bool) {
+	if m.players == nil {
+		return false, false, false
+	}
+	tx, ok := m.players.InvocationTx(invocation)
+	if !ok {
+		return false, false, false
+	}
+	pos := blockPosition(position)
+	redstone := tx.Redstone()
+	torch := redstone.Torch(pos)
+	switch kind {
+	case native.WorldRedstoneScheduleUpdate:
+		redstone.ScheduleUpdate(pos)
+		return false, false, true
+	case native.WorldRedstoneBurnoutStatus:
+		burnedOut, recoverable := torch.BurnoutStatus()
+		return burnedOut, recoverable, true
+	case native.WorldRedstoneRecordTurnOff:
+		return torch.RecordTurnOff(), false, true
+	case native.WorldRedstoneMarkSelfTriggered:
+		torch.MarkSelfTriggered()
+		return false, false, true
+	case native.WorldRedstoneConsumeSelfTriggered:
+		return torch.ConsumeSelfTriggered(), false, true
+	case native.WorldRedstoneClearBurnout:
+		torch.ClearBurnout()
+		return false, false, true
+	default:
+		return false, false, false
+	}
+}
+
 func (m *WorldManager) worldLight(invocation native.InvocationID, id native.WorldID, position native.BlockPos, read func(*world.Tx, cube.Pos) uint8) (uint8, bool) {
 	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok {

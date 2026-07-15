@@ -837,6 +837,7 @@ type csharpWorldHost struct {
 	skyLight                   uint8
 	redstonePower              [7]int32
 	redstonePowerCalls         []csharpWorldRedstoneCall
+	redstoneTransactionCalls   []csharpWorldRedstoneTransactionCall
 	worldQueryOperations       []string
 	worldLiquid                WorldBlock
 	worldLiquidOK              bool
@@ -912,6 +913,12 @@ type csharpWorldRedstoneCall struct {
 	position   BlockPos
 	face       int32
 	kind       WorldRedstonePowerKind
+}
+
+type csharpWorldRedstoneTransactionCall struct {
+	invocation InvocationID
+	position   BlockPos
+	kind       WorldRedstoneTransactionKind
 }
 
 type csharpWorldLiquidSetCall struct {
@@ -1156,6 +1163,23 @@ func (h *csharpWorldHost) WorldRedstonePower(invocation InvocationID, world Worl
 	})
 	h.worldQueryOperations = append(h.worldQueryOperations, "redstone")
 	return h.redstonePower[kind], true
+}
+
+func (h *csharpWorldHost) WorldRedstoneTransaction(invocation InvocationID, position BlockPos, kind WorldRedstoneTransactionKind) (bool, bool, bool) {
+	if kind > WorldRedstoneClearBurnout {
+		return false, false, false
+	}
+	h.redstoneTransactionCalls = append(h.redstoneTransactionCalls, csharpWorldRedstoneTransactionCall{
+		invocation: invocation, position: position, kind: kind,
+	})
+	switch kind {
+	case WorldRedstoneBurnoutStatus:
+		return true, false, true
+	case WorldRedstoneRecordTurnOff, WorldRedstoneConsumeSelfTriggered:
+		return true, false, true
+	default:
+		return false, false, true
+	}
 }
 
 func (h *csharpWorldHost) WorldLiquid(invocation InvocationID, world WorldID, position BlockPos) (WorldBlock, bool, bool) {
@@ -1588,7 +1612,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	input.Overload = 7
 	input.Arguments = []string{"block"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, redstone=15/14/13/12/11/10/9, liquid_before=false, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=true, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, redstone=15/14/13/12/11/10/9, redstone_tx=true/false/true/true, liquid_before=false, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
 		t.Fatalf("block output=%#v error=%v", output, err)
 	}
 	wantUniqueLookups := []struct {
@@ -1676,6 +1700,17 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	if !slices.Equal(host.redstonePowerCalls, wantRedstoneCalls) {
 		t.Fatalf("redstone query calls=%+v", host.redstonePowerCalls)
 	}
+	wantRedstoneTransactions := []csharpWorldRedstoneTransactionCall{
+		{invocation: 42, position: queryPosition, kind: WorldRedstoneScheduleUpdate},
+		{invocation: 42, position: queryPosition, kind: WorldRedstoneBurnoutStatus},
+		{invocation: 42, position: queryPosition, kind: WorldRedstoneRecordTurnOff},
+		{invocation: 42, position: queryPosition, kind: WorldRedstoneMarkSelfTriggered},
+		{invocation: 42, position: queryPosition, kind: WorldRedstoneConsumeSelfTriggered},
+		{invocation: 42, position: queryPosition, kind: WorldRedstoneClearBurnout},
+	}
+	if !slices.Equal(host.redstoneTransactionCalls, wantRedstoneTransactions) {
+		t.Fatalf("redstone transaction calls=%+v", host.redstoneTransactionCalls)
+	}
 	if host.blockIteratorOpenCalls != 1 || host.blockIteratorNextCalls != 1 || host.blockIteratorCloseCalls != 1 ||
 		host.blockIteratorInvocation != 42 || host.blockIteratorClosed != 7 || host.blockIteratorIndex != 1 {
 		t.Fatalf("block iterator: open=%d next=%d close=%d invocation=%d closed=%d index=%d",
@@ -1711,7 +1746,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	host.worldBlockLoadedOK = false
 	host.worldBlock, host.worldBlockOK = host.worldBlockLoaded, true
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, redstone=15/14/13/12/11/10/9, liquid_before=true, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
+	if err != nil || output.Failed || output.Message != "block=(1,63,2), lookup=true, range=-64..319, loaded=false, was_sand=true, nearby_sand=(0,63,0), highest_light_blocker=70, highest_block=72, light=9, sky_light=15, redstone=15/14/13/12/11/10/9, redstone_tx=true/false/true/true, liquid_before=true, liquid=true:Water(still=true,depth=8,falling=false), scheduled_update=water:250ms" {
 		t.Fatalf("unloaded block output=%#v error=%v", output, err)
 	}
 	if host.worldRangeCalls != 4 || host.worldBlockLoadedCalls != 3 || host.worldBlockCalls != 2 {

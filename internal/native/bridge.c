@@ -276,10 +276,12 @@ _Static_assert(DF_PLAYER_COOLDOWN_HAS == 0u, "player cooldown has operation chan
 _Static_assert(DF_PLAYER_COOLDOWN_SET == 1u, "player cooldown set operation changed");
 _Static_assert(DF_WORLD_REDSTONE_POWER == 0u, "redstone power operation changed");
 _Static_assert(DF_WORLD_REDSTONE_STRONG_POWER_FROM == 6u, "redstone strong power-from operation changed");
+_Static_assert(DF_WORLD_REDSTONE_SCHEDULE_UPDATE == 0u, "redstone schedule-update operation changed");
+_Static_assert(DF_WORLD_REDSTONE_CLEAR_BURNOUT == 5u, "redstone clear-burnout operation changed");
 _Static_assert(sizeof(DfDifficultyView) == 24, "DfDifficultyView ABI layout changed");
 _Static_assert(offsetof(DfDifficultyView, starvation_health_limit) == 8, "DfDifficultyView.starvation_health_limit ABI offset changed");
-_Static_assert(sizeof(DfHostApiV27) == 1080, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 66u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 1088, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 67u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -326,6 +328,7 @@ _Static_assert(offsetof(DfHostApiV27, player_entity_action) == 1048, "DfHostApiV
 _Static_assert(offsetof(DfHostApiV27, player_item_action) == 1056, "DfHostApiV27.player_item_action ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_tx_defer) == 1064, "DfHostApiV27.world_tx_defer ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_redstone_power) == 1072, "DfHostApiV27.world_redstone_power ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, world_redstone_transaction) == 1080, "DfHostApiV27.world_redstone_transaction ABI offset changed");
 _Static_assert(sizeof(DfEntityNewView) == 152, "DfEntityNewView ABI layout changed");
 _Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
 _Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
@@ -458,6 +461,7 @@ extern DfStatus bg_go_world_highest_block(uint64_t context, DfInvocationId invoc
 extern DfStatus bg_go_world_light(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *level);
 extern DfStatus bg_go_world_sky_light(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *level);
 extern DfStatus bg_go_world_redstone_power(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, int32_t face, uint32_t kind, int32_t *power);
+extern DfStatus bg_go_world_redstone_transaction(uint64_t context, DfInvocationId invocation, DfBlockPos position, uint32_t kind, uint8_t *first, uint8_t *second);
 extern DfStatus bg_go_world_time_get(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t *time);
 extern DfStatus bg_go_world_time_set(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time);
 extern DfStatus bg_go_world_spawn_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
@@ -697,6 +701,7 @@ static DfStatus host_world_highest_block(uint64_t context, DfInvocationId invoca
 static DfStatus host_world_light(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *level) { return bg_go_world_light(context, invocation, world, position, level); }
 static DfStatus host_world_sky_light(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, uint8_t *level) { return bg_go_world_sky_light(context, invocation, world, position, level); }
 static DfStatus host_world_redstone_power(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, int32_t face, uint32_t kind, int32_t *power) { return bg_go_world_redstone_power(context, invocation, world, position, face, kind, power); }
+static DfStatus host_world_redstone_transaction(uint64_t context, DfInvocationId invocation, DfBlockPos position, uint32_t kind, uint8_t *first, uint8_t *second) { return bg_go_world_redstone_transaction(context, invocation, position, kind, first, second); }
 static DfStatus host_world_time_get(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t *time) { return bg_go_world_time_get(context, invocation, world, time); }
 static DfStatus host_world_time_set(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time) { return bg_go_world_time_set(context, invocation, world, time); }
 static DfStatus host_world_spawn_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position) { return bg_go_world_spawn_get(context, invocation, world, position); }
@@ -1025,6 +1030,7 @@ DfStatus bg_runtime_open(
         .player_item_action = host_player_item_action,
         .world_tx_defer = host_world_tx_defer,
         .world_redstone_power = host_world_redstone_power,
+        .world_redstone_transaction = host_world_redstone_transaction,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

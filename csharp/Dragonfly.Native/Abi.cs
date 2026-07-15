@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static partial class Abi
 {
     public const uint PluginVersion = 12;
-    public const uint HostVersion = 66;
+    public const uint HostVersion = 67;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerCooldownHas = 0;
@@ -25,6 +25,12 @@ public static partial class Abi
     public const uint WorldRedstonePowerFrom = 4;
     public const uint WorldRedstoneDirectPowerFrom = 5;
     public const uint WorldRedstoneStrongPowerFrom = 6;
+    public const uint WorldRedstoneScheduleUpdate = 0;
+    public const uint WorldRedstoneBurnoutStatus = 1;
+    public const uint WorldRedstoneRecordTurnOff = 2;
+    public const uint WorldRedstoneMarkSelfTriggered = 3;
+    public const uint WorldRedstoneConsumeSelfTriggered = 4;
+    public const uint WorldRedstoneClearBurnout = 5;
     public const uint EntityOperationAdopt = 0;
     public const uint EntityOperationLoad = 1;
     public const uint EntityOperationSave = 2;
@@ -537,6 +543,7 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, ItemStackViewV3*, long*, byte*, int> PlayerItemAction;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, ulong, uint, int> WorldTxDefer;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, int, uint, int*, int> WorldRedstonePower;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, BlockPos, uint, byte*, byte*, int> WorldRedstoneTransaction;
 }
 
 [StructLayout(LayoutKind.Sequential)]

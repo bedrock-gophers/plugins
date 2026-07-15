@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 12u
-// Host version 66 adds exact transaction redstone power queries.
-#define DF_HOST_ABI_VERSION 66u
+// Host version 67 adds exact transaction-scoped redstone engine operations.
+#define DF_HOST_ABI_VERSION 67u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -448,6 +448,13 @@ typedef DfStatus (*DfHostWorldLightFn)(uint64_t context, DfInvocationId invocati
 #define DF_WORLD_REDSTONE_DIRECT_POWER_FROM 5u
 #define DF_WORLD_REDSTONE_STRONG_POWER_FROM 6u
 typedef DfStatus (*DfHostWorldRedstonePowerFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position, int32_t face, uint32_t kind, int32_t *power);
+#define DF_WORLD_REDSTONE_SCHEDULE_UPDATE 0u
+#define DF_WORLD_REDSTONE_BURNOUT_STATUS 1u
+#define DF_WORLD_REDSTONE_RECORD_TURN_OFF 2u
+#define DF_WORLD_REDSTONE_MARK_SELF_TRIGGERED 3u
+#define DF_WORLD_REDSTONE_CONSUME_SELF_TRIGGERED 4u
+#define DF_WORLD_REDSTONE_CLEAR_BURNOUT 5u
+typedef DfStatus (*DfHostWorldRedstoneTransactionFn)(uint64_t context, DfInvocationId invocation, DfBlockPos position, uint32_t kind, uint8_t *first, uint8_t *second);
 typedef DfStatus (*DfHostWorldTimeGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t *time);
 typedef DfStatus (*DfHostWorldTimeSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time);
 typedef DfStatus (*DfHostWorldSpawnGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
@@ -675,6 +682,7 @@ typedef struct {
     DfHostPlayerItemActionFn player_item_action;
     DfHostWorldTxDeferFn world_tx_defer;
     DfHostWorldRedstonePowerFn world_redstone_power;
+    DfHostWorldRedstoneTransactionFn world_redstone_transaction;
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u

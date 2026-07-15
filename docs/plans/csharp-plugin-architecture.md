@@ -288,6 +288,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    Dragonfly's exact persistent `World` plus position and cannot outlive the enclosing callback.
    Host ABI 66 appends one private operation for the seven exact AST-generated transaction redstone
    power queries. Position and face remain typed publicly; the private operation kind does not leak.
+   Host ABI 67 appends one private operation for the exact AST-generated `RedstoneTransaction` and
+   `RedstoneTorchTransaction` surface: scheduled updates, burnout state, turn-off recording, and
+   self-trigger tracking. Both public wrappers remain transaction-scoped and expose no transport IDs.
    The AST-generated `Scoreboard` class mirrors Dragonfly's mutable name, write, set/remove,
    padding, line-copy, and descending-order behavior. `Player.SendScoreboard` activates the
    existing private transport with raw lines so the Go host applies padding and ordering once.
@@ -335,8 +338,8 @@ ABI without adding invented public wrapper types.
 
 Remaining raw-Dragonfly parity work includes:
 
-- remaining `Player`, `World`, and `World.Tx` methods, including redstone transactions,
-  world configuration, presentation, combat, and player-control surfaces;
+- remaining `Player`, `World`, and `World.Tx` methods, including world configuration,
+  presentation, combat, and player-control surfaces;
 - exact command behavior and skin types;
 - player-capable raw handle transfer and remaining concrete entity capabilities;
 - custom items, blocks, dimensions, providers, and generators beyond current generated registries and
@@ -356,7 +359,8 @@ transports calls.
 block below the source through `World.Tx`, writes typed `Block.Sand`, and exercises all three
 `World.SetOpts` flags, reads the world range, performs a non-loading block lookup, lazily searches
 nearby blocks, reads height/light data, inspects typed water, and writes/removes typed liquid.
-It also exercises all seven direct, strong, conductive, and face-specific redstone power queries.
+It also exercises all seven direct, strong, conductive, and face-specific redstone power queries,
+plus every redstone and torch transaction operation.
 It also leaves typed water present and schedules its update with an exact 250 ms delay.
 Its separate `/kitchen crop` overload decodes and writes `Block.WheatSeeds(Growth: 7)`, proving
 that promoted private Go embeddings round-trip through the typed C# API.

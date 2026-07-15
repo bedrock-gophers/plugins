@@ -33,6 +33,16 @@ internal static unsafe class PluginBridge
             RedstoneStrongPowerFrom = Abi.WorldRedstoneStrongPowerFrom,
         }
 
+        internal enum RedstoneTransactionKind : uint
+        {
+            ScheduleUpdate = Abi.WorldRedstoneScheduleUpdate,
+            BurnoutStatus = Abi.WorldRedstoneBurnoutStatus,
+            RecordTurnOff = Abi.WorldRedstoneRecordTurnOff,
+            MarkSelfTriggered = Abi.WorldRedstoneMarkSelfTriggered,
+            ConsumeSelfTriggered = Abi.WorldRedstoneConsumeSelfTriggered,
+            ClearBurnout = Abi.WorldRedstoneClearBurnout,
+        }
+
         internal static void SendPlayerText(ulong invocation, PlayerId player, uint kind, string message)
         {
             var api = Api;
@@ -3312,6 +3322,27 @@ internal static unsafe class PluginBridge
                     &power) != Abi.Ok)
                 throw new InvalidOperationException("world transaction is no longer valid");
             return power;
+        }
+
+        internal static (bool First, bool Second) WorldRedstoneTransaction(
+            ulong invocation,
+            Cube.Pos position,
+            RedstoneTransactionKind kind)
+        {
+            var api = Api;
+            if (api is null || api->WorldRedstoneTransaction == null)
+                throw new InvalidOperationException("world transaction is unavailable");
+            byte first;
+            byte second;
+            if (api->WorldRedstoneTransaction(
+                    api->Context,
+                    invocation,
+                    new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() },
+                    (uint)kind,
+                    &first,
+                    &second) != Abi.Ok)
+                throw new InvalidOperationException("world transaction is no longer valid");
+            return (first != 0, second != 0);
         }
 
         private sealed class WorldBlocksWithinEnumerable(

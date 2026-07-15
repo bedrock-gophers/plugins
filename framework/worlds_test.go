@@ -341,6 +341,31 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 		if _, ok := manager.WorldRedstonePower(invocation, 0, blockPosition, int32(face), 99); ok {
 			t.Fatal("unknown redstone query succeeded")
 		}
+		if _, _, ok := manager.WorldRedstoneTransaction(invocation, blockPosition, native.WorldRedstoneScheduleUpdate); !ok {
+			t.Fatal("redstone ScheduleUpdate failed")
+		}
+		if _, _, ok := manager.WorldRedstoneTransaction(invocation, blockPosition, native.WorldRedstoneRecordTurnOff); !ok {
+			t.Fatal("redstone RecordTurnOff failed")
+		}
+		if _, _, ok := manager.WorldRedstoneTransaction(invocation, blockPosition, native.WorldRedstoneMarkSelfTriggered); !ok {
+			t.Fatal("redstone MarkSelfTriggered failed")
+		}
+		if selfTriggered, _, ok := manager.WorldRedstoneTransaction(invocation, blockPosition, native.WorldRedstoneConsumeSelfTriggered); !ok || !selfTriggered {
+			t.Fatalf("redstone ConsumeSelfTriggered() = %v, %v", selfTriggered, ok)
+		}
+		if selfTriggered, _, ok := manager.WorldRedstoneTransaction(invocation, blockPosition, native.WorldRedstoneConsumeSelfTriggered); !ok || selfTriggered {
+			t.Fatalf("second redstone ConsumeSelfTriggered() = %v, %v", selfTriggered, ok)
+		}
+		if _, _, ok := manager.WorldRedstoneTransaction(invocation, blockPosition, native.WorldRedstoneClearBurnout); !ok {
+			t.Fatal("redstone ClearBurnout failed")
+		}
+		wantBurnedOut, wantRecoverable := tx.Redstone().Torch(pos).BurnoutStatus()
+		if burnedOut, recoverable, ok := manager.WorldRedstoneTransaction(invocation, blockPosition, native.WorldRedstoneBurnoutStatus); !ok || burnedOut != wantBurnedOut || recoverable != wantRecoverable {
+			t.Fatalf("redstone BurnoutStatus() = %v, %v, %v; want %v, %v", burnedOut, recoverable, ok, wantBurnedOut, wantRecoverable)
+		}
+		if _, _, ok := manager.WorldRedstoneTransaction(invocation, blockPosition, 99); ok {
+			t.Fatal("unknown redstone transaction operation succeeded")
+		}
 		plains, ok := world.BiomeByName("plains")
 		if !ok {
 			t.Fatal("plains biome is not registered")
@@ -433,6 +458,9 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 	}
 	if _, ok := manager.WorldRedstonePower(9999, 0, native.BlockPos{}, 0, native.WorldRedstonePower); ok {
 		t.Fatal("stale invocation resolved redstone power")
+	}
+	if _, _, ok := manager.WorldRedstoneTransaction(9999, native.BlockPos{}, native.WorldRedstoneScheduleUpdate); ok {
+		t.Fatal("stale invocation resolved a redstone transaction")
 	}
 	if _, ok := manager.WorldBiome(9999, 0, native.BlockPos{}); ok {
 		t.Fatal("stale invocation resolved a biome")

@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"go/ast"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -478,6 +480,7 @@ var selectedFormElements = []string{
 var selectedWorldTxMethods = []string{
 	"World",
 	"Event",
+	"Redstone",
 	"Range",
 	"SetBlock",
 	"Block",
@@ -758,6 +761,10 @@ func main() {
 		filepath.Join(directory, "server", "world", "tx.go"),
 		filepath.Join(directory, "server", "world", "tx_redstone.go"),
 	)
+	if err != nil {
+		fatal(err)
+	}
+	redstoneTransactions, err := inspectRedstoneTransactions(filepath.Join(directory, "server", "world", "tx_redstone.go"))
 	if err != nil {
 		fatal(err)
 	}
@@ -1060,7 +1067,7 @@ func main() {
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Block.g.cs"),
-			Content: generateWorldBlock(setOpts, worldTx),
+			Content: generateWorldBlock(setOpts, worldTx, redstoneTransactions),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Block.Types.g.cs"),
@@ -1698,6 +1705,140 @@ func inspectSetOpts(path string) ([]string, error) {
 	return nil, fmt.Errorf("world.SetOpts not found")
 }
 
+type redstoneTransactionSpec struct {
+	Methods      []commandMethod
+	TorchMethods []commandMethod
+}
+
+var selectedRedstoneTransactionMethods = []string{"ScheduleUpdate", "Torch"}
+var selectedRedstoneTorchTransactionMethods = []string{
+	"BurnoutStatus", "RecordTurnOff", "MarkSelfTriggered", "ConsumeSelfTriggered", "ClearBurnout",
+}
+
+func inspectRedstoneTransactions(path string) (redstoneTransactionSpec, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return redstoneTransactionSpec{}, err
+	}
+	structs := map[string]bool{}
+	found := map[string]map[string]commandMethod{
+		"RedstoneTransaction":      {},
+		"RedstoneTorchTransaction": {},
+	}
+	for _, declaration := range file.Decls {
+		switch value := declaration.(type) {
+		case *ast.GenDecl:
+			if value.Tok != token.TYPE {
+				continue
+			}
+			for _, raw := range value.Specs {
+				typeSpec, ok := raw.(*ast.TypeSpec)
+				if !ok || found[typeSpec.Name.Name] == nil {
+					continue
+				}
+				_, structs[typeSpec.Name.Name] = typeSpec.Type.(*ast.StructType)
+			}
+		case *ast.FuncDecl:
+			receiver, ok := valueReceiverName(value)
+			if !ok || found[receiver] == nil || !selectedRedstoneTransactionMethod(receiver, value.Name.Name) {
+				continue
+			}
+			parameters, err := translateWorldTxParameters(value.Name.Name, value.Type.Params)
+			if err != nil {
+				return redstoneTransactionSpec{}, fmt.Errorf("world.%s.%s: %w", receiver, value.Name.Name, err)
+			}
+			result, err := translateRedstoneTransactionResult(value.Name.Name, value.Type.Results)
+			if err != nil {
+				return redstoneTransactionSpec{}, fmt.Errorf("world.%s.%s: %w", receiver, value.Name.Name, err)
+			}
+			method := commandMethod{Name: value.Name.Name, Parameters: parameters, ReturnType: result}
+			if err := validateRedstoneTransactionMethod(receiver, method); err != nil {
+				return redstoneTransactionSpec{}, fmt.Errorf("world.%s.%s: %w", receiver, value.Name.Name, err)
+			}
+			found[receiver][value.Name.Name] = method
+		}
+	}
+	for name := range found {
+		if !structs[name] {
+			return redstoneTransactionSpec{}, fmt.Errorf("world.%s is missing or no longer a struct", name)
+		}
+	}
+	ordered := func(receiver string, names []string) ([]commandMethod, error) {
+		methods := make([]commandMethod, 0, len(names))
+		for _, name := range names {
+			method, ok := found[receiver][name]
+			if !ok {
+				return nil, fmt.Errorf("Dragonfly world.%s has no supported %s method", receiver, name)
+			}
+			methods = append(methods, method)
+		}
+		return methods, nil
+	}
+	methods, err := ordered("RedstoneTransaction", selectedRedstoneTransactionMethods)
+	if err != nil {
+		return redstoneTransactionSpec{}, err
+	}
+	torchMethods, err := ordered("RedstoneTorchTransaction", selectedRedstoneTorchTransactionMethods)
+	if err != nil {
+		return redstoneTransactionSpec{}, err
+	}
+	return redstoneTransactionSpec{Methods: methods, TorchMethods: torchMethods}, nil
+}
+
+func valueReceiverName(function *ast.FuncDecl) (string, bool) {
+	if function.Recv == nil || len(function.Recv.List) != 1 {
+		return "", false
+	}
+	receiver, ok := function.Recv.List[0].Type.(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	return receiver.Name, true
+}
+
+func selectedRedstoneTransactionMethod(receiver, name string) bool {
+	names := selectedRedstoneTransactionMethods
+	if receiver == "RedstoneTorchTransaction" {
+		names = selectedRedstoneTorchTransactionMethods
+	}
+	return slices.Contains(names, name)
+}
+
+func translateRedstoneTransactionResult(method string, fields *ast.FieldList) (string, error) {
+	if method == "BurnoutStatus" {
+		if fields == nil || len(fields.List) != 1 || len(fields.List[0].Names) != 2 ||
+			fields.List[0].Names[0].Name != "burnedOut" || fields.List[0].Names[1].Name != "recoverable" {
+			return "", errors.New("expected named (burnedOut, recoverable bool) result")
+		}
+		value, ok := fields.List[0].Type.(*ast.Ident)
+		if !ok || value.Name != "bool" {
+			return "", errors.New("expected named (burnedOut, recoverable bool) result")
+		}
+		return "(bool BurnedOut, bool Recoverable)", nil
+	}
+	return translateWorldTxResult(method, fields)
+}
+
+func validateRedstoneTransactionMethod(receiver string, method commandMethod) error {
+	expected := map[string]map[string]commandMethod{
+		"RedstoneTransaction": {
+			"ScheduleUpdate": {Name: "ScheduleUpdate", ReturnType: "void", Parameters: []parameter{{Name: "pos", Type: "Cube.Pos"}}},
+			"Torch":          {Name: "Torch", ReturnType: "RedstoneTorchTransaction", Parameters: []parameter{{Name: "pos", Type: "Cube.Pos"}}},
+		},
+		"RedstoneTorchTransaction": {
+			"BurnoutStatus":        {Name: "BurnoutStatus", ReturnType: "(bool BurnedOut, bool Recoverable)"},
+			"RecordTurnOff":        {Name: "RecordTurnOff", ReturnType: "bool"},
+			"MarkSelfTriggered":    {Name: "MarkSelfTriggered", ReturnType: "void"},
+			"ConsumeSelfTriggered": {Name: "ConsumeSelfTriggered", ReturnType: "bool"},
+			"ClearBurnout":         {Name: "ClearBurnout", ReturnType: "void"},
+		},
+	}[receiver][method.Name]
+	if !reflect.DeepEqual(method, expected) {
+		return fmt.Errorf("signature changed: got %s %s(%s)", method.ReturnType, method.Name, formatParameters(method.Parameters))
+	}
+	return nil
+}
+
 func inspectWorldTx(paths ...string) ([]commandMethod, error) {
 	found := map[string]commandMethod{}
 	for _, path := range paths {
@@ -1739,9 +1880,10 @@ func inspectWorldTx(paths ...string) ([]commandMethod, error) {
 
 func validateWorldTxMethod(method commandMethod) error {
 	expected := map[string]commandMethod{
-		"World": {Name: "World", ReturnType: "World"},
-		"Event": {Name: "Event", ReturnType: "Context"},
-		"Range": {Name: "Range", ReturnType: "Cube.Range"},
+		"World":    {Name: "World", ReturnType: "World"},
+		"Event":    {Name: "Event", ReturnType: "Context"},
+		"Redstone": {Name: "Redstone", ReturnType: "RedstoneTransaction"},
+		"Range":    {Name: "Range", ReturnType: "Cube.Range"},
 		"SetBlock": {Name: "SetBlock", ReturnType: "void", Parameters: []parameter{
 			{Name: "pos", Type: "Cube.Pos"}, {Name: "b", Type: "Block?"}, {Name: "opts", Type: "SetOpts?"},
 		}},
@@ -1951,21 +2093,23 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 		return strings.TrimSuffix(typeName, "?") + "?", true
 	case *ast.Ident:
 		typeName, ok := map[string]string{
-			"Block":        "Block",
-			"Biome":        "Biome",
-			"Context":      "Context",
-			"Entity":       "Entity",
-			"EntityHandle": "EntityHandle",
-			"Liquid":       "Liquid",
-			"Particle":     "Particle",
-			"Sound":        "Sound",
-			"SetOpts":      "SetOpts",
-			"World":        "World",
-			"bool":         "bool",
-			"float64":      "double",
-			"int":          "int",
-			"int64":        "long",
-			"uint8":        "byte",
+			"Block":                    "Block",
+			"Biome":                    "Biome",
+			"Context":                  "Context",
+			"Entity":                   "Entity",
+			"EntityHandle":             "EntityHandle",
+			"Liquid":                   "Liquid",
+			"Particle":                 "Particle",
+			"RedstoneTransaction":      "RedstoneTransaction",
+			"RedstoneTorchTransaction": "RedstoneTorchTransaction",
+			"Sound":                    "Sound",
+			"SetOpts":                  "SetOpts",
+			"World":                    "World",
+			"bool":                     "bool",
+			"float64":                  "double",
+			"int":                      "int",
+			"int64":                    "long",
+			"uint8":                    "byte",
 		}[value.Name]
 		if !ok {
 			return "", false
@@ -5345,7 +5489,7 @@ func generateCube(spec cubeSpec) []byte {
 	return output.Bytes()
 }
 
-func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
+func generateWorldBlock(setOpts []string, methods []commandMethod, redstone redstoneTransactionSpec) []byte {
 	var output bytes.Buffer
 	output.WriteString("// Code generated from Dragonfly server/world Go AST. DO NOT EDIT.\n")
 	output.WriteString("#nullable enable\n")
@@ -5389,6 +5533,8 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 			output.WriteString("            PluginBridge.Host.TransactionWorld(Invocation);\n")
 		case "Event":
 			output.WriteString("            new(Invocation, false);\n")
+		case "Redstone":
+			output.WriteString("            new(Invocation);\n")
 		case "Range":
 			output.WriteString("            PluginBridge.Host.WorldRange(Invocation);\n")
 		case "SetBlock":
@@ -5470,8 +5616,53 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 			output.WriteByte('\n')
 		}
 	}
-	output.WriteString("    }\n}\n")
+	output.WriteString("    }\n")
+	writeRedstoneTransactions(&output, redstone)
+	output.WriteString("}\n")
 	return output.Bytes()
+}
+
+func writeRedstoneTransactions(output *bytes.Buffer, spec redstoneTransactionSpec) {
+	if len(spec.Methods) == 0 && len(spec.TorchMethods) == 0 {
+		return
+	}
+	output.WriteString("\n    public readonly struct RedstoneTransaction\n    {\n")
+	output.WriteString("        private readonly ulong _invocation;\n\n")
+	output.WriteString("        internal RedstoneTransaction(ulong invocation) => _invocation = invocation;\n")
+	for _, method := range spec.Methods {
+		output.WriteByte('\n')
+		fmt.Fprintf(output, "        public %s %s(%s) =>\n", method.ReturnType, method.Name, formatParameters(method.Parameters))
+		switch method.Name {
+		case "ScheduleUpdate":
+			fmt.Fprintf(output, "            _ = PluginBridge.Host.WorldRedstoneTransaction(_invocation, %s, PluginBridge.Host.RedstoneTransactionKind.ScheduleUpdate);\n", method.Parameters[0].Name)
+		case "Torch":
+			fmt.Fprintf(output, "            new(_invocation, %s);\n", method.Parameters[0].Name)
+		default:
+			panic("unsupported world.RedstoneTransaction method: " + method.Name)
+		}
+	}
+	output.WriteString("    }\n\n")
+	output.WriteString("    public readonly struct RedstoneTorchTransaction\n    {\n")
+	output.WriteString("        private readonly ulong _invocation;\n")
+	output.WriteString("        private readonly Cube.Pos _position;\n\n")
+	output.WriteString("        internal RedstoneTorchTransaction(ulong invocation, Cube.Pos position) =>\n")
+	output.WriteString("            (_invocation, _position) = (invocation, position);\n")
+	for _, method := range spec.TorchMethods {
+		output.WriteByte('\n')
+		fmt.Fprintf(output, "        public %s %s(%s) =>\n", method.ReturnType, method.Name, formatParameters(method.Parameters))
+		call := fmt.Sprintf("PluginBridge.Host.WorldRedstoneTransaction(_invocation, _position, PluginBridge.Host.RedstoneTransactionKind.%s)", method.Name)
+		switch method.Name {
+		case "BurnoutStatus":
+			fmt.Fprintf(output, "            %s;\n", call)
+		case "RecordTurnOff", "ConsumeSelfTriggered":
+			fmt.Fprintf(output, "            %s.First;\n", call)
+		case "MarkSelfTriggered", "ClearBurnout":
+			fmt.Fprintf(output, "            _ = %s;\n", call)
+		default:
+			panic("unsupported world.RedstoneTorchTransaction method: " + method.Name)
+		}
+	}
+	output.WriteString("    }\n")
 }
 
 func generateBlocks(spec blockSpec) []byte {
