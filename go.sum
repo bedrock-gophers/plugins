@@ -1,7 +1,7 @@
 github.com/bedrock-gophers/intercept v0.3.0 h1:Xu1G52iB8jBNMdydjcem2kgOSCC63qH+UQyWAJMtHvk=
 github.com/bedrock-gophers/intercept v0.3.0/go.mod h1:JJubl+cmpuN9y1T0BqeAK6h2cumdZD/IQ86AFZsus4c=
-github.com/bedrock-gophers/plugins v0.0.0-20260715143900-c00443837471 h1:wCo5HAfEE/+/fAFNnOFmENgUo7hkVC1LBHyaDLzNqfE=
-github.com/bedrock-gophers/plugins v0.0.0-20260715143900-c00443837471/go.mod h1:7X3QQp2OkieMpcZAi7r7YCiZSIu50XIRKlSw7413puY=
+github.com/bedrock-gophers/plugins v0.0.0-20260715145557-273cc247c58b h1:pK/pWVrCWXmmHRgFsPnw4JwGXNszm+1xcy/Pcd626YE=
+github.com/bedrock-gophers/plugins v0.0.0-20260715145557-273cc247c58b/go.mod h1:7X3QQp2OkieMpcZAi7r7YCiZSIu50XIRKlSw7413puY=
 github.com/brentp/intintmap v0.0.0-20251106190759-56907b1f8479 h1:UZbbt19ACBOFO+CiDQFjaEoPJkBhj7GNGtIq59WR6Os=
 github.com/brentp/intintmap v0.0.0-20251106190759-56907b1f8479/go.mod h1:TOk10ahXejq9wkEaym3KPRNeuR/h5Jx+s8QRWIa2oTM=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
