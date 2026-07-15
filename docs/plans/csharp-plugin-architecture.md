@@ -83,7 +83,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `World.Tx.BlockLoaded`, `World.Tx.BlocksWithin`, `World.Tx.SetBlock`,
    `World.Tx.ScheduleBlockUpdate`,
    `World.Tx.HighestLightBlocker`, `World.Tx.HighestBlock`, `World.Tx.Light`,
-   `World.Tx.SkyLight`, `World.Liquid`, `World.Tx.Liquid`, `World.Tx.SetLiquid`, 118 non-liquid
+   `World.Tx.SkyLight`, `World.Tx.Event`, `World.Liquid`, `World.Tx.Liquid`, `World.Tx.SetLiquid`, 118 non-liquid
    block types covering all 314 registered states whose varying registry-state fields are primitive,
    plus `Block.Water` and `Block.Lava`. Promoted fields are expanded through Dragonfly's AST, so
    all eight growth stages of `BeetrootSeeds`, `Carrot`, `Potato`, and `WheatSeeds` remain typed.

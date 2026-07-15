@@ -477,6 +477,7 @@ var selectedFormElements = []string{
 
 var selectedWorldTxMethods = []string{
 	"World",
+	"Event",
 	"Range",
 	"SetBlock",
 	"Block",
@@ -1727,6 +1728,7 @@ func inspectWorldTx(path string) ([]commandMethod, error) {
 func validateWorldTxMethod(method commandMethod) error {
 	expected := map[string]commandMethod{
 		"World": {Name: "World", ReturnType: "World"},
+		"Event": {Name: "Event", ReturnType: "Context"},
 		"Range": {Name: "Range", ReturnType: "Cube.Range"},
 		"SetBlock": {Name: "SetBlock", ReturnType: "void", Parameters: []parameter{
 			{Name: "pos", Type: "Cube.Pos"}, {Name: "b", Type: "Block?"}, {Name: "opts", Type: "SetOpts?"},
@@ -1879,6 +1881,12 @@ func translateWorldTxResult(method string, fields *ast.FieldList) (string, error
 			}
 			return "World", nil
 		}
+		if method == "Event" {
+			if results[0] != "Context?" {
+				return "", fmt.Errorf("expected *Context, got %s", results[0])
+			}
+			return "Context", nil
+		}
 		if method == "RemoveEntity" && results[0] == "EntityHandle?" {
 			return "EntityHandle", nil
 		}
@@ -1912,6 +1920,7 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 		typeName, ok := map[string]string{
 			"Block":        "Block",
 			"Biome":        "Biome",
+			"Context":      "Context",
 			"Entity":       "Entity",
 			"EntityHandle": "EntityHandle",
 			"Liquid":       "Liquid",
@@ -5344,6 +5353,8 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 		switch method.Name {
 		case "World":
 			output.WriteString("            PluginBridge.Host.TransactionWorld(Invocation);\n")
+		case "Event":
+			output.WriteString("            new(Invocation, false);\n")
 		case "Range":
 			output.WriteString("            PluginBridge.Host.WorldRange(Invocation);\n")
 		case "SetBlock":

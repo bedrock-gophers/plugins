@@ -420,6 +420,7 @@ func TestGeneratedWorldBlockSurfaceKeepsTransportPrivate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tx.go")
 	source := `package world
 func (tx *Tx) World() *World { return nil }
+func (tx *Tx) Event() *Context { return nil }
 func (tx *Tx) Range() cube.Range { return cube.Range{} }
 func (tx *Tx) SetBlock(pos cube.Pos, b Block, opts *SetOpts) {}
 func (tx *Tx) Block(pos cube.Pos) Block { return nil }
@@ -468,6 +469,8 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 		"public Cube.Range Range()",
 		"public void SetBlock(Cube.Pos pos, Block? b, SetOpts? opts = null)",
 		"public Block Block(Cube.Pos pos)",
+		"public Context Event()",
+		"new(Invocation, false)",
 		"public (Block? Block, bool Ok) BlockLoaded(Cube.Pos pos)",
 		"public IEnumerable<Cube.Pos> BlocksWithin(Cube.Pos pos, int radius, params Block[] blocks)",
 		"public interface Liquid : Block { string LiquidType(); }",

@@ -865,6 +865,13 @@ public sealed class KitchenSink : Plugin
                 output.Error("A world transaction is required.");
                 return;
             }
+            var firstEvent = tx.Event();
+            firstEvent.Cancel();
+            if (!firstEvent.Cancelled() || tx.Event().Cancelled())
+            {
+                output.Error("World event contexts are not fresh and sticky.");
+                return;
+            }
             var position = Cube.PosFromVec3(source.Position()).Side(Cube.Face.Down);
             var (_, wheatOK) = World.BlockByName("minecraft:wheat", new()
             {

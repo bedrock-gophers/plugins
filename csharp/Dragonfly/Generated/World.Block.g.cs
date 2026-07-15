@@ -30,6 +30,9 @@ public sealed partial class World
         public World World() =>
             PluginBridge.Host.TransactionWorld(Invocation);
 
+        public Context Event() =>
+            new(Invocation, false);
+
         public Cube.Range Range() =>
             PluginBridge.Host.WorldRange(Invocation);
 
