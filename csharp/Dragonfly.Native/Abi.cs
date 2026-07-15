@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 10;
-    public const uint HostVersion = 45;
+    public const uint HostVersion = 46;
     public const int Ok = 0;
     public const int Error = 1;
 
@@ -140,6 +140,10 @@ public static class Abi
     public const ulong WorldRedstoneUpdateSubscription = 1UL << 52;
     public const uint WorldCloseEvent = 54;
     public const ulong WorldCloseSubscription = 1UL << 53;
+    public const uint PacketClientEvent = 55;
+    public const ulong PacketClientSubscription = 1UL << 54;
+    public const uint PacketServerEvent = 56;
+    public const ulong PacketServerSubscription = 1UL << 55;
     public const uint CommandParameterSubcommand = 1;
     public const uint CommandParameterEnum = 2;
     public const uint CommandParameterString = 3;
@@ -228,6 +232,36 @@ public unsafe struct StringBuffer
     public byte* Data;
     public ulong Length;
     public ulong Capacity;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct PacketFieldValue
+{
+    public uint Kind;
+    public uint Reserved;
+    public long Signed;
+    public ulong Unsigned;
+    public double Number;
+    public double X;
+    public double Y;
+    public double Z;
+    public NativeUuid Uuid;
+    public StringBuffer Data;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PacketInput
+{
+    public ulong Packet;
+    public uint PacketId;
+    public uint Reserved;
+    public StringView Xuid;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PacketState
+{
+    public byte Cancelled;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -447,6 +481,8 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, EntityNewView*, EntityHandleId*, int> EntityNew;
     public delegate* unmanaged[Cdecl]<ulong, EntityHandleId, StringBuffer*, int> EntityHandleType;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, byte*, int> WorldTaskCancel;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, uint, PacketFieldValue*, int> PacketFieldGet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, uint, PacketFieldValue*, int> PacketFieldSet;
 }
 
 [StructLayout(LayoutKind.Sequential)]

@@ -10,7 +10,7 @@ extern "C" {
 
 #define DF_ABI_VERSION 10u
 // Version 45 replaces fire-and-forget world scheduling with Dragonfly task semantics.
-#define DF_HOST_ABI_VERSION 45u
+#define DF_HOST_ABI_VERSION 46u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -458,6 +458,31 @@ typedef DfStatus (*DfHostWorldEntityAddFn)(uint64_t context, DfInvocationId invo
 typedef DfStatus (*DfHostEntityNewFn)(uint64_t context, const DfEntityNewView *entity, DfEntityHandleId *handle);
 typedef DfStatus (*DfHostEntityHandleTypeFn)(uint64_t context, DfEntityHandleId handle, DfStringBuffer *entity_type);
 typedef struct {
+    uint32_t kind;
+    uint32_t _reserved;
+    int64_t signed_value;
+    uint64_t unsigned_value;
+    double number;
+    double x;
+    double y;
+    double z;
+    DfUuid uuid;
+    DfStringBuffer data;
+} DfPacketFieldValue;
+#define DF_PACKET_FIELD_INVALID 0u
+#define DF_PACKET_FIELD_BOOL 1u
+#define DF_PACKET_FIELD_SIGNED 2u
+#define DF_PACKET_FIELD_UNSIGNED 3u
+#define DF_PACKET_FIELD_FLOAT 4u
+#define DF_PACKET_FIELD_STRING 5u
+#define DF_PACKET_FIELD_BYTES 6u
+#define DF_PACKET_FIELD_VEC2 7u
+#define DF_PACKET_FIELD_VEC3 8u
+#define DF_PACKET_FIELD_UUID 9u
+#define DF_PACKET_FIELD_JSON 10u
+typedef DfStatus (*DfHostPacketFieldGetFn)(uint64_t context, uint64_t packet, uint32_t field, DfPacketFieldValue *value);
+typedef DfStatus (*DfHostPacketFieldSetFn)(uint64_t context, uint64_t packet, uint32_t field, const DfPacketFieldValue *value);
+typedef struct {
     uint32_t abi_version;
     uint32_t struct_size;
     uint64_t context;
@@ -566,6 +591,8 @@ typedef struct {
     DfHostEntityNewFn entity_new;
     DfHostEntityHandleTypeFn entity_handle_type;
     DfHostWorldTaskCancelFn world_task_cancel;
+    DfHostPacketFieldGetFn packet_field_get;
+    DfHostPacketFieldSetFn packet_field_set;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
@@ -1130,6 +1157,19 @@ typedef struct {
 #define DF_EVENT_WORLD_EXPLOSION 52u
 #define DF_EVENT_WORLD_REDSTONE_UPDATE 53u
 #define DF_EVENT_WORLD_CLOSE 54u
+#define DF_EVENT_PACKET_CLIENT 55u
+#define DF_EVENT_PACKET_SERVER 56u
+
+typedef struct {
+    uint64_t packet;
+    uint32_t packet_id;
+    uint32_t _reserved;
+    DfStringView xuid;
+} DfPacketInput;
+
+typedef struct {
+    uint8_t cancelled;
+} DfPacketState;
 
 typedef struct {
     uint8_t cancelled;

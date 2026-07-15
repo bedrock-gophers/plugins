@@ -254,8 +254,12 @@ _Static_assert(sizeof(DfWorldCloseInput) == 8, "DfWorldCloseInput ABI layout cha
 _Static_assert(sizeof(DfBlockRange) == 8, "DfBlockRange ABI layout changed");
 _Static_assert(sizeof(DfEntityHandleId) == 16, "DfEntityHandleId ABI layout changed");
 _Static_assert(sizeof(DfUuid) == 16, "DfUuid ABI layout changed");
-_Static_assert(sizeof(DfHostApiV27) == 856, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 45u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfPacketFieldValue) == 96, "DfPacketFieldValue ABI layout changed");
+_Static_assert(offsetof(DfPacketFieldValue, data) == 72, "DfPacketFieldValue.data ABI offset changed");
+_Static_assert(sizeof(DfPacketInput) == 32, "DfPacketInput ABI layout changed");
+_Static_assert(sizeof(DfPacketState) == 1, "DfPacketState ABI layout changed");
+_Static_assert(sizeof(DfHostApiV27) == 872, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 46u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -274,6 +278,8 @@ _Static_assert(offsetof(DfHostApiV27, block_by_name) == 824, "DfHostApiV27.block
 _Static_assert(offsetof(DfHostApiV27, entity_new) == 832, "DfHostApiV27.entity_new ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, entity_handle_type) == 840, "DfHostApiV27.entity_handle_type ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_task_cancel) == 848, "DfHostApiV27.world_task_cancel ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, packet_field_get) == 856, "DfHostApiV27.packet_field_get ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, packet_field_set) == 864, "DfHostApiV27.packet_field_set ABI offset changed");
 _Static_assert(sizeof(DfEntityNewView) == 152, "DfEntityNewView ABI layout changed");
 _Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
 _Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
@@ -429,6 +435,8 @@ extern DfStatus bg_go_server_world(uint64_t context, uint32_t dimension, DfWorld
 extern DfStatus bg_go_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds);
 extern DfStatus bg_go_world_task_cancel(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled);
 extern DfStatus bg_go_world_new(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world);
+extern DfStatus bg_go_packet_field_get(uint64_t context, uint64_t packet, uint32_t field, DfPacketFieldValue *value);
+extern DfStatus bg_go_packet_field_set(uint64_t context, uint64_t packet, uint32_t field, const DfPacketFieldValue *value);
 
 static DfStatus host_player_text(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringView message) {
     return bg_go_player_text(context, invocation, player, kind, message);
@@ -563,6 +571,8 @@ static DfStatus host_world_time_get(uint64_t context, DfInvocationId invocation,
 static DfStatus host_world_time_set(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time) { return bg_go_world_time_set(context, invocation, world, time); }
 static DfStatus host_world_spawn_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position) { return bg_go_world_spawn_get(context, invocation, world, position); }
 static DfStatus host_world_spawn_set(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position) { return bg_go_world_spawn_set(context, invocation, world, position); }
+static DfStatus host_packet_field_get(uint64_t context, uint64_t packet, uint32_t field, DfPacketFieldValue *value) { return bg_go_packet_field_get(context, packet, field, value); }
+static DfStatus host_packet_field_set(uint64_t context, uint64_t packet, uint32_t field, const DfPacketFieldValue *value) { return bg_go_packet_field_set(context, packet, field, value); }
 static DfStatus host_world_entity_spawn(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV3 *entity, DfEntityId *output) { return bg_go_world_entity_spawn(context, invocation, world, entity, output); }
 static DfStatus host_entity_state(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state) { return bg_go_entity_state(context, invocation, entity, state); }
 static DfStatus host_entity_player(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfPlayerSnapshotBuffer *output) { return bg_go_entity_player(context, invocation, entity, output); }
@@ -841,6 +851,8 @@ DfStatus bg_runtime_open(
         .entity_new = host_entity_new,
         .entity_handle_type = host_entity_handle_type,
         .world_task_cancel = host_world_task_cancel,
+        .packet_field_get = host_packet_field_get,
+        .packet_field_set = host_packet_field_set,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

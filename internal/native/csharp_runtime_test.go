@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sandertv/gophertunnel/minecraft/nbt"
+	gtpacket "github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 )
 
 const csharpBuiltinGameModeDescriptor = int64(-1 << 63)
@@ -27,6 +28,25 @@ type csharpEntityHost struct {
 	entityHandleActive      bool
 	entityHandleCalls       []EntityID
 	entityHandleEntityCalls int
+}
+
+type csharpPacketHost struct {
+	*recordingHost
+	fields map[uint32]PacketFieldValue
+	sets   []PacketFieldValue
+}
+
+func (h *csharpPacketHost) PacketField(_ PacketHandle, field uint32) (PacketFieldValue, bool) {
+	value, ok := h.fields[field]
+	value.Data = append([]byte(nil), value.Data...)
+	return value, ok
+}
+
+func (h *csharpPacketHost) SetPacketField(_ PacketHandle, field uint32, value PacketFieldValue) bool {
+	value.Data = append([]byte(nil), value.Data...)
+	h.fields[field] = value
+	h.sets = append(h.sets, value)
+	return true
 }
 
 func (h *csharpEntityHost) DespawnEntity(invocation InvocationID, entity EntityID) bool {
@@ -100,7 +120,7 @@ func openCSharpRuntimeWithHost(t testing.TB, host Host) *Runtime {
 		WorldSoundSubscription | WorldFireSpreadSubscription | WorldBlockBurnSubscription |
 		WorldCropTrampleSubscription | WorldLeavesDecaySubscription | WorldEntitySpawnSubscription |
 		WorldEntityDespawnSubscription | WorldExplosionSubscription | WorldRedstoneUpdateSubscription |
-		WorldCloseSubscription
+		WorldCloseSubscription | PacketClientSubscription | PacketServerSubscription
 	if got := pluginRuntime.Subscriptions(); got != wantSubscriptions {
 		t.Fatalf("Subscriptions() = %d, want %d", got, wantSubscriptions)
 	}
@@ -108,6 +128,37 @@ func openCSharpRuntimeWithHost(t testing.TB, host Host) *Runtime {
 		t.Fatal(err)
 	}
 	return pluginRuntime
+}
+
+func TestCSharpPacketHandlersMutateIncomingAndCancel(t *testing.T) {
+	host := &csharpPacketHost{recordingHost: &recordingHost{}, fields: map[uint32]PacketFieldValue{
+		3: {Kind: PacketFieldString, Data: []byte("  hello  ")},
+	}}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	cancelled, err := pluginRuntime.HandlePacket(PacketClientEvent, 1, (&gtpacket.Text{}).ID(), "xuid", false)
+	if err != nil || cancelled {
+		t.Fatalf("HandlePacket(Text) cancelled=%v error=%v", cancelled, err)
+	}
+	if len(host.sets) != 1 || string(host.sets[0].Data) != "hello" {
+		t.Fatalf("packet sets = %#v", host.sets)
+	}
+
+	wantUUID := [16]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+	host.fields = map[uint32]PacketFieldValue{0: {Kind: PacketFieldUUID, UUID: wantUUID}}
+	host.sets = nil
+	cancelled, err = pluginRuntime.HandlePacket(PacketClientEvent, 4, (&gtpacket.PlayerSkin{}).ID(), "xuid", false)
+	if err != nil || cancelled || len(host.sets) != 1 || host.sets[0].UUID != wantUUID {
+		t.Fatalf("HandlePacket(PlayerSkin) cancelled=%v sets=%#v error=%v", cancelled, host.sets, err)
+	}
+
+	host.fields = map[uint32]PacketFieldValue{0: {Kind: PacketFieldString}}
+	cancelled, err = pluginRuntime.HandlePacket(PacketClientEvent, 2, (&gtpacket.CommandRequest{}).ID(), "xuid", false)
+	if err != nil || !cancelled {
+		t.Fatalf("HandlePacket(CommandRequest) cancelled=%v error=%v", cancelled, err)
+	}
+	if cancelled, err = pluginRuntime.HandlePacket(PacketServerEvent, 3, (&gtpacket.Text{}).ID(), "xuid", false); err != nil || cancelled {
+		t.Fatalf("HandlePacket(server Text) cancelled=%v error=%v", cancelled, err)
+	}
 }
 
 func TestCSharpVanillaGameModeCommand(t *testing.T) {
@@ -763,7 +814,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		arguments []string
 		want      string
 	}{
-		{0, nil, "jumps=0, punches=0, sprints=0, sneaks=0, quits=0, scheduled=0"},
+		{0, nil, "jumps=0, punches=0, sprints=0, sneaks=0, quits=0, scheduled=0, packets=0/0"},
 		{1, []string{"echo", "hello world"}, "hello world"},
 		{2, []string{"mode", "Creative"}, "mode=Creative"},
 		{3, []string{"ping"}, "Danick's ping: 37ms"},

@@ -7,6 +7,8 @@
 - Plugins subclass `Plugin`; generated build plumbing supplies the native entry point and project-name identity.
 - The Go host owns Dragonfly and exposes a private flat C ABI. Plugins never use ABI types.
 - Code generation reads the pinned Dragonfly Go source with `go/ast` and emits C#; there is no second public API schema.
+- Packet generation reads the pinned gophertunnel packet structs and the intercept handler contract with
+  `go/ast`; intercept hands the host packets that gophertunnel has already decoded.
 
 ## Shape
 
@@ -47,6 +49,18 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `RedstoneUpdate` includes all 12 upstream fields, nullable `After`, and all three causes.
    Context callbacks use sticky cancellation; notification callbacks receive their borrowed
    transaction without inventing cancellation state.
+   The packet slice uses the exact `intercept.Handler` names, `HandleClientPacket` and
+   `HandleServerPacket`. Both are allowed by default and cancellable. The host borrows each decoded
+   `packet.Packet` for one synchronous callback and exposes all 233 registered concrete packet
+   types. The generator currently maps 681 primitive, string, byte, UUID, and float-vector fields
+   to mutable typed properties. The remaining 205 top-level fields are callback-scoped lazy
+   `Packet.Value` objects with JSON inspection while recursive protocol structs, optionals, unions,
+   maps, and slices are added to the AST generator. Incoming packet mutation changes the exact
+   decoded object consumed by Dragonfly. Outgoing inspection and cancellation are safe; outgoing
+   mutation is rejected because intercept v0.3 passes potentially shared packet pointers and has
+   no per-connection clone/replacement contract. Packet callbacks intentionally expose the
+   connection XUID rather than a fake `Player.Context`: login packets can precede player
+   registration and the intercept callback does not own a Dragonfly world transaction.
 3. Player methods and commands. Command interfaces and the implemented `Player` method surface are generated from Dragonfly's Go AST. C# uses `Cmd.New`/`Cmd.Register`, one `Cmd.Runnable` per overload, and reflected public fields as Dragonfly uses reflected Go struct fields. Supported command fields include subcommands, native enums, dynamic `Cmd.Enum` values, players, vectors, optional values, and `Cmd.Varargs`. The generator roots runnable fields and field types for NativeAOT; runnable types use `internal` visibility and require no linker annotations. Bedrock-facing subcommands and enum/player suggestions are always lowercase. The generated game-mode slice includes the exact `World.GameMode` interface, four registered values, `GameModeByID`, `GameModeID`, `Player.SetGameMode`, and `Player.GameMode`. Custom C# game modes cross the private ABI as their eight Dragonfly capabilities and remain unregistered, matching raw Dragonfly behavior. The text slice includes `Message`, `SendPopup`, `SendTip`, `SendJukeboxPopup`, `SetNameTag`, and `Disconnect`. The state slice adds the exact 17 `Food`, health, experience-level/progress, scale, visibility, and mobility methods. The kinematics slice adds AST-generated `Teleport`, `Move`, `Displace`, `Position`, `Velocity`, `SetVelocity`, and `Rotation`; the host invokes those exact Dragonfly methods and does not reject non-finite values that raw Dragonfly accepts. Setters return `void`; private host status never enters the public API. `SetMaxHealth` preserves Dragonfly's clamp-to-one behavior for non-positive values. `Messagef` remains absent until Go `fmt.Sprintf` semantics can be preserved honestly.
 4. World and block parity. The first landed slice generates `Cube.Pos`, `Cube.Range`,
    `Cube.Face`, `World.Block`, `World.SetOpts`, `World.Tx.Range`, `World.Tx.Block`,
@@ -195,7 +209,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    C# maps Dragonfly task errors to domain exceptions without exposing ABI status. The private
    callback trampoline keeps delegates plugin-owned and borrows a fresh transaction only during
    execution. Framework teardown rejects new tasks, cancels pending delays, and drains running
-   callbacks before `OnDisable`. Host ABI 45 and plugin ABI 10 carry execution, terminal outcome,
+   callbacks before `OnDisable`. Host ABI 46 and plugin ABI 10 carry execution, terminal outcome,
    signed delay, and cancellation. `World.New()`
    constructs Dragonfly's in-memory NOP-provider world. `World.Config.New()` transports the
    selected upstream config fields atomically; `MCDB.Config.Open(path)` selects a writable,

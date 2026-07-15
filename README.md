@@ -55,7 +55,7 @@ handler interface has no join callback. The host emits it after installing its h
 the same transaction-owned `Player.Context` and may cancel admission. The remaining player
 callbacks continue to mirror `player.Handler`.
 
-Current C# slice: loading, lifecycle, reflected commands, player text actions, game mode, typed
+Current C# slice: loading, lifecycle, reflected commands, decoded packet interception, player text actions, game mode, typed
 effects, forms, items and player inventories, all 37 methods in Dragonfly's current
 `player.Handler`, and all 13 methods in `world.Handler`. Player callbacks include movement, world
 changes, damage/healing/death, mutable respawns and
@@ -86,6 +86,27 @@ with typed elements, submitted values, `Closer`, and callback-owned `World.Tx`. 
 remains open for custom implementations, matching Dragonfly's public `form.Form` interface.
 `examples/plugins/kitchen-sink` compiles against every exposed C# API and grows with each parity
 slice.
+
+Packet plugins override the exact intercept contract names:
+
+```csharp
+public override void HandleClientPacket(Packet.Context ctx, Packet.Packet packet)
+{
+    if (packet is Packet.Text text) text.Message = text.Message.Trim();
+    if (packet is Packet.CommandRequest command && command.CommandLine.Length == 0) ctx.Cancel();
+}
+
+public override void HandleServerPacket(Packet.Context ctx, Packet.Packet packet)
+{
+    Console.WriteLine($"send {packet.ID()} to {ctx.XUID()}");
+}
+```
+
+gophertunnel has already decoded these objects; the plugin does not parse raw packet bytes. All
+233 registered packet structs are generated from its Go AST. Simple top-level fields are typed and
+mutable. Complex protocol fields currently expose lazy `Packet.Value.Json()` while recursive AST
+generation lands. Outgoing packets may be inspected or cancelled, but mutation is rejected:
+intercept v0.3 does not clone potentially shared broadcast packet objects per connection.
 
 Item code uses Dragonfly types, never Minecraft identifiers:
 

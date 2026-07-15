@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using Dragonfly;
+using GtPacket = Dragonfly.Packet;
 
 public sealed class KitchenSink : Plugin
 {
@@ -17,6 +18,8 @@ public sealed class KitchenSink : Plugin
     private long _commandExecutions;
     private long _diagnostics;
     private long _scheduled;
+    private long _clientPackets;
+    private long _serverPackets;
     private World? _memoryWorld;
     private World? _persistentWorld;
     private World.DamageSource? _lastDamageSource;
@@ -311,6 +314,24 @@ public sealed class KitchenSink : Plugin
 
     public override void HandleClose(World.Tx tx) => _ = tx;
 
+    public override void HandleClientPacket(GtPacket.Context ctx, GtPacket.Packet packet)
+    {
+        Increment(ref _clientPackets);
+        if (packet is GtPacket.Text text) text.Message = text.Message.Trim();
+        if (packet is GtPacket.PlayerSkin skin) skin.UUID = skin.UUID;
+        if (packet is GtPacket.CommandRequest command && string.IsNullOrWhiteSpace(command.CommandLine))
+            ctx.Cancel();
+    }
+
+    // Outgoing packets may be inspected or cancelled. The intercept library
+    // does not yet clone broadcast packets, so this example intentionally does
+    // not mutate them.
+    public override void HandleServerPacket(GtPacket.Context ctx, GtPacket.Packet packet)
+    {
+        Increment(ref _serverPackets);
+        _ = (ctx.XUID(), packet.ID());
+    }
+
     private static void Increment(ref long counter) => Interlocked.Increment(ref counter);
 
     private static bool Finite(Vector3 value) =>
@@ -322,13 +343,15 @@ public sealed class KitchenSink : Plugin
     internal sealed class KitchenStatus(KitchenSink plugin) : Cmd.Runnable
     {
         public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx) => output.Printf(
-            "jumps={0}, punches={1}, sprints={2}, sneaks={3}, quits={4}, scheduled={5}",
+            "jumps={0}, punches={1}, sprints={2}, sneaks={3}, quits={4}, scheduled={5}, packets={6}/{7}",
             plugin._jumps,
             plugin._punches,
             plugin._sprints,
             plugin._sneaks,
             plugin._quits,
-            plugin._scheduled);
+            plugin._scheduled,
+            plugin._clientPackets,
+            plugin._serverPackets);
     }
 
     internal sealed class KitchenEcho : Cmd.Runnable

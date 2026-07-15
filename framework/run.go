@@ -49,6 +49,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		return err
 	}
 	players := host.NewPlayers()
+	packets := host.NewPackets()
 	serverHost := host.NewServer(players)
 	worlds, err := NewPersistentWorldManager(config.Worlds.Directory, log, players)
 	if err != nil {
@@ -57,8 +58,9 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	pluginRuntime, err := native.OpenWithHost(config.Plugins.RuntimeLibrary, config.Plugins.Directory, struct {
 		*host.Players
 		*host.Server
+		*host.Packets
 		*WorldManager
-	}{players, serverHost, worlds})
+	}{players, serverHost, packets, worlds})
 	if err != nil {
 		return err
 	}
@@ -88,7 +90,9 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		return fmt.Errorf("configure core worlds: %w", err)
 	}
 	listenerGate := deferListenerCreation(&dragonflyConfig)
+	wrapPacketListeners(&dragonflyConfig)
 	var srv *server.Server
+	var packetLease *packetInterceptLease
 	cleanup := runCleanup{
 		log: log,
 		closeStarted: func() error {
@@ -119,6 +123,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		},
 		drainScheduled: worlds.DrainScheduled,
 		closeRuntime: func() {
+			packetLease.Close()
 			serverHost.Close()
 			pluginRuntime.Close()
 		},
@@ -139,6 +144,10 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		return err
 	}
 	if err := host.RegisterCommands(pluginRuntime, players); err != nil {
+		return err
+	}
+	packetLease, err = activatePacketIntercept(srv, nativePacketEndpoint{runtime: pluginRuntime, packets: packets, log: log})
+	if err != nil {
 		return err
 	}
 	if err := listenerGate.openAll(); err != nil {

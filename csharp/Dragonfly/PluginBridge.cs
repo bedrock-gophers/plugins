@@ -3720,6 +3720,20 @@ internal static unsafe class PluginBridge
                     plugin.HandleClose(new World.Tx(value->Invocation));
                     return Abi.Ok;
                 }
+                case Abi.PacketClientEvent:
+                case Abi.PacketServerEvent:
+                {
+                    var value = (PacketInput*)input;
+                    var result = (PacketState*)state;
+                    var context = new Packet.Context(Utf8(value->Xuid), result->Cancelled != 0);
+                    var packet = Packet.PacketCodec.Decode(value->Packet, value->PacketId);
+                    if (eventId == Abi.PacketClientEvent)
+                        plugin.HandleClientPacket(context, packet);
+                    else
+                        plugin.HandleServerPacket(context, packet);
+                    ApplyCancellation(context, &result->Cancelled);
+                    return Abi.Ok;
+                }
                 default:
                     return Abi.Ok;
             }
@@ -4211,6 +4225,11 @@ internal static unsafe class PluginBridge
     }
 
     private static void ApplyCancellation(World.Context context, byte* cancelled)
+    {
+        if (context.Cancelled()) *cancelled = 1;
+    }
+
+    private static void ApplyCancellation(Packet.Context context, byte* cancelled)
     {
         if (context.Cancelled()) *cancelled = 1;
     }

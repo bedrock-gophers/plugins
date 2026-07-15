@@ -11,6 +11,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - concrete `Player` targets and `Player.Name()` in attack and entity-use handlers;
 - all 13 Dragonfly world handlers, including typed liquids/sounds/blocks/entities, entity
   spawn/despawn, mutable explosion lists and scalars, full redstone updates, and world close;
+- decoded gophertunnel client/server packet interception, callback-scoped typed packet properties,
+  incoming mutation and cancellation, and safe outgoing inspection;
 - the cancellable host `OnJoin` lifecycle extension emitted after the framework installs its
   Dragonfly player handler;
 - player-action telemetry;

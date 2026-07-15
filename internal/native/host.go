@@ -104,6 +104,36 @@ type ItemStack struct {
 // WorldID is an opaque, process-local handle. Handles are never reused.
 type WorldID uint64
 
+// PacketHandle identifies a decoded gophertunnel packet borrowed for one
+// synchronous intercept callback.
+type PacketHandle uint64
+
+type PacketFieldKind uint32
+
+const (
+	PacketFieldInvalid PacketFieldKind = iota
+	PacketFieldBool
+	PacketFieldSigned
+	PacketFieldUnsigned
+	PacketFieldFloat
+	PacketFieldString
+	PacketFieldBytes
+	PacketFieldVec2
+	PacketFieldVec3
+	PacketFieldUUID
+	PacketFieldJSON
+)
+
+type PacketFieldValue struct {
+	Kind     PacketFieldKind
+	Signed   int64
+	Unsigned uint64
+	Number   float64
+	X, Y, Z  float64
+	UUID     [16]byte
+	Data     []byte
+}
+
 type WorldDimension uint32
 
 const (

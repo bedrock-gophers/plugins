@@ -217,7 +217,7 @@ func TestCSharpServerPlayersAndLookup(t *testing.T) {
 		Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &source,
 		Overload: 0, OnlinePlayers: []CommandPlayer{{Player: source, Name: "Danick"}},
 	})
-	if err != nil || status.Failed || status.Message != "jumps=0, punches=0, sprints=0, sneaks=0, quits=0, scheduled=1" {
+	if err != nil || status.Failed || status.Message != "jumps=0, punches=0, sprints=0, sneaks=0, quits=0, scheduled=1, packets=0/0" {
 		t.Fatalf("scheduled status=%#v error=%v", status, err)
 	}
 	if !slices.Equal(host.openInvocations, []InvocationID{42}) ||

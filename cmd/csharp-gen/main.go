@@ -508,6 +508,8 @@ var selectedWorldTxMethods = []string{
 func main() {
 	root := flag.String("root", ".", "repository root")
 	dragonfly := flag.String("dragonfly", "", "Dragonfly module directory")
+	gophertunnel := flag.String("gophertunnel", "", "gophertunnel module directory")
+	intercept := flag.String("intercept", "", "bedrock-gophers/intercept module directory")
 	check := flag.Bool("check", false, "fail if generated output differs")
 	flag.Parse()
 
@@ -520,6 +522,21 @@ func main() {
 			fatal(err)
 		}
 		directory = string(bytes.TrimSpace(output))
+	}
+	gophertunnelDirectory := *gophertunnel
+	if gophertunnelDirectory == "" {
+		gophertunnelDirectory = moduleDirectory(*root, "github.com/sandertv/gophertunnel")
+	}
+	interceptDirectory := *intercept
+	if interceptDirectory == "" {
+		interceptDirectory = moduleDirectory(*root, "github.com/bedrock-gophers/intercept")
+	}
+	packets, err := inspectPackets(filepath.Join(gophertunnelDirectory, "minecraft", "protocol", "packet"))
+	if err != nil {
+		fatal(err)
+	}
+	if err := inspectInterceptHandler(filepath.Join(interceptDirectory, "intercept", "handler.go")); err != nil {
+		fatal(err)
 	}
 	methods, err := playerHandlerMethods(filepath.Join(directory, "server", "player", "handler.go"))
 	if err != nil {
@@ -680,6 +697,14 @@ func main() {
 	}
 	files := []generatedFile{
 		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Packet.Types.g.cs"),
+			Content: generatePacketTypes(packets),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Packet.Handler.g.cs"),
+			Content: generatePacketHandler(),
+		},
+		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Server.g.cs"),
 			Content: generateServer(serverMethods),
 		},
@@ -803,6 +828,16 @@ func main() {
 	if err := syncGeneratedFiles(files, *check); err != nil {
 		fatal(err)
 	}
+}
+
+func moduleDirectory(root, module string) string {
+	command := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", module)
+	command.Dir = root
+	output, err := command.Output()
+	if err != nil {
+		fatal(fmt.Errorf("locate %s: %w", module, err))
+	}
+	return string(bytes.TrimSpace(output))
 }
 
 func playerTextMethods(path string) ([]method, error) {
