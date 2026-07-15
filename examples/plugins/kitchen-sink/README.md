@@ -18,6 +18,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - every zero-argument player action plus exact typed block interactions in `/kitchen actions`;
 - exact `UseItemOnEntity` and `AttackEntity` results against a selected player in
   `/kitchen entity-actions`;
+- exact `Collect` and `Drop` results with complete typed item stacks in `/kitchen item-actions`;
 - reflected command arguments and overloads;
 - direct `Player.Message` output;
 - transaction-safe range, lazy block/entity/player/bounding-box iteration, current-world lookup, height/light

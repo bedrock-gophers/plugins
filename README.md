@@ -113,6 +113,8 @@ Block-interaction parity includes AST-generated `BreakBlock`, `ContinueBreaking`
 arguments passed to Dragonfly inside the active player transaction.
 Entity-interaction parity includes exact AST-generated `UseItemOnEntity` and `AttackEntity`
 methods. Both accept `World.Entity` and return Dragonfly's real `bool` result.
+Item-action parity includes exact AST-generated `Collect(Item.Stack)` and `Drop(Item.Stack)`
+methods. Both reuse the complete typed stack codec and call Dragonfly directly.
 `World.New()` creates a writable in-memory world.
 `World.Config.New()` accepts Dragonfly's dimension and runtime settings, and an
 `MCDB.Config().Open(...)` provider creates a writable, saveable world below the configured worlds

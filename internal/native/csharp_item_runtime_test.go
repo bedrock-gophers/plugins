@@ -107,6 +107,68 @@ func cloneNativeItem(value ItemStack) ItemStack {
 	return value
 }
 
+func TestCSharpPlayerItemActions(t *testing.T) {
+	host := &csharpItemHost{recordingHost: &recordingHost{
+		itemActionResults: map[PlayerItemActionKind]struct {
+			Count  int64
+			Result bool
+		}{
+			PlayerItemActionCollect: {Count: 3, Result: true},
+			PlayerItemActionDrop:    {Count: 1, Result: true},
+		},
+	}}
+	runtime := openCSharpRuntimeWithHost(t, host)
+	commands, err := runtime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	var overload uint64
+	found := false
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "item-actions" {
+			overload, found = uint64(index), true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("item-actions overload missing: %#v", kitchen.Overloads)
+	}
+	player := PlayerID{UUID: [16]byte{1}, Generation: 9}
+	output, err := runtime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 61, Source: "Kitchen", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Overload: overload, Arguments: []string{"item-actions"},
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Kitchen"}},
+	})
+	if err != nil || output.Failed || output.Message != "collected=3:true, dropped=1" {
+		t.Fatalf("item-actions output=%#v error=%v", output, err)
+	}
+	if !slices.Equal(host.itemActions, []PlayerItemActionKind{PlayerItemActionCollect, PlayerItemActionDrop}) ||
+		len(host.itemActionItems) != 2 {
+		t.Fatalf("item actions=%v items=%#v", host.itemActions, host.itemActionItems)
+	}
+	collect, drop := host.itemActionItems[0], host.itemActionItems[1]
+	values := map[string]any{}
+	valuesOK := nbt.UnmarshalEncoding(collect.ValuesNBT, &values, nbt.LittleEndian) == nil
+	if collect.Identifier != "minecraft:apple" || collect.Count != 3 || collect.CustomName != "Kitchen collect" ||
+		!slices.Equal(collect.Lore, []string{"Exact Player.Collect"}) || !valuesOK || values["kitchen:action"] != "collect" {
+		t.Fatalf("collect transport=%#v values=%#v", collect, values)
+	}
+	if drop.Identifier != "minecraft:diamond_sword" || drop.Count != 1 || !drop.Unbreakable ||
+		!reflect.DeepEqual(drop.Enchantments, []ItemEnchantment{{ID: 17, Level: 2}}) {
+		t.Fatalf("drop transport=%#v", drop)
+	}
+	host.itemActionResults = nil
+	output, err = runtime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 62, Source: "Kitchen", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Overload: overload, Arguments: []string{"item-actions"},
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Kitchen"}},
+	})
+	if err != nil || output.Failed || output.Message != "collected=0:false, dropped=0" {
+		t.Fatalf("failed transport leaked into public API: output=%#v error=%v", output, err)
+	}
+}
+
 func TestCSharpTypedItemInventoryFlow(t *testing.T) {
 	var largeValues [70 << 10]byte
 	largeValues[0], largeValues[len(largeValues)-1] = 0x2a, 0x7f

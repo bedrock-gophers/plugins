@@ -184,6 +184,27 @@ func bg_go_player_held_slot_set(context C.uint64_t, invocation C.DfInvocationId,
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_player_item_action
+func bg_go_player_item_action(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, kind C.uint32_t, view *C.DfItemStackViewV3, count *C.int64_t, result *C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	value, valid := copyItemStackView(view)
+	if !ok || !valid || count == nil || result == nil {
+		return C.DF_STATUS_ERROR
+	}
+	valueCount, valueResult, ok := host.PlayerItemAction(
+		InvocationID(invocation), playerID(player), PlayerItemActionKind(kind), value,
+	)
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	*count = C.int64_t(valueCount)
+	*result = 0
+	if valueResult {
+		*result = 1
+	}
+	return C.DF_STATUS_OK
+}
+
 func openItemSnapshot(context uint64, value ItemStack, ok bool, snapshot *C.uint64_t, info *C.DfItemStackInfo) C.DfStatus {
 	if !ok || snapshot == nil || info == nil || !validNativeItem(value) {
 		return C.DF_STATUS_ERROR

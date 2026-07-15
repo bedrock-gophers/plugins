@@ -275,6 +275,8 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    methods and Dragonfly's three opaque `VisibilityLevel` values.
    Host ABI 60 appends one private result transport for exact `Player.UseItemOnEntity` and
    `AttackEntity` calls. Transport success remains separate from the methods' `bool` results.
+   Host ABI 61 appends one private full-stack transport for exact AST-generated `Player.Collect`
+   and `Drop` calls. Transport failure stays private and collapses to normal zero values.
    The AST-generated `Scoreboard` class mirrors Dragonfly's mutable name, write, set/remove,
    padding, line-copy, and descending-order behavior. `Player.SendScoreboard` activates the
    existing private transport with raw lines so the Go host applies padding and ordering once.

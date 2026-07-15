@@ -226,10 +226,16 @@ type recordingHost struct {
 	entityActions       []PlayerEntityActionKind
 	entityActionTargets []EntityID
 	entityActionResults map[PlayerEntityActionKind]bool
-	skin                PlayerSkin
-	setSkins            []PlayerSkin
-	inventoryItem       ItemStack
-	inventorySets       []struct {
+	itemActions         []PlayerItemActionKind
+	itemActionItems     []ItemStack
+	itemActionResults   map[PlayerItemActionKind]struct {
+		Count  int64
+		Result bool
+	}
+	skin          PlayerSkin
+	setSkins      []PlayerSkin
+	inventoryItem ItemStack
+	inventorySets []struct {
 		Inventory InventoryID
 		Slot      uint32
 		Item      ItemStack
@@ -413,6 +419,13 @@ func (h *recordingHost) PlayerEntityAction(_ InvocationID, _ PlayerID, entity En
 	h.entityActions = append(h.entityActions, kind)
 	h.entityActionTargets = append(h.entityActionTargets, entity)
 	return h.entityActionResults[kind], true
+}
+
+func (h *recordingHost) PlayerItemAction(_ InvocationID, _ PlayerID, kind PlayerItemActionKind, item ItemStack) (int64, bool, bool) {
+	h.itemActions = append(h.itemActions, kind)
+	h.itemActionItems = append(h.itemActionItems, cloneNativeItem(item))
+	result, ok := h.itemActionResults[kind]
+	return result.Count, result.Result, ok
 }
 
 func (h *recordingHost) PlayerString(_ InvocationID, _ PlayerID, kind PlayerStringKind) (string, bool) {

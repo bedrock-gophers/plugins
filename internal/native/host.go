@@ -444,6 +444,7 @@ type Host interface {
 	PlayerBlockAction(InvocationID, PlayerID, PlayerBlockActionKind, BlockPos, int32, Vec3) bool
 	PlayerViewLayer(InvocationID, PlayerID, EntityID, PlayerViewLayerKind, string, uint8) bool
 	PlayerEntityAction(InvocationID, PlayerID, EntityID, PlayerEntityActionKind) (bool, bool)
+	PlayerItemAction(InvocationID, PlayerID, PlayerItemActionKind, ItemStack) (int64, bool, bool)
 	PlayerString(InvocationID, PlayerID, PlayerStringKind) (string, bool)
 	SendPlayerToast(InvocationID, PlayerID, string, string) bool
 	PlayerCooldown(InvocationID, PlayerID, PlayerCooldownOperation, string, int32, time.Duration) (bool, bool)
@@ -580,6 +581,9 @@ func (noopHost) PlayerViewLayer(InvocationID, PlayerID, EntityID, PlayerViewLaye
 }
 func (noopHost) PlayerEntityAction(InvocationID, PlayerID, EntityID, PlayerEntityActionKind) (bool, bool) {
 	return false, false
+}
+func (noopHost) PlayerItemAction(InvocationID, PlayerID, PlayerItemActionKind, ItemStack) (int64, bool, bool) {
+	return 0, false, false
 }
 func (noopHost) PlayerString(InvocationID, PlayerID, PlayerStringKind) (string, bool) {
 	return "", false

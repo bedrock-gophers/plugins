@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 11u
-// Host version 60 adds exact player-on-entity actions.
-#define DF_HOST_ABI_VERSION 60u
+// Host version 61 adds exact player item actions.
+#define DF_HOST_ABI_VERSION 61u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -380,6 +380,7 @@ typedef DfStatus (*DfHostPlayerDeathPositionFn)(uint64_t context, DfInvocationId
 typedef DfStatus (*DfHostPlayerBlockActionFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfBlockPos position, int32_t face, DfVec3 click_position);
 typedef DfStatus (*DfHostPlayerViewLayerFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfEntityId entity, uint32_t kind, DfStringView text, uint8_t visibility);
 typedef DfStatus (*DfHostPlayerEntityActionFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfEntityId entity, uint32_t kind, uint8_t *result);
+typedef DfStatus (*DfHostPlayerItemActionFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, const DfItemStackViewV3 *item, int64_t *count, uint8_t *result);
 typedef DfStatus (*DfHostPlayerEffectFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t operation, DfEffectView effect);
 typedef DfStatus (*DfHostPlayerEffectsFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfEffectBuffer *output);
 typedef DfStatus (*DfHostPlayerEffectsClearFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player);
@@ -652,6 +653,7 @@ typedef struct {
     DfHostPlayerBlockActionFn player_block_action;
     DfHostPlayerViewLayerFn player_view_layer;
     DfHostPlayerEntityActionFn player_entity_action;
+    DfHostPlayerItemActionFn player_item_action;
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u

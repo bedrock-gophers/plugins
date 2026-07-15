@@ -1630,6 +1630,30 @@ internal static unsafe class PluginBridge
                    result <= 1 && result != 0;
         }
 
+        internal static (int Count, bool Result) RunPlayerItemAction(
+            ulong invocation,
+            PlayerId player,
+            Item.Stack item,
+            uint kind)
+        {
+            var api = Api;
+            if (api is null || api->PlayerItemAction == null) return default;
+            using var lease = new ItemViewLease(item);
+            var view = lease.View;
+            long count = 0;
+            byte result = 0;
+            if (api->PlayerItemAction(
+                    api->Context,
+                    invocation,
+                    player,
+                    kind,
+                    &view,
+                    &count,
+                    &result) != Abi.Ok ||
+                result > 1 || count is < int.MinValue or > int.MaxValue) return default;
+            return ((int)count, result != 0);
+        }
+
         internal static Skin PlayerSkin(ulong invocation, PlayerId player)
         {
             var api = Api;

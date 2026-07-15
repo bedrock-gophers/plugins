@@ -58,6 +58,26 @@ func (p *Players) PlayerCooldown(
 	return active, ok
 }
 
+func (p *Players) PlayerItemAction(invocation native.InvocationID, id native.PlayerID, kind native.PlayerItemActionKind, value native.ItemStack) (int64, bool, bool) {
+	stack, ok := itemStackFromNative(value)
+	if !ok {
+		return 0, false, false
+	}
+	result, ok := callPlayer(p, invocation, id, func(_ *world.Tx, connected *player.Player) struct {
+		count  int
+		result bool
+		valid  bool
+	} {
+		count, actionResult, valid := runExactPlayerItemAction(connected, stack, kind)
+		return struct {
+			count  int
+			result bool
+			valid  bool
+		}{count: count, result: actionResult, valid: valid}
+	})
+	return int64(result.count), result.result, ok && result.valid
+}
+
 func (p *Players) InventorySize(invocation native.InvocationID, id native.InventoryID) (uint32, bool) {
 	value, ok := readPlayer(p, invocation, id.Player, func(connected *player.Player) uint32 {
 		if id.Kind == native.InventoryOffhand {

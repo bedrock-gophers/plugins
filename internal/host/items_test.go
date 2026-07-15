@@ -42,6 +42,55 @@ func TestPlayersItemCooldownRoundTrip(t *testing.T) {
 	})
 }
 
+func TestPlayersItemActionsCallDragonfly(t *testing.T) {
+	withPlayerTx(t, func(tx *world.Tx, connected *player.Player) {
+		players := NewPlayers()
+		playerID := players.Register(connected, 61)
+		invocation, leave := players.BeginInvocation(tx)
+		defer leave()
+
+		added, collected, ok := players.PlayerItemAction(
+			invocation,
+			playerID,
+			native.PlayerItemActionCollect,
+			native.ItemStack{Identifier: "minecraft:apple", Count: 2},
+		)
+		if !ok || !collected || added != 2 {
+			t.Fatalf("collect added=%d result=%v ok=%v", added, collected, ok)
+		}
+		stack, err := connected.Inventory().Item(0)
+		if err != nil || stack.Count() != 2 {
+			t.Fatalf("collected stack=%v error=%v", stack, err)
+		}
+
+		dropped, result, ok := players.PlayerItemAction(
+			invocation,
+			playerID,
+			native.PlayerItemActionDrop,
+			native.ItemStack{Identifier: "minecraft:stick", Count: 1},
+		)
+		if !ok || !result || dropped != 1 {
+			t.Fatalf("drop count=%d result=%v ok=%v", dropped, result, ok)
+		}
+		if _, _, ok := players.PlayerItemAction(
+			invocation,
+			playerID,
+			native.PlayerItemActionKind(99),
+			native.ItemStack{Identifier: "minecraft:apple", Count: 1},
+		); ok {
+			t.Fatal("unknown item action accepted")
+		}
+		if _, _, ok := players.PlayerItemAction(
+			invocation,
+			playerID,
+			native.PlayerItemActionCollect,
+			native.ItemStack{Identifier: "missing:item", Count: 1},
+		); ok {
+			t.Fatal("invalid item accepted")
+		}
+	})
+}
+
 func TestPlayersInventoryItemRoundTrip(t *testing.T) {
 	withPlayer(t, func(player *player.Player) {
 		players := NewPlayers()
