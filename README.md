@@ -36,6 +36,7 @@ durations.
 `/kitchen visibility` exercises exact per-player entity hide/show calls.
 `/kitchen kinematics` exercises exact player transforms, reads, and Dragonfly knockback.
 `/kitchen heal` exercises direct healing, hurting, and final-damage calculation.
+`/kitchen state` includes live item-use and sleeping state reads.
 `/kitchen item` builds a typed diamond sword, round-trips inventory, armour, and held-item APIs,
 then restores every changed slot.
 `/kitchen form` covers reflected menu, custom, and modal forms with every typed element;
