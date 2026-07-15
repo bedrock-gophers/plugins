@@ -66,7 +66,8 @@ public sealed class KitchenSink : Plugin
             new KitchenScoreboard(),
             new KitchenSkin(),
             new KitchenVisibility(),
-            new KitchenEntityActions()));
+            new KitchenEntityActions(),
+            new KitchenItemActions()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -508,6 +509,37 @@ public sealed class KitchenSink : Plugin
                 "used={0}, attacked={1}",
                 used ? "true" : "false",
                 attacked ? "true" : "false");
+        }
+    }
+
+    internal sealed class KitchenItemActions : Cmd.Runnable
+    {
+        [Cmd.Tag("item-actions")]
+        public Cmd.SubCommand ItemActions;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var collectStack = Dragonfly.Item.NewStack(new Dragonfly.Item.Apple(), 3)
+                .WithCustomName("Kitchen collect")
+                .WithLore("Exact Player.Collect")
+                .WithValue("kitchen:action", "collect");
+            var dropStack = Dragonfly.Item.NewStack(
+                    new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond),
+                    1)
+                .AsUnbreakable()
+                .WithEnchantments(Dragonfly.Item.NewEnchantment(Dragonfly.Item.Unbreaking, 2));
+            var (added, ok) = player.Collect(collectStack);
+            var dropped = player.Drop(dropStack);
+            output.Printf(
+                "collected={0}:{1}, dropped={2}",
+                added,
+                ok ? "true" : "false",
+                dropped);
         }
     }
 
