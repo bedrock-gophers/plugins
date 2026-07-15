@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static class Abi
 {
     public const uint PluginVersion = 11;
-    public const uint HostVersion = 46;
+    public const uint HostVersion = 47;
     public const int Ok = 0;
     public const int Error = 1;
 
@@ -496,6 +496,15 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, byte*, int> WorldTaskCancel;
     public delegate* unmanaged[Cdecl]<ulong, ulong, uint, PacketFieldValue*, int> PacketFieldGet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, uint, PacketFieldValue*, int> PacketFieldSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, uint*, int> WorldDimensionGet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, byte*, int> WorldTimeCycleGet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, byte, int> WorldTimeCycleSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, long, int> WorldRequiredSleepDurationSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, long*, int> WorldDefaultGameModeGet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, long, int> WorldDefaultGameModeSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, int, int> WorldTickRangeSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, DifficultyView*, int> WorldDifficultyGet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, DifficultyView, int> WorldDifficultySet;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -736,6 +745,18 @@ public unsafe struct WorldConfigV1
     public long ChunkUnloadIntervalNanoseconds;
     public int RandomTickSpeed;
     public uint Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct DifficultyView
+{
+    public uint ID;
+    public byte Builtin;
+    public byte FoodRegenerates;
+    public ushort Reserved;
+    public double StarvationHealthLimit;
+    public int FireSpreadIncrease;
+    public uint Reserved2;
 }
 
 [StructLayout(LayoutKind.Sequential)]

@@ -216,6 +216,16 @@ var rainingHere = tx.RainingAt(pos);
 tx.SetBiome(pos, previousBiome);
 var tick = tx.CurrentTick();
 var currentWorld = tx.World();
+var dimension = currentWorld.Dimension();
+var cycling = currentWorld.TimeCycle();
+currentWorld.StopTime();
+if (cycling) currentWorld.StartTime();
+currentWorld.SetRequiredSleepDuration(TimeSpan.FromSeconds(1));
+var defaultGameMode = currentWorld.DefaultGameMode();
+currentWorld.SetDefaultGameMode(defaultGameMode);
+currentWorld.SetTickRange(4);
+var difficulty = currentWorld.Difficulty();
+currentWorld.SetDifficulty(difficulty);
 foreach (var entity in tx.Entities()) { /* live World.Entity */ }
 foreach (var player in tx.Players().OfType<Player>()) player.Message("Hello, world!");
 foreach (var entity in tx.EntitiesWithin(Cube.Box(-16, -16, -16, 16, 16, 16))) { /* nearby */ }
@@ -227,6 +237,11 @@ tx.AddParticle(source.Position(), new Particle.Note(Sound.Piano(), 12));
 tx.PlaySound(source.Position(), new Sound.Explosion());
 player.PlaySound(new Sound.LevelUp());
 ```
+
+These world state methods keep Dragonfly's exact names and signatures. `World.Dimension()` and
+`World.Difficulty()` are emitted as extension methods because C# cannot place a method beside the
+same-named nested type; plugin call syntax remains unchanged. The four registered difficulties and
+custom structural `World.Difficulty` implementations round-trip through private ABI 47.
 
 `BlocksWithin`, `Entities`, `EntitiesWithin`, and `Players` stay lazy across the private ABI: each C# enumerator owns
 a transaction-scoped Dragonfly iterator and closes it on exhaustion, early exit, or callback

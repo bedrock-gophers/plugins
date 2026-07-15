@@ -560,15 +560,32 @@ public sealed class KitchenSink : Plugin
             var range = arena.Range();
             var highestLightBlocker = arena.HighestLightBlocker(spawn.X(), spawn.Z());
             var time = arena.Time();
+            var dimension = arena.Dimension();
+            var timeCycle = arena.TimeCycle();
+            var defaultGameMode = arena.DefaultGameMode();
+            var difficulty = arena.Difficulty();
             arena.SetTime(time);
             arena.SetSpawn(spawn);
+            arena.StopTime();
+            if (timeCycle) arena.StartTime();
+            arena.SetRequiredSleepDuration(TimeSpan.FromSeconds(1));
+            arena.SetDefaultGameMode(new CustomGameMode());
+            arena.SetDefaultGameMode(defaultGameMode);
+            arena.SetTickRange(4);
+            arena.SetDifficulty(new CustomDifficulty());
+            var customDifficulty = arena.Difficulty();
+            arena.SetDifficulty(difficulty);
             arena.Save();
             player.ChangeWorld(arena, spawn.Vec3Middle());
             output.Printf(
                 "memory={0}, persistent={1}, spawn={2},{3},{4}, range={5}..{6}, " +
-                "highest_light_blocker={7}, time={8}",
+                "highest_light_blocker={7}, time={8}, overworld={9}, cycle={10}, difficulty={11}",
                 memory.Name(), arena.Name(), spawn.X(), spawn.Y(), spawn.Z(),
-                range.Min(), range.Max(), highestLightBlocker, time);
+                range.Min(), range.Max(), highestLightBlocker, time,
+                dimension.Equals(Dragonfly.World.Overworld) ? "true" : "false",
+                arena.TimeCycle() == timeCycle ? "true" : "false",
+                customDifficulty.FoodRegenerates() && customDifficulty.StarvationHealthLimit() == 7.5 &&
+                    customDifficulty.FireSpreadIncrease() == -4 ? "true" : "false");
         }
     }
 
@@ -1746,6 +1763,13 @@ public sealed class KitchenSink : Plugin
         public bool AllowsInteraction() => true;
         public bool Visible() => true;
         public bool InstantPortalTravel() => false;
+    }
+
+    private sealed class CustomDifficulty : World.Difficulty
+    {
+        public bool FoodRegenerates() => true;
+        public double StarvationHealthLimit() => 7.5;
+        public int FireSpreadIncrease() => -4;
     }
 
     internal sealed class KitchenMarkerType : World.EntityType

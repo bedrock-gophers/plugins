@@ -39,6 +39,12 @@ func decodeGameModeDescriptor(value int64) (world.GameMode, bool) {
 	return descriptorGameMode(uint8(descriptor)), true
 }
 
+// DecodeGameModeDescriptor decodes the private native representation used by
+// both player and world game-mode operations.
+func DecodeGameModeDescriptor(value int64) (world.GameMode, bool) {
+	return decodeGameModeDescriptor(value)
+}
+
 func encodeGameModeDescriptor(mode world.GameMode) (value int64, ok bool) {
 	if mode == nil {
 		return 0, false
@@ -72,6 +78,11 @@ func encodeGameModeDescriptor(mode world.GameMode) (value int64, ok bool) {
 		}
 	}
 	return int64(descriptor), true
+}
+
+// EncodeGameModeDescriptor encodes a registered or structural Dragonfly game mode.
+func EncodeGameModeDescriptor(mode world.GameMode) (int64, bool) {
+	return encodeGameModeDescriptor(mode)
 }
 
 func registeredGameModeID(mode world.GameMode) (id int, ok bool) {

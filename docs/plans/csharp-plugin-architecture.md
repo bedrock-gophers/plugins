@@ -37,8 +37,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    Callbacks may be concurrent. Identity data retains all six upstream fields, including the two
    PlayFab fields excluded from gophertunnel's normal JSON. Client data remains explicitly
    untrusted. Internal callback failures fail closed with a fixed public rejection while only a
-   private runtime status reaches the server log. Plugin ABI 11 adds this dedicated callback; host ABI 46 is
-   unchanged.
+   private runtime status reaches the server log. Plugin ABI 11 adds this dedicated callback.
 2. Generated handler events. All 37 methods in the pinned Dragonfly `player.Handler` interface are generated and
    transported: movement, chat, world changes, damage/healing/death, respawn, skin changes, every
    block/item interaction, entity use/attacks, transfer, command execution, diagnostics, and quit.
@@ -220,7 +219,7 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    C# maps Dragonfly task errors to domain exceptions without exposing ABI status. The private
    callback trampoline keeps delegates plugin-owned and borrows a fresh transaction only during
    execution. Framework teardown rejects new tasks, cancels pending delays, and drains running
-   callbacks before `OnDisable`. Host ABI 46 and plugin ABI 11 carry execution, terminal outcome,
+   callbacks before `OnDisable`. Host ABI 47 and plugin ABI 11 carry execution, terminal outcome,
    signed delay, and cancellation. `World.New()`
    constructs Dragonfly's in-memory NOP-provider world. `World.Config.New()` transports the
    selected upstream config fields atomically; `MCDB.Config.Open(path)` selects a writable,
@@ -232,6 +231,12 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    resolves them through `world.BlockByName`; failed names or state hashes return `(null, false)`.
    This is the dynamic block path needed by VAP-style arena data, while generated concrete block
    types remain the normal compile-time path.
+   Host ABI 47 adds AST-generated `World.Dimension`, `StopTime`, `StartTime`, `TimeCycle`,
+   `SetRequiredSleepDuration`, `DefaultGameMode`, `SetDefaultGameMode`, `SetTickRange`,
+   `Difficulty`, and `SetDifficulty`. Registered game modes/difficulties preserve identity; custom
+   structural implementations preserve their exact interface capabilities. C# emits `Dimension()`
+   and `Difficulty()` as extension methods solely to avoid the language collision with the nested
+   `World.Dimension` and `World.Difficulty` types while retaining identical call syntax.
    ABI 44 and plugin ABI 9 add AST-generated `EntitySpawnOpts`, `EntityType`, `EntityConfig`,
    `EntityData`, and `TickerEntity`. `EntitySpawnOpts.New` creates a worldless Dragonfly handle;
    `Tx.AddEntity`, `RemoveEntity`, and `AddEntityAt` preserve that handle across a fresh world-bound
@@ -279,7 +284,7 @@ Remaining raw-Dragonfly parity work includes:
   world configuration, presentation, combat, and player-control surfaces;
 - exact command behavior and skin types;
 - player-capable raw handle transfer and remaining concrete entity capabilities;
-- custom items, blocks, providers, and generators beyond current generated registries and
+- custom items, blocks, dimensions, providers, and generators beyond current generated registries and
   NOP/MCDB `World.Config` surface.
 
 Dragonfly's `HandleTransfer` remains a transfer to another server address. It must not be reused or
@@ -316,6 +321,8 @@ instruments through the transaction-owned `AddParticle` call.
 scalars, blocks, instruments, discs, items, liquids, stages, and horns.
 `/kitchen game-mode` exercises registered lookup, player reads, and a custom capability-backed
 game mode.
+`/kitchen world` exercises world dimension, time-cycle stop/start, sleep duration, default game
+mode, tick range, registered/custom difficulty, and restores observable state after transport.
 `/kitchen state` exercises all 17 generated food, health, experience-level/progress, scale,
 visibility, and mobility methods without changing the final player state.
 `/kitchen item` exercises stack count, durability, unbreakable, attack damage, anvil cost,

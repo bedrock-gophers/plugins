@@ -708,6 +708,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	difficulties, err := inspectDifficulties(filepath.Join(directory, "server", "world", "difficulty.go"))
+	if err != nil {
+		fatal(err)
+	}
 	playerGameModes, err := inspectPlayerGameModeMethods(filepath.Join(directory, "server", "player", "player.go"))
 	if err != nil {
 		fatal(err)
@@ -844,6 +848,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "GameMode.Types.g.cs"),
 			Content: generateGameModes(gameModes),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Difficulty.Types.g.cs"),
+			Content: generateDifficulties(difficulties),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.GameMode.g.cs"),

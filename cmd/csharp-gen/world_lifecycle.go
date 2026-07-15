@@ -10,12 +10,22 @@ import (
 
 var selectedWorldLifecycleMethods = []string{
 	"Name",
+	"Dimension",
 	"Range",
 	"HighestLightBlocker",
 	"Time",
 	"SetTime",
+	"StopTime",
+	"StartTime",
+	"TimeCycle",
 	"Spawn",
 	"SetSpawn",
+	"SetRequiredSleepDuration",
+	"DefaultGameMode",
+	"SetTickRange",
+	"SetDefaultGameMode",
+	"Difficulty",
+	"SetDifficulty",
 	"Save",
 	"Close",
 }
@@ -38,19 +48,31 @@ func inspectWorldLifecycleMethods(path string) ([]worldLifecycleMethod, error) {
 		}
 	}
 	want := map[string]goSignature{
-		"Name":                {Results: "string"},
-		"Range":               {Results: "cube.Range"},
-		"HighestLightBlocker": {Parameters: "int, int", Results: "int"},
-		"Time":                {Results: "int"},
-		"SetTime":             {Parameters: "int"},
-		"Spawn":               {Results: "cube.Pos"},
-		"SetSpawn":            {Parameters: "cube.Pos"},
-		"Save":                {},
-		"Close":               {Results: "error"},
+		"Name":                     {Results: "string"},
+		"Dimension":                {Results: "Dimension"},
+		"Range":                    {Results: "cube.Range"},
+		"HighestLightBlocker":      {Parameters: "int, int", Results: "int"},
+		"Time":                     {Results: "int"},
+		"SetTime":                  {Parameters: "int"},
+		"StopTime":                 {},
+		"StartTime":                {},
+		"TimeCycle":                {Results: "bool"},
+		"Spawn":                    {Results: "cube.Pos"},
+		"SetSpawn":                 {Parameters: "cube.Pos"},
+		"SetRequiredSleepDuration": {Parameters: "time.Duration"},
+		"DefaultGameMode":          {Results: "GameMode"},
+		"SetTickRange":             {Parameters: "int"},
+		"SetDefaultGameMode":       {Parameters: "GameMode"},
+		"Difficulty":               {Results: "Difficulty"},
+		"SetDifficulty":            {Parameters: "Difficulty"},
+		"Save":                     {},
+		"Close":                    {Results: "error"},
 	}
 	wantParameterCount := map[string]int{
-		"Name": 0, "Range": 0, "HighestLightBlocker": 2, "Time": 0, "SetTime": 1,
-		"Spawn": 0, "SetSpawn": 1, "Save": 0, "Close": 0,
+		"Name": 0, "Dimension": 0, "Range": 0, "HighestLightBlocker": 2, "Time": 0,
+		"SetTime": 1, "StopTime": 0, "StartTime": 0, "TimeCycle": 0, "Spawn": 0,
+		"SetSpawn": 1, "SetRequiredSleepDuration": 1, "DefaultGameMode": 0, "SetTickRange": 1,
+		"SetDefaultGameMode": 1, "Difficulty": 0, "SetDifficulty": 1, "Save": 0, "Close": 0,
 	}
 	methods := make([]worldLifecycleMethod, 0, len(selectedWorldLifecycleMethods))
 	for _, name := range selectedWorldLifecycleMethods {
@@ -85,6 +107,9 @@ func generateWorldLifecycleMethods(methods []worldLifecycleMethod) []byte {
 		switch method.Name {
 		case "Name":
 			output.WriteString("    public string Name() => PluginBridge.Host.WorldName(_invocation, Id) ?? string.Empty;\n")
+		case "Dimension":
+			// C# does not permit a nested World.Dimension type and a World.Dimension
+			// member. An extension preserves both exact plugin spellings.
 		case "Range":
 			output.WriteString("    public Cube.Range Range() => PluginBridge.Host.WorldRange(_invocation, Id);\n")
 		case "HighestLightBlocker":
@@ -94,10 +119,29 @@ func generateWorldLifecycleMethods(methods []worldLifecycleMethod) []byte {
 		case "SetTime":
 			parameter := csharpIdentifier(method.Parameters[0])
 			fmt.Fprintf(&output, "    public void SetTime(int %s) => PluginBridge.Host.SetWorldTime(_invocation, Id, %s);\n", parameter, parameter)
+		case "StopTime":
+			output.WriteString("    public void StopTime() => PluginBridge.Host.SetWorldTimeCycle(_invocation, Id, false);\n")
+		case "StartTime":
+			output.WriteString("    public void StartTime() => PluginBridge.Host.SetWorldTimeCycle(_invocation, Id, true);\n")
+		case "TimeCycle":
+			output.WriteString("    public bool TimeCycle() => PluginBridge.Host.WorldTimeCycle(_invocation, Id);\n")
 		case "Spawn":
 			output.WriteString("    public Cube.Pos Spawn() => PluginBridge.Host.WorldSpawn(_invocation, Id);\n")
 		case "SetSpawn":
 			fmt.Fprintf(&output, "    public void SetSpawn(Cube.Pos %s) =>\n        PluginBridge.Host.SetWorldSpawn(_invocation, Id, %s);\n", method.Parameters[0], method.Parameters[0])
+		case "SetRequiredSleepDuration":
+			parameter := csharpIdentifier(method.Parameters[0])
+			fmt.Fprintf(&output, "    public void SetRequiredSleepDuration(TimeSpan %s) =>\n        PluginBridge.Host.SetWorldRequiredSleepDuration(_invocation, Id, %s);\n", parameter, parameter)
+		case "DefaultGameMode":
+			output.WriteString("    public GameMode DefaultGameMode() => PluginBridge.Host.WorldDefaultGameMode(_invocation, Id);\n")
+		case "SetTickRange":
+			fmt.Fprintf(&output, "    public void SetTickRange(int %s) => PluginBridge.Host.SetWorldTickRange(_invocation, Id, %s);\n", method.Parameters[0], method.Parameters[0])
+		case "SetDefaultGameMode":
+			fmt.Fprintf(&output, "    public void SetDefaultGameMode(GameMode %s) =>\n        PluginBridge.Host.SetWorldDefaultGameMode(_invocation, Id, %s);\n", method.Parameters[0], method.Parameters[0])
+		case "Difficulty":
+			// See Dimension above.
+		case "SetDifficulty":
+			fmt.Fprintf(&output, "    public void SetDifficulty(Difficulty %s) =>\n        PluginBridge.Host.SetWorldDifficulty(_invocation, Id, %s);\n", method.Parameters[0], method.Parameters[0])
 		case "Save":
 			output.WriteString("    public void Save() => PluginBridge.Host.SaveWorld(_invocation, Id);\n")
 		case "Close":
@@ -106,6 +150,10 @@ func generateWorldLifecycleMethods(methods []worldLifecycleMethod) []byte {
 			panic("unsupported world lifecycle method: " + method.Name)
 		}
 	}
+	output.WriteString("}\n\n")
+	output.WriteString("public static class WorldStateExtensions\n{\n")
+	output.WriteString("    public static World.Dimension Dimension(this World world)\n    {\n        ArgumentNullException.ThrowIfNull(world);\n        return PluginBridge.Host.WorldDimension(world.Invocation, world.Id);\n    }\n\n")
+	output.WriteString("    public static World.Difficulty Difficulty(this World world)\n    {\n        ArgumentNullException.ThrowIfNull(world);\n        return PluginBridge.Host.WorldDifficulty(world.Invocation, world.Id);\n    }\n")
 	output.WriteString("}\n")
 	return output.Bytes()
 }

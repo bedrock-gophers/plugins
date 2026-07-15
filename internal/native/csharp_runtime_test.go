@@ -751,9 +751,12 @@ func TestCSharpReflectedCommands(t *testing.T) {
 			Velocity: Vec3{X: 0.25, Y: 0.5, Z: -0.25},
 			Rotation: Rotation{Yaw: 90, Pitch: -15},
 		}, worldID: 91, worldName: "kitchen:arena", worldSpawn: BlockPos{X: 8, Y: 70, Z: -4},
-			worldTime:  6000,
-			healed:     4,
-			hurtResult: PlayerHurtResult{Damage: 1, Vulnerable: true},
+			worldTime:        6000,
+			worldTimeCycle:   true,
+			worldDefaultMode: csharpBuiltinGameModeDescriptor,
+			worldDifficulty:  DifficultyView{ID: 2, Builtin: true, StarvationHealthLimit: 2, FireSpreadIncrease: 14},
+			healed:           4,
+			hurtResult:       PlayerHurtResult{Damage: 1, Vulnerable: true},
 			stateValues: map[PlayerStateKind]PlayerStateValue{
 				PlayerStateHealth:    {Number: 16},
 				PlayerStateMaxHealth: {Number: 20},
@@ -910,7 +913,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	configuredWorld.Overload = 21
 	configuredWorld.Arguments = []string{"world"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, configuredWorld)
-	if err != nil || output.Failed || output.Message != "memory=World, persistent=kitchen:arena, spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000" {
+	if err != nil || output.Failed || output.Message != "memory=World, persistent=kitchen:arena, spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000, overworld=true, cycle=true, difficulty=true" {
 		t.Fatalf("configured world output=%#v error=%v", output, err)
 	}
 	if len(host.worldConfigs) != 2 || host.worldConfigs[0] != (WorldConfig{
@@ -928,7 +931,9 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		host.transferPosition != (Vec3{X: 8.5, Y: 70, Z: -3.5}) ||
 		host.worldRangeCalls != 1 || host.worldRangeInvocation != 0 || host.worldRangeWorld != 91 ||
 		host.highestLightBlockerCall != (csharpWorldQueryCall{world: 91, x: 8, z: -4}) ||
-		host.worldTime != 6000 ||
+		host.worldTime != 6000 || !host.worldTimeCycle || host.worldSleepDuration != time.Second ||
+		host.worldDefaultMode != csharpBuiltinGameModeDescriptor || host.worldTickRange != 4 ||
+		host.worldDifficulty != (DifficultyView{ID: 2, Builtin: true, StarvationHealthLimit: 2, FireSpreadIncrease: 14}) ||
 		!slices.Equal(host.scheduledWorlds, []WorldID{90}) || len(host.scheduledPlugins) != 1 ||
 		len(host.scheduledCallbacks) != 1 {
 		t.Fatalf("configured world host state: configs=%+v saved=%v spawn=%+v transfer=%d/%+v/%d/%+v range=%d/%d/%d highest=%+v time=%d scheduled=%v/%v/%v",
@@ -941,7 +946,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	host.worldName = longWorldName
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, configuredWorld)
 	if err != nil || output.Failed || output.Message !=
-		"memory=World, persistent="+longWorldName+", spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000" {
+		"memory=World, persistent="+longWorldName+", spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000, overworld=true, cycle=true, difficulty=true" {
 		t.Fatalf("long world name output=%#v error=%v", output, err)
 	}
 	host.worldName = "kitchen:arena"

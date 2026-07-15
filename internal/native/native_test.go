@@ -225,6 +225,12 @@ type recordingHost struct {
 	worldUnloaded      bool
 	worldTime          int64
 	worldSpawn         BlockPos
+	worldDimension     WorldDimension
+	worldTimeCycle     bool
+	worldSleepDuration time.Duration
+	worldDefaultMode   int64
+	worldTickRange     int32
+	worldDifficulty    DifficultyView
 	entityStateID      EntityID
 	entityState        EntityState
 	entityPlayerID     EntityID
@@ -514,6 +520,47 @@ func (h *recordingHost) SetWorldSpawn(_ InvocationID, _ WorldID, position BlockP
 }
 func (h *recordingHost) WorldSpawn(_ InvocationID, id WorldID) (BlockPos, bool) {
 	return h.worldSpawn, id == h.worldID
+}
+
+func (h *recordingHost) WorldDimension(_ InvocationID, id WorldID) (WorldDimension, bool) {
+	return h.worldDimension, id == h.worldID
+}
+
+func (h *recordingHost) WorldTimeCycle(_ InvocationID, id WorldID) (bool, bool) {
+	return h.worldTimeCycle, id == h.worldID
+}
+
+func (h *recordingHost) SetWorldTimeCycle(_ InvocationID, id WorldID, value bool) bool {
+	h.worldTimeCycle = value
+	return id == h.worldID
+}
+
+func (h *recordingHost) SetWorldRequiredSleepDuration(_ InvocationID, id WorldID, value time.Duration) bool {
+	h.worldSleepDuration = value
+	return id == h.worldID
+}
+
+func (h *recordingHost) WorldDefaultGameMode(_ InvocationID, id WorldID) (int64, bool) {
+	return h.worldDefaultMode, id == h.worldID
+}
+
+func (h *recordingHost) SetWorldDefaultGameMode(_ InvocationID, id WorldID, value int64) bool {
+	h.worldDefaultMode = value
+	return id == h.worldID
+}
+
+func (h *recordingHost) SetWorldTickRange(_ InvocationID, id WorldID, value int32) bool {
+	h.worldTickRange = value
+	return id == h.worldID
+}
+
+func (h *recordingHost) WorldDifficulty(_ InvocationID, id WorldID) (DifficultyView, bool) {
+	return h.worldDifficulty, id == h.worldID
+}
+
+func (h *recordingHost) SetWorldDifficulty(_ InvocationID, id WorldID, value DifficultyView) bool {
+	h.worldDifficulty = value
+	return id == h.worldID
 }
 func (h *recordingHost) EntityState(_ InvocationID, id EntityID) (EntityState, bool) {
 	h.entityStateID = id

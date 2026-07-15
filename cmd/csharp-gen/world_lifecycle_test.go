@@ -19,18 +19,28 @@ func TestPinnedDragonflyWorldLifecycleUsesGoAST(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(methods) != 9 {
-		t.Fatalf("generated %d world lifecycle methods, want 9", len(methods))
+	if len(methods) != 19 {
+		t.Fatalf("generated %d world lifecycle methods, want 19", len(methods))
 	}
 	generated := string(generateWorldLifecycleMethods(methods))
 	for _, expected := range []string{
 		"string Name()",
+		"World.Dimension Dimension(this World world)",
 		"Cube.Range Range()",
 		"int HighestLightBlocker(int x, int z)",
 		"int Time()",
 		"void SetTime(int @new)",
+		"void StopTime()",
+		"void StartTime()",
+		"bool TimeCycle()",
 		"Cube.Pos Spawn()",
 		"void SetSpawn(Cube.Pos pos)",
+		"void SetRequiredSleepDuration(TimeSpan duration)",
+		"GameMode DefaultGameMode()",
+		"void SetTickRange(int v)",
+		"void SetDefaultGameMode(GameMode mode)",
+		"World.Difficulty Difficulty(this World world)",
+		"void SetDifficulty(Difficulty d)",
 		"void Save()",
 		"void Close()",
 	} {

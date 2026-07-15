@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 11u
-// Host version 46 includes task cancellation and typed decoded-packet field access.
-#define DF_HOST_ABI_VERSION 46u
+// Host version 47 adds exact World state controls.
+#define DF_HOST_ABI_VERSION 47u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -78,6 +78,7 @@ typedef void (*DfItemStackViewsDropFn)(void *context);
 #define DF_WORLD_PROVIDER_NOP 0u
 #define DF_WORLD_PROVIDER_MCDB 1u
 typedef struct { uint32_t struct_size; uint32_t dimension; uint32_t provider_kind; uint32_t read_only; DfStringView provider_path; int64_t save_interval_nanoseconds; int64_t chunk_unload_interval_nanoseconds; int32_t random_tick_speed; uint32_t reserved; } DfWorldConfigV1;
+typedef struct { uint32_t id; uint8_t builtin; uint8_t food_regenerates; uint16_t reserved; double starvation_health_limit; int32_t fire_spread_increase; uint32_t reserved2; } DfDifficultyView;
 typedef struct { DfStringBuffer identifier; DfStringBuffer properties_nbt; } DfBlockData;
 typedef struct { DfStringView identifier; DfStringView properties_nbt; } DfBlockView;
 #define DF_SET_BLOCK_DISABLE_BLOCK_UPDATES 1u
@@ -424,6 +425,15 @@ typedef DfStatus (*DfHostWorldTimeGetFn)(uint64_t context, DfInvocationId invoca
 typedef DfStatus (*DfHostWorldTimeSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time);
 typedef DfStatus (*DfHostWorldSpawnGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
 typedef DfStatus (*DfHostWorldSpawnSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position);
+typedef DfStatus (*DfHostWorldDimensionGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, uint32_t *dimension);
+typedef DfStatus (*DfHostWorldBoolGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t *value);
+typedef DfStatus (*DfHostWorldBoolSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t value);
+typedef DfStatus (*DfHostWorldDurationSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t duration_nanoseconds);
+typedef DfStatus (*DfHostWorldGameModeGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t *game_mode);
+typedef DfStatus (*DfHostWorldGameModeSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t game_mode);
+typedef DfStatus (*DfHostWorldIntSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int32_t value);
+typedef DfStatus (*DfHostWorldDifficultyGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfDifficultyView *difficulty);
+typedef DfStatus (*DfHostWorldDifficultySetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfDifficultyView difficulty);
 typedef DfStatus (*DfHostWorldEntitySpawnFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV3 *entity, DfEntityId *output);
 typedef DfStatus (*DfHostEntityStateFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state);
 typedef DfStatus (*DfHostEntityPlayerFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfPlayerSnapshotBuffer *output);
@@ -603,6 +613,15 @@ typedef struct {
     DfHostWorldTaskCancelFn world_task_cancel;
     DfHostPacketFieldGetFn packet_field_get;
     DfHostPacketFieldSetFn packet_field_set;
+    DfHostWorldDimensionGetFn world_dimension_get;
+    DfHostWorldBoolGetFn world_time_cycle_get;
+    DfHostWorldBoolSetFn world_time_cycle_set;
+    DfHostWorldDurationSetFn world_required_sleep_duration_set;
+    DfHostWorldGameModeGetFn world_default_game_mode_get;
+    DfHostWorldGameModeSetFn world_default_game_mode_set;
+    DfHostWorldIntSetFn world_tick_range_set;
+    DfHostWorldDifficultyGetFn world_difficulty_get;
+    DfHostWorldDifficultySetFn world_difficulty_set;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u

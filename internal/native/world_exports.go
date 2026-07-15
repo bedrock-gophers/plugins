@@ -6,6 +6,7 @@ package native
 import "C"
 
 import (
+	"time"
 	"unicode/utf8"
 	"unsafe"
 )
@@ -507,6 +508,120 @@ func bg_go_world_spawn_set(context C.uint64_t, invocation C.DfInvocationId, worl
 		return C.DF_STATUS_ERROR
 	}
 	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_dimension_get
+func bg_go_world_dimension_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, output *C.uint32_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	dimension, ok := host.WorldDimension(InvocationID(invocation), WorldID(world.value))
+	if !ok || dimension > WorldDimensionEnd {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.uint32_t(dimension)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_time_cycle_get
+func bg_go_world_time_cycle_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, output *C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := host.WorldTimeCycle(InvocationID(invocation), WorldID(world.value))
+	return writeWorldBool(output, value, ok)
+}
+
+//export bg_go_world_time_cycle_set
+func bg_go_world_time_cycle_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, value C.uint8_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || value > 1 || !host.SetWorldTimeCycle(InvocationID(invocation), WorldID(world.value), value != 0) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_required_sleep_duration_set
+func bg_go_world_required_sleep_duration_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, value C.int64_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || !host.SetWorldRequiredSleepDuration(InvocationID(invocation), WorldID(world.value), time.Duration(value)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_default_game_mode_get
+func bg_go_world_default_game_mode_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, output *C.int64_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := host.WorldDefaultGameMode(InvocationID(invocation), WorldID(world.value))
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.int64_t(value)
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_default_game_mode_set
+func bg_go_world_default_game_mode_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, value C.int64_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || !host.SetWorldDefaultGameMode(InvocationID(invocation), WorldID(world.value), int64(value)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_tick_range_set
+func bg_go_world_tick_range_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, value C.int32_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || !host.SetWorldTickRange(InvocationID(invocation), WorldID(world.value), int32(value)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_difficulty_get
+func bg_go_world_difficulty_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, output *C.DfDifficultyView) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	value, ok := host.WorldDifficulty(InvocationID(invocation), WorldID(world.value))
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.DfDifficultyView{
+		id: C.uint32_t(value.ID), builtin: worldBool(value.Builtin), food_regenerates: worldBool(value.FoodRegenerates),
+		starvation_health_limit: C.double(value.StarvationHealthLimit), fire_spread_increase: C.int32_t(value.FireSpreadIncrease),
+	}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_difficulty_set
+func bg_go_world_difficulty_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, value C.DfDifficultyView) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || value.builtin > 1 || value.food_regenerates > 1 || value.reserved != 0 || value.reserved2 != 0 {
+		return C.DF_STATUS_ERROR
+	}
+	view := DifficultyView{
+		ID: uint32(value.id), Builtin: value.builtin != 0, FoodRegenerates: value.food_regenerates != 0,
+		StarvationHealthLimit: float64(value.starvation_health_limit), FireSpreadIncrease: int32(value.fire_spread_increase),
+	}
+	if !host.SetWorldDifficulty(InvocationID(invocation), WorldID(world.value), view) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+func worldBool(value bool) C.uint8_t {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func nativeBlockPosition(position C.DfBlockPos) BlockPos {

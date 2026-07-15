@@ -1717,6 +1717,88 @@ internal static unsafe class PluginBridge
                 return;
         }
 
+        internal static World.Dimension WorldDimension(ulong invocation, WorldId world)
+        {
+            var api = Api;
+            if (api is null || api->WorldDimensionGet == null) return World.Overworld;
+            uint value;
+            if (api->WorldDimensionGet(api->Context, invocation, world, &value) != Abi.Ok)
+                return World.Overworld;
+            return value switch
+            {
+                Abi.WorldDimensionOverworld => World.Overworld,
+                Abi.WorldDimensionNether => World.Nether,
+                Abi.WorldDimensionEnd => World.End,
+                _ => World.Overworld,
+            };
+        }
+
+        internal static bool WorldTimeCycle(ulong invocation, WorldId world)
+        {
+            var api = Api;
+            if (api is null || api->WorldTimeCycleGet == null) return false;
+            byte value;
+            return api->WorldTimeCycleGet(api->Context, invocation, world, &value) == Abi.Ok && value == 1;
+        }
+
+        internal static void SetWorldTimeCycle(ulong invocation, WorldId world, bool value)
+        {
+            var api = Api;
+            if (api is null || api->WorldTimeCycleSet == null) return;
+            _ = api->WorldTimeCycleSet(api->Context, invocation, world, value ? (byte)1 : (byte)0);
+        }
+
+        internal static void SetWorldRequiredSleepDuration(ulong invocation, WorldId world, TimeSpan duration)
+        {
+            var api = Api;
+            if (api is null || api->WorldRequiredSleepDurationSet == null) return;
+            _ = api->WorldRequiredSleepDurationSet(
+                api->Context, invocation, world, DurationNanoseconds(duration, nameof(duration)));
+        }
+
+        internal static World.GameMode WorldDefaultGameMode(ulong invocation, WorldId world)
+        {
+            var api = Api;
+            if (api is null || api->WorldDefaultGameModeGet == null) return World.GameModeSurvival;
+            long value;
+            if (api->WorldDefaultGameModeGet(api->Context, invocation, world, &value) != Abi.Ok)
+                return World.GameModeSurvival;
+            return World.GameModeFromDescriptor(value);
+        }
+
+        internal static void SetWorldDefaultGameMode(ulong invocation, WorldId world, World.GameMode mode)
+        {
+            var descriptor = World.GameModeDescriptor(mode);
+            var api = Api;
+            if (api is null || api->WorldDefaultGameModeSet == null) return;
+            _ = api->WorldDefaultGameModeSet(api->Context, invocation, world, descriptor);
+        }
+
+        internal static void SetWorldTickRange(ulong invocation, WorldId world, int value)
+        {
+            var api = Api;
+            if (api is null || api->WorldTickRangeSet == null) return;
+            _ = api->WorldTickRangeSet(api->Context, invocation, world, value);
+        }
+
+        internal static World.Difficulty WorldDifficulty(ulong invocation, WorldId world)
+        {
+            var api = Api;
+            if (api is null || api->WorldDifficultyGet == null) return World.DifficultyNormal;
+            DifficultyView value;
+            if (api->WorldDifficultyGet(api->Context, invocation, world, &value) != Abi.Ok)
+                return World.DifficultyNormal;
+            return World.DifficultyFromView(value);
+        }
+
+        internal static void SetWorldDifficulty(ulong invocation, WorldId world, World.Difficulty difficulty)
+        {
+            var value = World.DifficultyView(difficulty);
+            var api = Api;
+            if (api is null || api->WorldDifficultySet == null) return;
+            _ = api->WorldDifficultySet(api->Context, invocation, world, value);
+        }
+
         internal static (World.Block? Block, bool Loaded) WorldBlockLoaded(
             ulong invocation,
             Cube.Pos position)
