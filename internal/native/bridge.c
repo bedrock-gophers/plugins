@@ -1,10 +1,58 @@
 #include "bridge.h"
 
-#include <dlfcn.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+
+#define RTLD_NOW 0
+#define RTLD_LOCAL 0
+
+static char bg_dl_error[512];
+
+static const char *dlerror(void) {
+    DWORD code = GetLastError();
+    if (code == 0) {
+        return NULL;
+    }
+
+    DWORD written = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        code,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        bg_dl_error,
+        sizeof(bg_dl_error),
+        NULL
+    );
+    if (written == 0) {
+        snprintf(bg_dl_error, sizeof(bg_dl_error), "Windows error %lu", (unsigned long) code);
+    }
+
+    SetLastError(0);
+    return bg_dl_error;
+}
+
+static void *dlopen(const char *path, int flags) {
+    (void) flags;
+    SetLastError(0);
+    return (void *) LoadLibraryA(path);
+}
+
+static void *dlsym(void *handle, const char *name) {
+    SetLastError(0);
+    return (void *) GetProcAddress((HMODULE) handle, name);
+}
+
+static int dlclose(void *handle) {
+    return FreeLibrary((HMODULE) handle) ? 0 : 1;
+}
+#else
+#include <dlfcn.h>
+#endif
 
 #include "player_operations_generated.h"
 
