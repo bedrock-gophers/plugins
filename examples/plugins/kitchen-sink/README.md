@@ -35,6 +35,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - all 88 generated vanilla biome types plus biome, temperature, and weather queries in
   `/kitchen biome`;
 - transaction-owned `CurrentTick` in `/kitchen tick`;
+- exact FIFO `World.Tx.Defer` and `DeferErr` callbacks in `/kitchen defer`;
 - all 20 generated particle types and all 16 typed note instruments in `/kitchen particle`;
 - exact world-broadcast and player-only sound playback across every payload family in `/kitchen sound`;
 - registered lookup, player reads, and custom `World.GameMode` in `/kitchen game-mode`;

@@ -688,6 +688,10 @@ func main() {
 	if err := inspectWorldSchedule(filepath.Join(directory, "server", "world", "task.go")); err != nil {
 		fatal(err)
 	}
+	worldDeferMethods, err := inspectWorldDeferMethods(filepath.Join(directory, "server", "world", "tx.go"))
+	if err != nil {
+		fatal(err)
+	}
 	if err := inspectWorldConfig(
 		filepath.Join(directory, "server", "world", "conf.go"),
 		filepath.Join(directory, "server", "world", "world.go"),
@@ -990,6 +994,22 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Schedule.g.cs"),
 			Content: generateWorldSchedule(),
+		},
+		{
+			Path:    filepath.Join(*root, "internal", "native", "world_defer_generated.go"),
+			Content: generateNativeWorldDefer(worldDeferMethods),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly.Native", "Generated", "World.Tx.Defer.g.cs"),
+			Content: generateCSharpWorldDefer(worldDeferMethods),
+		},
+		{
+			Path:    filepath.Join(*root, "framework", "world_defer_generated.go"),
+			Content: generateFrameworkWorldDefer(worldDeferMethods),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Tx.Defer.g.cs"),
+			Content: generateWorldDefer(worldDeferMethods),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Config.g.cs"),

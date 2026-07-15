@@ -18,6 +18,7 @@ public sealed class KitchenSink : Plugin
     private long _commandExecutions;
     private long _diagnostics;
     private long _scheduled;
+    private long _deferred;
     private long _clientPackets;
     private long _serverPackets;
     private World? _memoryWorld;
@@ -67,7 +68,8 @@ public sealed class KitchenSink : Plugin
             new KitchenSkin(),
             new KitchenVisibility(),
             new KitchenEntityActions(),
-            new KitchenItemActions()));
+            new KitchenItemActions(),
+            new KitchenDefer(this)));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -540,6 +542,28 @@ public sealed class KitchenSink : Plugin
                 added,
                 ok ? "true" : "false",
                 dropped);
+        }
+    }
+
+    internal sealed class KitchenDefer(KitchenSink owner) : Cmd.Runnable
+    {
+        public Cmd.SubCommand Defer;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (tx is null)
+            {
+                output.Error("A world transaction is required.");
+                return;
+            }
+            var before = Interlocked.Read(ref owner._deferred);
+            tx.Defer(_ => Increment(ref owner._deferred));
+            tx.DeferErr(_ =>
+            {
+                Increment(ref owner._deferred);
+                return null;
+            });
+            output.Printf("deferred={0}", before);
         }
     }
 

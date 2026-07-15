@@ -529,6 +529,7 @@ type Host interface {
 	PlayerXUID(InvocationID, PlayerID) (string, bool)
 	ServerWorld(WorldDimension) (WorldID, bool)
 	ScheduleWorld(WorldID, uint64, uint64, int64) bool
+	DeferWorld(InvocationID, uint64, uint64, WorldDeferKind) bool
 	CancelWorldTask(uint64, uint64) (bool, bool)
 	EntityHandle(InvocationID, EntityID) (EntityHandleID, bool)
 	EntityHandleEntity(InvocationID, EntityHandleID) (EntityID, bool, bool)
@@ -751,7 +752,10 @@ func (noopHost) ServerPlayerByXUID(string) (EntityHandleID, bool, bool) {
 func (noopHost) PlayerXUID(InvocationID, PlayerID) (string, bool)  { return "", false }
 func (noopHost) ServerWorld(WorldDimension) (WorldID, bool)        { return 0, false }
 func (noopHost) ScheduleWorld(WorldID, uint64, uint64, int64) bool { return false }
-func (noopHost) CancelWorldTask(uint64, uint64) (bool, bool)       { return false, false }
+func (noopHost) DeferWorld(InvocationID, uint64, uint64, WorldDeferKind) bool {
+	return false
+}
+func (noopHost) CancelWorldTask(uint64, uint64) (bool, bool) { return false, false }
 func (noopHost) EntityHandle(InvocationID, EntityID) (EntityHandleID, bool) {
 	return EntityHandleID{}, false
 }

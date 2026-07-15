@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 11u
-// Host version 62 adds exact player chat and command execution.
-#define DF_HOST_ABI_VERSION 62u
+// Host version 63 adds exact transaction-deferred world tasks.
+#define DF_HOST_ABI_VERSION 63u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -484,6 +484,7 @@ typedef DfStatus (*DfHostServerWorldFn)(uint64_t context, uint32_t dimension, Df
 #define DF_WORLD_TASK_FAILED 4u
 typedef DfStatus (*DfHostWorldScheduleFn)(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds);
 typedef DfStatus (*DfHostWorldTaskCancelFn)(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled);
+typedef DfStatus (*DfHostWorldTxDeferFn)(uint64_t context, DfInvocationId invocation, uint64_t plugin, uint64_t callback, uint32_t kind);
 typedef DfStatus (*DfHostWorldNewFn)(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world);
 typedef DfStatus (*DfHostEntityHandleFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityHandleId *handle);
 typedef DfStatus (*DfHostEntityHandleEntityFn)(uint64_t context, DfInvocationId invocation, DfEntityHandleId handle, DfEntityId *entity, uint8_t *found);
@@ -654,6 +655,7 @@ typedef struct {
     DfHostPlayerViewLayerFn player_view_layer;
     DfHostPlayerEntityActionFn player_entity_action;
     DfHostPlayerItemActionFn player_item_action;
+    DfHostWorldTxDeferFn world_tx_defer;
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u

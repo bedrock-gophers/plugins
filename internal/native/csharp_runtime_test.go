@@ -1293,7 +1293,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 37 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 38 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -1921,6 +1921,64 @@ func TestCSharpPlayerEntityActions(t *testing.T) {
 	}
 	if !slices.Equal(host.entityActions, wantKinds) || !slices.Equal(host.entityActionTargets, wantTargets) {
 		t.Fatalf("entity actions=%v targets=%+v", host.entityActions, host.entityActionTargets)
+	}
+}
+
+func TestCSharpWorldTxDefer(t *testing.T) {
+	host := &recordingHost{}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	var overload uint64
+	found := false
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "defer" {
+			overload, found = uint64(index), true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("defer overload missing: %#v", kitchen.Overloads)
+	}
+	player := PlayerID{UUID: [16]byte{1}, Generation: 63}
+	run := func(invocation InvocationID) CommandOutput {
+		output, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+			Invocation: invocation, Source: "Deferred", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+			Overload: overload, Arguments: []string{"defer"},
+			OnlinePlayers: []CommandPlayer{{Player: player, Name: "Deferred"}},
+		})
+		if err != nil || output.Failed {
+			t.Fatalf("defer output=%#v error=%v", output, err)
+		}
+		return output
+	}
+	if output := run(70); output.Message != "deferred=0" {
+		t.Fatalf("first defer output=%#v", output)
+	}
+	if !slices.Equal(host.deferInvocations, []InvocationID{70, 70}) ||
+		!slices.Equal(host.deferKinds, []WorldDeferKind{WorldDeferDefer, WorldDeferDeferErr}) ||
+		len(host.deferPlugins) != 2 || len(host.deferCallbacks) != 2 {
+		t.Fatalf("deferred calls: invocations=%v kinds=%v plugins=%v callbacks=%v", host.deferInvocations, host.deferKinds, host.deferPlugins, host.deferCallbacks)
+	}
+	for index := range 2 {
+		if err := pluginRuntime.HandleWorldScheduled(
+			host.deferPlugins[index], host.deferCallbacks[index], InvocationID(80+index),
+			WorldTaskExecute, WorldTaskSuccess,
+		); err != nil {
+			t.Fatalf("execute deferred callback %d: %v", index, err)
+		}
+		if err := pluginRuntime.HandleWorldScheduled(
+			host.deferPlugins[index], host.deferCallbacks[index], 0,
+			WorldTaskComplete, WorldTaskSuccess,
+		); err != nil {
+			t.Fatalf("complete deferred callback %d: %v", index, err)
+		}
+	}
+	if output := run(71); output.Message != "deferred=2" {
+		t.Fatalf("second defer output=%#v", output)
 	}
 }
 

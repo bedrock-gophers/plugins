@@ -158,6 +158,16 @@ func bg_go_world_schedule(context C.uint64_t, world C.DfWorldId, plugin C.uint64
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_world_tx_defer
+func bg_go_world_tx_defer(context C.uint64_t, invocation C.DfInvocationId, plugin C.uint64_t, callback C.uint64_t, kind C.uint32_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || invocation == 0 || plugin == 0 || callback == 0 ||
+		!host.DeferWorld(InvocationID(invocation), uint64(plugin), uint64(callback), WorldDeferKind(kind)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
 //export bg_go_world_task_cancel
 func bg_go_world_task_cancel(context C.uint64_t, plugin C.uint64_t, callback C.uint64_t, cancelled *C.uint8_t) C.DfStatus {
 	host, ok := resolveHost(uint64(context))

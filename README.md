@@ -358,6 +358,8 @@ if (validState && barrel is not null)
 `World.Do` and `DoAfter` are AST-generated from Dragonfly. Returned `World.Task` exposes `Done`,
 `Err`, `Wait`, `OnDone`, and `Cancel`. The callback runs once on that world's owner. Its `World.Tx`
 is borrowed and expires when the callback returns; do not retain it or values borrowed through it.
+`World.Tx.Defer` and `DeferErr` are also AST-generated and use Dragonfly's exact FIFO deferred
+queue. They run after the current callback and before its parent task completes.
 Calling `Wait` from the same world owner deadlocks, matching Dragonfly. Shutdown rejects new tasks,
 cancels pending delays, and drains running callbacks before plugin disable.
 `World.New()` uses Dragonfly's `NopProvider`, so it is genuinely in-memory. An MCDB provider is

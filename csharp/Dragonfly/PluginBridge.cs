@@ -14,7 +14,7 @@ internal static unsafe class PluginBridge
     private static PluginState? CurrentState;
     private static PluginApi* Descriptor;
     private static readonly Dictionary<string, nint> EntityTypeStrings = [];
-    private sealed record ScheduledWorldTask(Action<World.Tx> Callback, World.Task Task);
+    private sealed record ScheduledWorldTask(Func<World.Tx, Exception?> Callback, World.Task Task);
     private static readonly ConcurrentDictionary<ulong, ScheduledWorldTask> Scheduled = new();
     private static long NextScheduled;
 
@@ -2936,11 +2936,43 @@ internal static unsafe class PluginBridge
             if (next <= 0) throw new InvalidOperationException("world callback IDs exhausted");
             var id = (ulong)next;
             var task = new World.Task(id);
-            if (!Scheduled.TryAdd(id, new ScheduledWorldTask(callback, task)))
+            if (!Scheduled.TryAdd(id, new ScheduledWorldTask(tx =>
+                {
+                    callback(tx);
+                    return null;
+                }, task)))
                 throw new InvalidOperationException("world callback ID collision");
             var api = Api;
             if (api is not null && api->WorldSchedule != null && Descriptor is not null &&
                 api->WorldSchedule(api->Context, world.Id, (ulong)(nuint)Descriptor, id, delayNanoseconds) == Abi.Ok)
+                return task;
+            Scheduled.TryRemove(id, out _);
+            task.Complete(Abi.WorldTaskFailed);
+            return task;
+        }
+
+        internal static World.Task DeferWorld(ulong invocation, Action<World.Tx> callback, uint kind)
+        {
+            ArgumentNullException.ThrowIfNull(callback);
+            return DeferWorld(invocation, tx =>
+            {
+                callback(tx);
+                return null;
+            }, kind);
+        }
+
+        internal static World.Task DeferWorld(ulong invocation, Func<World.Tx, Exception?> callback, uint kind)
+        {
+            ArgumentNullException.ThrowIfNull(callback);
+            var next = Interlocked.Increment(ref NextScheduled);
+            if (next <= 0) throw new InvalidOperationException("world callback IDs exhausted");
+            var id = (ulong)next;
+            var task = new World.Task(id);
+            if (!Scheduled.TryAdd(id, new ScheduledWorldTask(callback, task)))
+                throw new InvalidOperationException("world callback ID collision");
+            var api = Api;
+            if (api is not null && api->WorldTxDefer != null && Descriptor is not null &&
+                api->WorldTxDefer(api->Context, invocation, (ulong)(nuint)Descriptor, id, kind) == Abi.Ok)
                 return task;
             Scheduled.TryRemove(id, out _);
             task.Complete(Abi.WorldTaskFailed);
@@ -3693,7 +3725,12 @@ internal static unsafe class PluginBridge
             try
             {
                 using var invocationScope = InvocationContext.Enter(invocation);
-                scheduled.Callback(new World.Tx(invocation));
+                var error = scheduled.Callback(new World.Tx(invocation));
+                if (error is not null)
+                {
+                    scheduled.Task.CallbackFailed(error);
+                    return Abi.Error;
+                }
                 return Abi.Ok;
             }
             catch (Exception error)

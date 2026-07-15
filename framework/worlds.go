@@ -866,22 +866,14 @@ func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64,
 	if !ok {
 		return false
 	}
-	m.mu.RLock()
-	runtime := m.runtime
-	m.mu.RUnlock()
+	runtime := m.worldTaskRuntime()
 	if runtime == nil {
 		return false
 	}
-	key := worldTaskKey{plugin: plugin, callback: callback}
-	pending := &scheduledWorldTask{ready: make(chan struct{})}
-	m.scheduleMu.Lock()
-	if m.scheduleClosing || m.scheduledTasks[key] != nil {
-		m.scheduleMu.Unlock()
+	key, pending, ok := m.reserveWorldTask(plugin, callback)
+	if !ok {
 		return false
 	}
-	m.scheduledTasks[key] = pending
-	m.scheduleWG.Add(1)
-	m.scheduleMu.Unlock()
 	callbackFunction := func(tx *world.Tx) {
 		invocation, end := m.players.BeginInvocation(tx)
 		defer end()
@@ -898,6 +890,77 @@ func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64,
 	} else {
 		task = entry.world.DoAfter(time.Duration(delayNanoseconds), callbackFunction)
 	}
+	m.trackWorldTask(key, pending, task, runtime, entry.name)
+	return true
+}
+
+// DeferWorld mirrors Tx.Defer and Tx.DeferErr on the exact invocation transaction.
+func (m *WorldManager) DeferWorld(invocation native.InvocationID, plugin, callback uint64, kind native.WorldDeferKind) bool {
+	if invocation == 0 || plugin == 0 || callback == 0 || m.players == nil || kind > native.WorldDeferDeferErr {
+		return false
+	}
+	tx, ok := m.players.InvocationTx(invocation)
+	if !ok {
+		return false
+	}
+	entry, ok := m.entryForInvocation(invocation, 0)
+	if !ok {
+		return false
+	}
+	runtime := m.worldTaskRuntime()
+	if runtime == nil {
+		return false
+	}
+	key, pending, ok := m.reserveWorldTask(plugin, callback)
+	if !ok {
+		return false
+	}
+	task, valid := runExactWorldDefer(tx, func(deferred *world.Tx) error {
+		deferredInvocation, end := m.players.BeginInvocation(deferred)
+		defer end()
+		if deferredInvocation == 0 {
+			return errors.New("deferred world callback has no invocation")
+		}
+		return runtime.HandleWorldScheduled(plugin, callback, deferredInvocation, native.WorldTaskExecute, native.WorldTaskSuccess)
+	}, kind)
+	if !valid {
+		m.releaseWorldTask(key, pending)
+		return false
+	}
+	m.trackWorldTask(key, pending, task, runtime, entry.name)
+	return true
+}
+
+func (m *WorldManager) worldTaskRuntime() host.WorldRuntime {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.runtime
+}
+
+func (m *WorldManager) reserveWorldTask(plugin, callback uint64) (worldTaskKey, *scheduledWorldTask, bool) {
+	key := worldTaskKey{plugin: plugin, callback: callback}
+	pending := &scheduledWorldTask{ready: make(chan struct{})}
+	m.scheduleMu.Lock()
+	defer m.scheduleMu.Unlock()
+	if m.scheduleClosing || m.scheduledTasks[key] != nil {
+		return worldTaskKey{}, nil, false
+	}
+	m.scheduledTasks[key] = pending
+	m.scheduleWG.Add(1)
+	return key, pending, true
+}
+
+func (m *WorldManager) releaseWorldTask(key worldTaskKey, pending *scheduledWorldTask) {
+	m.scheduleMu.Lock()
+	if m.scheduledTasks[key] == pending {
+		delete(m.scheduledTasks, key)
+	}
+	m.scheduleMu.Unlock()
+	close(pending.ready)
+	m.scheduleWG.Done()
+}
+
+func (m *WorldManager) trackWorldTask(key worldTaskKey, pending *scheduledWorldTask, task *world.Task, runtime host.WorldRuntime, name WorldID) {
 	pending.task = task
 	close(pending.ready)
 	task.OnDone(func(err error) {
@@ -912,8 +975,8 @@ func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64,
 		case err != nil:
 			result = native.WorldTaskFailed
 		}
-		if callbackErr := runtime.HandleWorldScheduled(plugin, callback, 0, native.WorldTaskComplete, result); callbackErr != nil {
-			m.log.Error("complete native world task", "world", entry.name, "error", callbackErr)
+		if callbackErr := runtime.HandleWorldScheduled(key.plugin, key.callback, 0, native.WorldTaskComplete, result); callbackErr != nil {
+			m.log.Error("complete native world task", "world", name, "error", callbackErr)
 		}
 		m.scheduleMu.Lock()
 		if m.scheduledTasks[key] == pending {
@@ -922,7 +985,6 @@ func (m *WorldManager) ScheduleWorld(id native.WorldID, plugin, callback uint64,
 		m.scheduleMu.Unlock()
 		m.scheduleWG.Done()
 	})
-	return true
 }
 
 func (m *WorldManager) CancelWorldTask(plugin, callback uint64) (bool, bool) {

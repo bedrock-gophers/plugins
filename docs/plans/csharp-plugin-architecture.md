@@ -220,7 +220,8 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    the body can deadlock, and mirrored server scans in handlers on different worlds can deadlock
    each other, exactly as in Dragonfly. The private iterator closes on exhaustion, early disposal,
    callback completion, or runtime shutdown.
-   `World.Do`, `World.DoAfter`, and `World.Task` are generated from Dragonfly's exact AST shapes.
+   `World.Do`, `World.DoAfter`, `World.Tx.Defer`, `World.Tx.DeferErr`, and `World.Task` are generated
+   from Dragonfly's exact AST shapes. Deferred callbacks use Dragonfly's FIFO transaction queue.
    `Task.Done`, `Err`, `Wait`, `OnDone`, and `Cancel` preserve completion and cancellation semantics;
    C# maps Dragonfly task errors to domain exceptions without exposing ABI status. The private
    callback trampoline keeps delegates plugin-owned and borrows a fresh transaction only during
@@ -279,6 +280,8 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    and `Drop` calls. Transport failure stays private and collapses to normal zero values.
    Host ABI 62 extends the AST-generated player-text transport with exact `Player.Chat` and
    `ExecuteCommand` calls. Their transport IDs are generated for both Go and C#.
+   Host ABI 63 adds exact AST-generated `World.Tx.Defer` and `DeferErr`. Both use Dragonfly's FIFO
+   deferred queue and existing task completion/cancellation transport.
    The AST-generated `Scoreboard` class mirrors Dragonfly's mutable name, write, set/remove,
    padding, line-copy, and descending-order behavior. `Player.SendScoreboard` activates the
    existing private transport with raw lines so the Go host applies padding and ordering once.
@@ -325,7 +328,7 @@ ABI without adding invented public wrapper types.
 
 Remaining raw-Dragonfly parity work includes:
 
-- remaining `Player`, `World`, and `World.Tx` methods, including transaction defer/event,
+- remaining `Player`, `World`, and `World.Tx` methods, including transaction event,
   world configuration, presentation, combat, and player-control surfaces;
 - exact command behavior and skin types;
 - player-capable raw handle transfer and remaining concrete entity capabilities;

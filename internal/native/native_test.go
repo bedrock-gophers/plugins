@@ -296,6 +296,10 @@ type recordingHost struct {
 	transferPlayer     PlayerID
 	transferWorld      WorldID
 	transferPosition   Vec3
+	deferInvocations   []InvocationID
+	deferPlugins       []uint64
+	deferCallbacks     []uint64
+	deferKinds         []WorldDeferKind
 }
 
 func (h *recordingHost) SendPlayerText(_ InvocationID, player PlayerID, kind PlayerTextKind, message string) bool {
@@ -303,6 +307,14 @@ func (h *recordingHost) SendPlayerText(_ InvocationID, player PlayerID, kind Pla
 	h.textPlayers = append(h.textPlayers, player)
 	h.kinds = append(h.kinds, kind)
 	h.texts = append(h.texts, message)
+	return true
+}
+
+func (h *recordingHost) DeferWorld(invocation InvocationID, plugin, callback uint64, kind WorldDeferKind) bool {
+	h.deferInvocations = append(h.deferInvocations, invocation)
+	h.deferPlugins = append(h.deferPlugins, plugin)
+	h.deferCallbacks = append(h.deferCallbacks, callback)
+	h.deferKinds = append(h.deferKinds, kind)
 	return true
 }
 

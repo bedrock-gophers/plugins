@@ -2,6 +2,7 @@ package framework
 
 import (
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -16,14 +17,17 @@ type scheduledWorldRuntime struct {
 	players *host.Players
 	fail    bool
 
-	mu          sync.Mutex
-	executions  int
-	completions int
-	plugin      uint64
-	callback    uint64
-	invocation  native.InvocationID
-	result      native.WorldTaskResult
-	live        bool
+	mu               sync.Mutex
+	executions       int
+	completions      int
+	plugin           uint64
+	callback         uint64
+	invocation       native.InvocationID
+	result           native.WorldTaskResult
+	live             bool
+	callbacks        []uint64
+	results          []native.WorldTaskResult
+	resultByCallback map[uint64]native.WorldTaskResult
 }
 
 func (*scheduledWorldRuntime) Subscriptions() uint64 { return 0 }
@@ -35,15 +39,93 @@ func (r *scheduledWorldRuntime) HandleWorldScheduled(plugin, callback uint64, in
 	if phase == native.WorldTaskComplete {
 		r.completions++
 		r.result = result
+		r.results = append(r.results, result)
+		if r.resultByCallback == nil {
+			r.resultByCallback = map[uint64]native.WorldTaskResult{}
+		}
+		r.resultByCallback[callback] = result
 		return nil
 	}
 	r.executions++
+	r.callbacks = append(r.callbacks, callback)
 	r.invocation = invocation
 	_, r.live = r.players.InvocationTx(invocation)
 	if r.fail {
 		return errors.New("callback failed")
 	}
 	return nil
+}
+
+func TestWorldDeferPreservesPanicAndErrorResults(t *testing.T) {
+	players := host.NewPlayers()
+	manager := newWorldManager("", nil, players)
+	runtime := &scheduledWorldRuntime{players: players, fail: true}
+	manager.attachRuntime(runtime)
+	w, err := manager.Create("example:deferred-errors", world.Config{Synchronous: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.CloseCustom() })
+
+	parent := w.Do(func(tx *world.Tx) {
+		invocation, end := players.BeginInvocation(tx)
+		defer end()
+		manager.DeferWorld(invocation, 13, 31, native.WorldDeferDefer)
+		manager.DeferWorld(invocation, 13, 32, native.WorldDeferDeferErr)
+	})
+	if err := parent.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	manager.DrainScheduled()
+	runtime.mu.Lock()
+	panicResult := runtime.resultByCallback[31]
+	errorResult := runtime.resultByCallback[32]
+	runtime.mu.Unlock()
+	if panicResult != native.WorldTaskPanicked || errorResult != native.WorldTaskFailed {
+		t.Fatalf("deferred results: Defer=%v DeferErr=%v", panicResult, errorResult)
+	}
+}
+
+func TestWorldDeferRunsFIFOWithFreshBorrowedTransactions(t *testing.T) {
+	players := host.NewPlayers()
+	manager := newWorldManager("", nil, players)
+	runtime := &scheduledWorldRuntime{players: players}
+	manager.attachRuntime(runtime)
+	w, err := manager.Create("example:deferred", world.Config{Synchronous: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.CloseCustom() })
+
+	var deferOK, deferErrOK bool
+	deferredEarly := -1
+	parent := w.Do(func(tx *world.Tx) {
+		invocation, end := players.BeginInvocation(tx)
+		defer end()
+		deferOK = manager.DeferWorld(invocation, 12, 21, native.WorldDeferDefer)
+		deferErrOK = manager.DeferWorld(invocation, 12, 22, native.WorldDeferDeferErr)
+		runtime.mu.Lock()
+		deferredEarly = runtime.executions
+		runtime.mu.Unlock()
+	})
+	if err := parent.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !deferOK || !deferErrOK || deferredEarly != 0 {
+		t.Fatalf("defer=%v deferErr=%v early=%d", deferOK, deferErrOK, deferredEarly)
+	}
+	manager.DrainScheduled()
+	runtime.mu.Lock()
+	callbacks := append([]uint64(nil), runtime.callbacks...)
+	completions, live := runtime.completions, runtime.live
+	runtime.mu.Unlock()
+	if !slices.Equal(callbacks, []uint64{21, 22}) || completions != 2 || !live {
+		t.Fatalf("deferred callbacks=%v completions=%d live=%v", callbacks, completions, live)
+	}
+	if manager.DeferWorld(0, 12, 23, native.WorldDeferDefer) ||
+		manager.DeferWorld(1, 12, 23, native.WorldDeferKind(99)) {
+		t.Fatal("invalid deferred callback accepted")
+	}
 }
 
 func TestWorldScheduleRunsOnceWithBorrowedTransaction(t *testing.T) {
