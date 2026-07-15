@@ -33,7 +33,7 @@ durations.
 `/kitchen cooldown` exercises typed `Player.HasCooldown` and `SetCooldown` with a diamond sword.
 `/kitchen scoreboard` builds and sends an AST-generated typed scoreboard.
 `/kitchen skin` round-trips the player's complete typed skin.
-`/kitchen visibility` exercises exact per-player entity hide/show calls.
+`/kitchen visibility` exercises exact hide/show and all six per-viewer entity overrides.
 `/kitchen kinematics` exercises exact player transforms, reads, and Dragonfly knockback.
 `/kitchen heal` exercises direct healing, hurting, and final-damage calculation.
 `/kitchen state` includes live item-use, sleeping, and exact death-position/dimension reads.
