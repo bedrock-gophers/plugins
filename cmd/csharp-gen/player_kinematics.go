@@ -16,6 +16,7 @@ var selectedPlayerKinematicsMethods = []string{
 	"Velocity",
 	"SetVelocity",
 	"Rotation",
+	"KnockBack",
 }
 
 type playerKinematicsMethod struct {
@@ -43,10 +44,11 @@ func inspectPlayerKinematicsMethods(path string) ([]playerKinematicsMethod, erro
 		"Velocity":    {Results: "mgl64.Vec3"},
 		"SetVelocity": {Parameters: "mgl64.Vec3"},
 		"Rotation":    {Results: "cube.Rotation"},
+		"KnockBack":   {Parameters: "mgl64.Vec3, float64, float64"},
 	}
 	wantParameterCount := map[string]int{
 		"Teleport": 1, "Move": 3, "Displace": 1, "Position": 0,
-		"Velocity": 0, "SetVelocity": 1, "Rotation": 0,
+		"Velocity": 0, "SetVelocity": 1, "Rotation": 0, "KnockBack": 3,
 	}
 	methods := make([]playerKinematicsMethod, 0, len(selectedPlayerKinematicsMethods))
 	for _, name := range selectedPlayerKinematicsMethods {
@@ -93,6 +95,8 @@ func generatePlayerKinematicsMethods(methods []playerKinematicsMethod) []byte {
 			fmt.Fprintf(&output, "    public void SetVelocity(Vector3 %s) =>\n        PluginBridge.Host.TransformPlayer(_invocation, Id, Abi.PlayerTransformVelocity, %s, 0, 0);\n", method.Parameters[0], method.Parameters[0])
 		case "Rotation":
 			output.WriteString("    public Rotation Rotation() => PluginBridge.Host.ReadPlayerKinematics(_invocation, Id).Rotation;\n")
+		case "KnockBack":
+			fmt.Fprintf(&output, "    public void KnockBack(Vector3 %[1]s, double %[2]s, double %[3]s) =>\n        PluginBridge.Host.KnockBackPlayer(_invocation, Id, %[1]s, %[2]s, %[3]s);\n", method.Parameters[0], method.Parameters[1], method.Parameters[2])
 		default:
 			panic("unsupported player kinematics method: " + method.Name)
 		}

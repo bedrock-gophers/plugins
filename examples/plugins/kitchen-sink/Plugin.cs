@@ -446,6 +446,7 @@ public sealed class KitchenSink : Plugin
             player.Move(default, 0, 0);
             player.Displace(default);
             player.SetVelocity(velocity);
+            player.KnockBack(new Vector3(position.X - 1, position.Y, position.Z), 0.4, 0.25);
             output.Printf(
                 "position={0},{1},{2}, velocity={3},{4},{5}, rotation={6},{7}",
                 position.X, position.Y, position.Z,

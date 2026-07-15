@@ -1304,6 +1304,11 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		host.vectors[3] != (Vec3{X: 0.25, Y: 0.5, Z: -0.25}) {
 		t.Fatalf("kinematics transforms=%v vectors=%+v", host.transforms, host.vectors)
 	}
+	if !slices.Equal(host.knockBackSources, []Vec3{{X: 0, Y: 64, Z: 2}}) ||
+		!slices.Equal(host.knockBackForces, []float64{0.4}) ||
+		!slices.Equal(host.knockBackHeights, []float64{0.25}) {
+		t.Fatalf("knockback sources=%+v forces=%v heights=%v", host.knockBackSources, host.knockBackForces, host.knockBackHeights)
+	}
 	heal := base
 	heal.Overload = 21
 	heal.Arguments = []string{"heal"}

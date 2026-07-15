@@ -229,6 +229,21 @@ func bg_go_player_transform(context C.uint64_t, invocation C.DfInvocationId, pla
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_player_knock_back
+func bg_go_player_knock_back(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, source C.DfVec3, force C.double, height C.double) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || !host.KnockBackPlayer(
+		InvocationID(invocation),
+		playerID(player),
+		Vec3{X: float64(source.x), Y: float64(source.y), Z: float64(source.z)},
+		float64(force),
+		float64(height),
+	) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
 //export bg_go_player_kinematics
 func bg_go_player_kinematics(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, output *C.DfPlayerKinematics) C.DfStatus {
 	host, ok := resolveHost(uint64(context))

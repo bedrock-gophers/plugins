@@ -163,6 +163,9 @@ type recordingHost struct {
 	vectors           []Vec3
 	yaws              []float64
 	pitches           []float64
+	knockBackSources  []Vec3
+	knockBackForces   []float64
+	knockBackHeights  []float64
 	states            []PlayerStateKind
 	values            []PlayerStateValue
 	state             PlayerStateValue
@@ -299,6 +302,13 @@ func (h *recordingHost) TransformPlayer(_ InvocationID, _ PlayerID, kind PlayerT
 	h.vectors = append(h.vectors, vector)
 	h.yaws = append(h.yaws, yaw)
 	h.pitches = append(h.pitches, pitch)
+	return true
+}
+
+func (h *recordingHost) KnockBackPlayer(_ InvocationID, _ PlayerID, source Vec3, force, height float64) bool {
+	h.knockBackSources = append(h.knockBackSources, source)
+	h.knockBackForces = append(h.knockBackForces, force)
+	h.knockBackHeights = append(h.knockBackHeights, height)
 	return true
 }
 

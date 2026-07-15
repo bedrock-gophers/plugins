@@ -19,8 +19,8 @@ func TestPlayerKinematicsMethodsUseGoAST(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(methods) != 7 {
-		t.Fatalf("generated %d player kinematics methods, want 7", len(methods))
+	if len(methods) != 8 {
+		t.Fatalf("generated %d player kinematics methods, want 8", len(methods))
 	}
 	generated := string(generatePlayerKinematicsMethods(methods))
 	for _, expected := range []string{
@@ -31,6 +31,7 @@ func TestPlayerKinematicsMethodsUseGoAST(t *testing.T) {
 		"Vector3 Velocity()",
 		"void SetVelocity(Vector3 velocity)",
 		"Rotation Rotation()",
+		"void KnockBack(Vector3 src, double force, double height)",
 	} {
 		if !strings.Contains(generated, expected) {
 			t.Fatalf("generated player kinematics missing %q:\n%s", expected, generated)

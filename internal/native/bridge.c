@@ -267,8 +267,8 @@ _Static_assert(DF_PLAYER_COOLDOWN_HAS == 0u, "player cooldown has operation chan
 _Static_assert(DF_PLAYER_COOLDOWN_SET == 1u, "player cooldown set operation changed");
 _Static_assert(sizeof(DfDifficultyView) == 24, "DfDifficultyView ABI layout changed");
 _Static_assert(offsetof(DfDifficultyView, starvation_health_limit) == 8, "DfDifficultyView.starvation_health_limit ABI offset changed");
-_Static_assert(sizeof(DfHostApiV27) == 992, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 53u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 1000, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 54u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -304,6 +304,7 @@ _Static_assert(offsetof(DfHostApiV27, world_player_spawn_set) == 960, "DfHostApi
 _Static_assert(offsetof(DfHostApiV27, player_string_get) == 968, "DfHostApiV27.player_string_get ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_toast) == 976, "DfHostApiV27.player_toast ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_cooldown) == 984, "DfHostApiV27.player_cooldown ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, player_knock_back) == 992, "DfHostApiV27.player_knock_back ABI offset changed");
 _Static_assert(sizeof(DfEntityNewView) == 152, "DfEntityNewView ABI layout changed");
 _Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
 _Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
@@ -371,6 +372,7 @@ extern DfStatus bg_go_player_action(uint64_t context, DfInvocationId invocation,
 extern DfStatus bg_go_player_string_get(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringBuffer *value);
 extern DfStatus bg_go_player_toast(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringView title, DfStringView message);
 extern DfStatus bg_go_player_cooldown(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t operation, DfStringView identifier, int32_t metadata, int64_t duration_nanoseconds, uint8_t *active);
+extern DfStatus bg_go_player_knock_back(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfVec3 source, double force, double height);
 extern DfStatus bg_go_player_heal(uint64_t context, DfInvocationId invocation, DfPlayerId player, double health, const DfHealingSourceView *source, DfPlayerHealResult *result);
 extern DfStatus bg_go_player_hurt(uint64_t context, DfInvocationId invocation, DfPlayerId player, double damage, const DfDamageSourceView *source, DfPlayerHurtResult *result);
 extern DfStatus bg_go_player_effect(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t operation, DfEffectView effect);
@@ -527,6 +529,10 @@ static DfStatus host_player_toast(uint64_t context, DfInvocationId invocation, D
 
 static DfStatus host_player_cooldown(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t operation, DfStringView identifier, int32_t metadata, int64_t duration_nanoseconds, uint8_t *active) {
     return bg_go_player_cooldown(context, invocation, player, operation, identifier, metadata, duration_nanoseconds, active);
+}
+
+static DfStatus host_player_knock_back(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfVec3 source, double force, double height) {
+    return bg_go_player_knock_back(context, invocation, player, source, force, height);
 }
 
 static DfStatus host_player_heal(uint64_t context, DfInvocationId invocation, DfPlayerId player, double health, const DfHealingSourceView *source, DfPlayerHealResult *result) {
@@ -940,6 +946,7 @@ DfStatus bg_runtime_open(
         .player_string_get = host_player_string_get,
         .player_toast = host_player_toast,
         .player_cooldown = host_player_cooldown,
+        .player_knock_back = host_player_knock_back,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

@@ -97,6 +97,8 @@ Dragonfly directly, preserving food-loss and experience-gain handlers, mending, 
 persona IDs, model data, cape pixels, and animations.
 `Player.HideEntity(World.Entity)` and `ShowEntity(World.Entity)` preserve Dragonfly's per-viewer
 entity visibility behavior for players, host entities, and plugin-defined entities.
+`Player.KnockBack(source, force, height)` calls Dragonfly directly, preserving damage immunity and
+armour knockback resistance instead of approximating the result with `SetVelocity`.
 Presentation parity includes instant-respawn and coordinate toggles, sleeping indicators,
 dialogue/boss-bar/scoreboard removal, live name/score tags, and toasts, using the exact Dragonfly
 `Player` method names.

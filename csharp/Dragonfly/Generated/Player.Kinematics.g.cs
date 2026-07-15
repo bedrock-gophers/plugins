@@ -16,4 +16,6 @@ public sealed partial class Player
     public void SetVelocity(Vector3 velocity) =>
         PluginBridge.Host.TransformPlayer(_invocation, Id, Abi.PlayerTransformVelocity, velocity, 0, 0);
     public Rotation Rotation() => PluginBridge.Host.ReadPlayerKinematics(_invocation, Id).Rotation;
+    public void KnockBack(Vector3 src, double force, double height) =>
+        PluginBridge.Host.KnockBackPlayer(_invocation, Id, src, force, height);
 }

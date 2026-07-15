@@ -532,6 +532,13 @@ func (p *Players) PlayerKinematics(invocation native.InvocationID, id native.Pla
 	})
 }
 
+func (p *Players) KnockBackPlayer(invocation native.InvocationID, id native.PlayerID, source native.Vec3, force, height float64) bool {
+	src := mgl64.Vec3{source.X, source.Y, source.Z}
+	return p.mutatePlayer(invocation, id, func(connected *player.Player) {
+		connected.KnockBack(src, force, height)
+	})
+}
+
 // EntityPlayer materializes an exact registered player entity as a fresh
 // transaction-safe player snapshot.
 func (p *Players) EntityPlayer(invocation native.InvocationID, id native.EntityID) (native.PlayerSnapshot, bool) {

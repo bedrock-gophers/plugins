@@ -257,6 +257,22 @@ func TestPlayersTransformKeepsDragonflyNumericSemantics(t *testing.T) {
 	})
 }
 
+func TestPlayersKnockBackUsesDragonflySemantics(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		id := players.Register(player, 1)
+		invocation, leave := players.BeginInvocation(player.Tx())
+		defer leave()
+		player.Teleport(mgl64.Vec3{4, 5, 6})
+		if !players.KnockBackPlayer(invocation, id, native.Vec3{X: 3, Y: 99, Z: 6}, 0.4, 0.25) {
+			t.Fatal("knockback failed")
+		}
+		if velocity := player.Velocity(); velocity != (mgl64.Vec3{0.4, 0.25, 0}) {
+			t.Fatalf("velocity = %v", velocity)
+		}
+	})
+}
+
 func TestPlayersSendsAndRemovesScoreboard(t *testing.T) {
 	withPlayer(t, func(player *player.Player) {
 		players := NewPlayers()

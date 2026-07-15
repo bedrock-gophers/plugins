@@ -423,6 +423,7 @@ type Host interface {
 	TransformPlayer(InvocationID, PlayerID, PlayerTransformKind, Vec3, float64, float64) bool
 	TransferPlayer(InvocationID, PlayerID, WorldID, Vec3) bool
 	PlayerKinematics(InvocationID, PlayerID) (PlayerKinematics, bool)
+	KnockBackPlayer(InvocationID, PlayerID, Vec3, float64, float64) bool
 	SetPlayerState(InvocationID, PlayerID, PlayerStateKind, PlayerStateValue) bool
 	PlayerState(InvocationID, PlayerID, PlayerStateKind) (PlayerStateValue, bool)
 	PlayerAction(InvocationID, PlayerID, PlayerActionKind, PlayerStateValue) (PlayerStateValue, bool)
@@ -540,6 +541,7 @@ func (noopHost) TransferPlayer(InvocationID, PlayerID, WorldID, Vec3) bool { ret
 func (noopHost) PlayerKinematics(InvocationID, PlayerID) (PlayerKinematics, bool) {
 	return PlayerKinematics{}, false
 }
+func (noopHost) KnockBackPlayer(InvocationID, PlayerID, Vec3, float64, float64) bool { return false }
 func (noopHost) SetPlayerState(InvocationID, PlayerID, PlayerStateKind, PlayerStateValue) bool {
 	return false
 }

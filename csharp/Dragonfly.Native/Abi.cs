@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static partial class Abi
 {
     public const uint PluginVersion = 11;
-    public const uint HostVersion = 53;
+    public const uint HostVersion = 54;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerCooldownHas = 0;
@@ -525,6 +525,7 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, StringBuffer*, int> PlayerStringGet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, StringView, StringView, int> PlayerToast;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, StringView, int, long, byte*, int> PlayerCooldown;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, Vec3, double, double, int> PlayerKnockBack;
 }
 
 [StructLayout(LayoutKind.Sequential)]

@@ -579,6 +579,24 @@ internal static unsafe class PluginBridge
                 pitch);
         }
 
+        internal static void KnockBackPlayer(
+            ulong invocation,
+            PlayerId player,
+            Vector3 source,
+            double force,
+            double height)
+        {
+            var api = Api;
+            if (api is null || api->PlayerKnockBack == null) return;
+            _ = api->PlayerKnockBack(
+                api->Context,
+                invocation,
+                player,
+                new Vec3 { X = source.X, Y = source.Y, Z = source.Z },
+                force,
+                height);
+        }
+
         internal static void CloseEntity(ulong invocation, EntityId entity)
         {
             var api = Api;
