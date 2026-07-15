@@ -2,7 +2,7 @@ module example.com/bedrock-gophers-minimal
 
 go 1.26.0
 
-require github.com/bedrock-gophers/plugins v0.0.0-20260715183045-1968f0bf2a7e
+require github.com/bedrock-gophers/plugins v0.0.0-20260715184303-3c86605616ff
 
 require (
 	github.com/bedrock-gophers/intercept v0.3.0 // indirect
