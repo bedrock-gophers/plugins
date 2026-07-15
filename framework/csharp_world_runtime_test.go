@@ -12,6 +12,8 @@ import (
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/entity"
 	"github.com/df-mc/dragonfly/server/player"
+	"github.com/df-mc/dragonfly/server/player/skin"
+	"github.com/df-mc/dragonfly/server/session"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
 	"github.com/google/uuid"
@@ -81,26 +83,42 @@ func TestCSharpKitchenWorldCommandCanRunInsideCreatedWorld(t *testing.T) {
 
 	command, overload := kitchenWorldCommand(t, pluginRuntime)
 	playerUUID := uuid.MustParse("ca2ce6b2-f3c0-4e16-8f0b-f5ef9a8fb182")
+	connection := newTransferSessionConn(playerUUID)
+	networkSession := session.Config{
+		MaxChunkRadius: 1,
+		HandleStop:     func(*world.Tx, session.Controllable) {},
+	}.New(connection)
 	handle := world.EntitySpawnOpts{ID: playerUUID, Position: mgl64.Vec3{0, 64, 0}}.New(
 		player.Type,
-		player.Config{UUID: playerUUID, Name: "Kitchen", Position: mgl64.Vec3{0, 64, 0}},
+		player.Config{
+			UUID: playerUUID, Name: "Kitchen", Position: mgl64.Vec3{0, 64, 0}, Session: networkSession,
+		},
 	)
+	networkSession.SetHandle(handle, skin.Skin{})
+	t.Cleanup(func() { _ = connection.Close() })
 	var playerID native.PlayerID
 	if err := openedWorld.Do(func(tx *world.Tx) {
 		connected := tx.AddEntity(handle).(*player.Player)
 		connected.Handle(host.NewPlayerHandler(pluginRuntime, nil, players, worlds))
 		playerID = players.Register(connected, 1)
+		networkSession.Spawn(connected, tx)
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
-	run := func() <-chan native.CommandOutput {
+	run := func(expected *world.World) <-chan native.CommandOutput {
 		result := make(chan native.CommandOutput, 1)
 		go func() {
-			_ = handle.Do(func(tx *world.Tx, _ world.Entity) {
+			var output native.CommandOutput
+			task := handle.Do(func(tx *world.Tx, _ world.Entity) {
+				if tx.World() != expected {
+					output = native.CommandOutput{Failed: true, Message: "command ran in the wrong world"}
+					return
+				}
 				invocation, end := players.BeginInvocation(tx)
 				defer end()
-				output, commandErr := pluginRuntime.HandleCommand(command.Index, native.CommandInput{
+				var commandErr error
+				output, commandErr = pluginRuntime.HandleCommand(command.Index, native.CommandInput{
 					Invocation: invocation, Overload: overload, Source: "Kitchen",
 					SourceKind: native.CommandSourcePlayer, SourcePlayer: &playerID,
 					SourcePosition: native.Vec3{Y: 64}, Arguments: []string{"world"},
@@ -108,15 +126,32 @@ func TestCSharpKitchenWorldCommandCanRunInsideCreatedWorld(t *testing.T) {
 				if commandErr != nil {
 					output = native.CommandOutput{Failed: true, Message: commandErr.Error()}
 				}
-				result <- output
 			})
+			if err := task.Wait(context.Background()); err != nil {
+				output = native.CommandOutput{Failed: true, Message: err.Error()}
+			}
+			result <- output
 		}()
 		return result
 	}
 
 	for attempt := 1; attempt <= 2; attempt++ {
+		expected := openedWorld
+		if attempt == 2 {
+			worlds.mu.RLock()
+			for _, entry := range worlds.worlds {
+				if entry.spec != nil && entry.spec.providerPath == "kitchen/arena" {
+					expected = entry.world
+					break
+				}
+			}
+			worlds.mu.RUnlock()
+			if expected == openedWorld {
+				t.Fatal("kitchen arena was not created")
+			}
+		}
 		select {
-		case output := <-run():
+		case output := <-run(expected):
 			if output.Failed {
 				t.Fatalf("world command %d failed: %s", attempt, output.Message)
 			}
