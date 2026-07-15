@@ -510,6 +510,37 @@ func bg_go_world_spawn_set(context C.uint64_t, invocation C.DfInvocationId, worl
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_world_player_spawn_get
+func bg_go_world_player_spawn_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, player C.DfUuid, output *C.DfBlockPos) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || output == nil {
+		return C.DF_STATUS_ERROR
+	}
+	position, ok := host.WorldPlayerSpawn(InvocationID(invocation), WorldID(world.value), uuidValue(player))
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	*output = C.DfBlockPos{x: C.int32_t(position.X), y: C.int32_t(position.Y), z: C.int32_t(position.Z)}
+	return C.DF_STATUS_OK
+}
+
+//export bg_go_world_player_spawn_set
+func bg_go_world_player_spawn_set(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, player C.DfUuid, position C.DfBlockPos) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || !host.SetWorldPlayerSpawn(InvocationID(invocation), WorldID(world.value), uuidValue(player), nativeBlockPosition(position)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+func uuidValue(value C.DfUuid) [16]byte {
+	var id [16]byte
+	for index := range id {
+		id[index] = byte(value.bytes[index])
+	}
+	return id
+}
+
 //export bg_go_world_dimension_get
 func bg_go_world_dimension_get(context C.uint64_t, invocation C.DfInvocationId, world C.DfWorldId, output *C.uint32_t) C.DfStatus {
 	host, ok := resolveHost(uint64(context))

@@ -716,6 +716,34 @@ internal static unsafe class PluginBridge
                 new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() });
         }
 
+        internal static Cube.Pos WorldPlayerSpawn(ulong invocation, WorldId world, Guid player)
+        {
+            var api = Api;
+            if (api is null || api->WorldPlayerSpawnGet == null) return default;
+            NativeUuid native = default;
+            if (!player.TryWriteBytes(new Span<byte>(native.Bytes, 16), bigEndian: true, out var written) || written != 16)
+                return default;
+            BlockPos position;
+            return api->WorldPlayerSpawnGet(api->Context, invocation, world, native, &position) == Abi.Ok
+                ? new Cube.Pos(position.X, position.Y, position.Z)
+                : default;
+        }
+
+        internal static void SetWorldPlayerSpawn(ulong invocation, WorldId world, Guid player, Cube.Pos position)
+        {
+            var api = Api;
+            if (api is null || api->WorldPlayerSpawnSet == null) return;
+            NativeUuid native = default;
+            if (!player.TryWriteBytes(new Span<byte>(native.Bytes, 16), bigEndian: true, out var written) || written != 16)
+                return;
+            _ = api->WorldPlayerSpawnSet(
+                api->Context,
+                invocation,
+                world,
+                native,
+                new BlockPos { X = position.X(), Y = position.Y(), Z = position.Z() });
+        }
+
         internal static void SaveWorld(ulong invocation, WorldId world)
         {
             var api = Api;

@@ -222,6 +222,8 @@ type recordingHost struct {
 	worldUnloaded      bool
 	worldTime          int64
 	worldSpawn         BlockPos
+	worldPlayer        [16]byte
+	worldPlayerSpawn   BlockPos
 	worldDimension     WorldDimension
 	worldTimeCycle     bool
 	worldSleepDuration time.Duration
@@ -510,6 +512,15 @@ func (h *recordingHost) SetWorldSpawn(_ InvocationID, _ WorldID, position BlockP
 }
 func (h *recordingHost) WorldSpawn(_ InvocationID, id WorldID) (BlockPos, bool) {
 	return h.worldSpawn, id == h.worldID
+}
+
+func (h *recordingHost) SetWorldPlayerSpawn(_ InvocationID, id WorldID, player [16]byte, position BlockPos) bool {
+	h.worldPlayer, h.worldPlayerSpawn = player, position
+	return id == h.worldID
+}
+
+func (h *recordingHost) WorldPlayerSpawn(_ InvocationID, id WorldID, player [16]byte) (BlockPos, bool) {
+	return h.worldPlayerSpawn, id == h.worldID && player == h.worldPlayer
 }
 
 func (h *recordingHost) WorldDimension(_ InvocationID, id WorldID) (WorldDimension, bool) {

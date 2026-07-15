@@ -20,6 +20,7 @@ import (
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/df-mc/dragonfly/server/world/mcdb"
+	"github.com/google/uuid"
 )
 
 type WorldID string
@@ -1514,6 +1515,34 @@ func (m *WorldManager) SetWorldSpawn(invocation native.InvocationID, id native.W
 		return false
 	}
 	entry.world.SetSpawn(blockPosition(value))
+	return true
+}
+
+func (m *WorldManager) WorldPlayerSpawn(invocation native.InvocationID, id native.WorldID, player [16]byte) (native.BlockPos, bool) {
+	entry, ok := m.entryForInvocation(invocation, id)
+	if !ok {
+		return native.BlockPos{}, false
+	}
+	entry.lifecycle.RLock()
+	defer entry.lifecycle.RUnlock()
+	if entry.closed {
+		return native.BlockPos{}, false
+	}
+	spawn := entry.world.PlayerSpawn(uuid.UUID(player))
+	return native.BlockPos{X: int32(spawn.X()), Y: int32(spawn.Y()), Z: int32(spawn.Z())}, true
+}
+
+func (m *WorldManager) SetWorldPlayerSpawn(invocation native.InvocationID, id native.WorldID, player [16]byte, value native.BlockPos) bool {
+	entry, ok := m.entryForInvocation(invocation, id)
+	if !ok {
+		return false
+	}
+	entry.lifecycle.RLock()
+	defer entry.lifecycle.RUnlock()
+	if entry.closed {
+		return false
+	}
+	entry.world.SetPlayerSpawn(uuid.UUID(player), blockPosition(value))
 	return true
 }
 

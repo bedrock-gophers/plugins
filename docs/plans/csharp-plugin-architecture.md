@@ -243,6 +243,8 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    structural implementations preserve their exact interface capabilities. C# emits `Dimension()`
    and `Difficulty()` as extension methods solely to avoid the language collision with the nested
    `World.Dimension` and `World.Difficulty` types while retaining identical call syntax.
+   Host ABI 49 adds exact AST-generated `World.PlayerSpawn(Guid)` and
+   `World.SetPlayerSpawn(Guid, Cube.Pos)` calls backed directly by Dragonfly's provider state.
    ABI 44 and plugin ABI 9 add AST-generated `EntitySpawnOpts`, `EntityType`, `EntityConfig`,
    `EntityData`, and `TickerEntity`. `EntitySpawnOpts.New` creates a worldless Dragonfly handle;
    `Tx.AddEntity`, `RemoveEntity`, and `AddEntityAt` preserve that handle across a fresh world-bound

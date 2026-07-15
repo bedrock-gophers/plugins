@@ -449,6 +449,14 @@ func TestWorldManagerBlockAndStateOperationsUseActiveTx(t *testing.T) {
 	if got, ok := manager.WorldSpawn(0, id); !ok || got != spawn {
 		t.Fatalf("WorldSpawn() = %#v, %v", got, ok)
 	}
+	playerID := [16]byte{1, 2, 3, 4}
+	playerSpawn := native.BlockPos{X: -4, Y: 80, Z: 12}
+	if !manager.SetWorldPlayerSpawn(0, id, playerID, playerSpawn) {
+		t.Fatal("SetWorldPlayerSpawn failed")
+	}
+	if got, ok := manager.WorldPlayerSpawn(0, id, playerID); !ok || got != spawn {
+		t.Fatalf("WorldPlayerSpawn() = %#v, %v", got, ok)
+	}
 }
 
 func TestWorldManagerInvocationCannotBorrowAnotherWorldTransaction(t *testing.T) {

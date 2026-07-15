@@ -20,6 +20,8 @@ var selectedWorldLifecycleMethods = []string{
 	"TimeCycle",
 	"Spawn",
 	"SetSpawn",
+	"PlayerSpawn",
+	"SetPlayerSpawn",
 	"SetRequiredSleepDuration",
 	"DefaultGameMode",
 	"SetTickRange",
@@ -59,6 +61,8 @@ func inspectWorldLifecycleMethods(path string) ([]worldLifecycleMethod, error) {
 		"TimeCycle":                {Results: "bool"},
 		"Spawn":                    {Results: "cube.Pos"},
 		"SetSpawn":                 {Parameters: "cube.Pos"},
+		"PlayerSpawn":              {Parameters: "uuid.UUID", Results: "cube.Pos"},
+		"SetPlayerSpawn":           {Parameters: "uuid.UUID, cube.Pos"},
 		"SetRequiredSleepDuration": {Parameters: "time.Duration"},
 		"DefaultGameMode":          {Results: "GameMode"},
 		"SetTickRange":             {Parameters: "int"},
@@ -72,6 +76,7 @@ func inspectWorldLifecycleMethods(path string) ([]worldLifecycleMethod, error) {
 		"Name": 0, "Dimension": 0, "Range": 0, "HighestLightBlocker": 2, "Time": 0,
 		"SetTime": 1, "StopTime": 0, "StartTime": 0, "TimeCycle": 0, "Spawn": 0,
 		"SetSpawn": 1, "SetRequiredSleepDuration": 1, "DefaultGameMode": 0, "SetTickRange": 1,
+		"PlayerSpawn": 1, "SetPlayerSpawn": 2,
 		"SetDefaultGameMode": 1, "Difficulty": 0, "SetDifficulty": 1, "Save": 0, "Close": 0,
 	}
 	methods := make([]worldLifecycleMethod, 0, len(selectedWorldLifecycleMethods))
@@ -129,6 +134,10 @@ func generateWorldLifecycleMethods(methods []worldLifecycleMethod) []byte {
 			output.WriteString("    public Cube.Pos Spawn() => PluginBridge.Host.WorldSpawn(_invocation, Id);\n")
 		case "SetSpawn":
 			fmt.Fprintf(&output, "    public void SetSpawn(Cube.Pos %s) =>\n        PluginBridge.Host.SetWorldSpawn(_invocation, Id, %s);\n", method.Parameters[0], method.Parameters[0])
+		case "PlayerSpawn":
+			fmt.Fprintf(&output, "    public Cube.Pos PlayerSpawn(Guid %s) =>\n        PluginBridge.Host.WorldPlayerSpawn(_invocation, Id, %s);\n", method.Parameters[0], method.Parameters[0])
+		case "SetPlayerSpawn":
+			fmt.Fprintf(&output, "    public void SetPlayerSpawn(Guid %s, Cube.Pos %s) =>\n        PluginBridge.Host.SetWorldPlayerSpawn(_invocation, Id, %s, %s);\n", method.Parameters[0], method.Parameters[1], method.Parameters[0], method.Parameters[1])
 		case "SetRequiredSleepDuration":
 			parameter := csharpIdentifier(method.Parameters[0])
 			fmt.Fprintf(&output, "    public void SetRequiredSleepDuration(TimeSpan %s) =>\n        PluginBridge.Host.SetWorldRequiredSleepDuration(_invocation, Id, %s);\n", parameter, parameter)

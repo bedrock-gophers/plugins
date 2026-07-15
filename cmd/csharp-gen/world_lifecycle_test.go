@@ -19,8 +19,8 @@ func TestPinnedDragonflyWorldLifecycleUsesGoAST(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(methods) != 19 {
-		t.Fatalf("generated %d world lifecycle methods, want 19", len(methods))
+	if len(methods) != 21 {
+		t.Fatalf("generated %d world lifecycle methods, want 21", len(methods))
 	}
 	generated := string(generateWorldLifecycleMethods(methods))
 	for _, expected := range []string{
@@ -35,6 +35,8 @@ func TestPinnedDragonflyWorldLifecycleUsesGoAST(t *testing.T) {
 		"bool TimeCycle()",
 		"Cube.Pos Spawn()",
 		"void SetSpawn(Cube.Pos pos)",
+		"Cube.Pos PlayerSpawn(Guid id)",
+		"void SetPlayerSpawn(Guid id, Cube.Pos pos)",
 		"void SetRequiredSleepDuration(TimeSpan duration)",
 		"GameMode DefaultGameMode()",
 		"void SetTickRange(int v)",

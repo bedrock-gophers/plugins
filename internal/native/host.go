@@ -467,6 +467,8 @@ type Host interface {
 	SetWorldTime(InvocationID, WorldID, int64) bool
 	WorldSpawn(InvocationID, WorldID) (BlockPos, bool)
 	SetWorldSpawn(InvocationID, WorldID, BlockPos) bool
+	WorldPlayerSpawn(InvocationID, WorldID, [16]byte) (BlockPos, bool)
+	SetWorldPlayerSpawn(InvocationID, WorldID, [16]byte, BlockPos) bool
 	WorldDimension(InvocationID, WorldID) (WorldDimension, bool)
 	WorldTimeCycle(InvocationID, WorldID) (bool, bool)
 	SetWorldTimeCycle(InvocationID, WorldID, bool) bool
@@ -626,6 +628,12 @@ func (noopHost) WorldTime(InvocationID, WorldID) (int64, bool)               { r
 func (noopHost) SetWorldTime(InvocationID, WorldID, int64) bool              { return false }
 func (noopHost) WorldSpawn(InvocationID, WorldID) (BlockPos, bool)           { return BlockPos{}, false }
 func (noopHost) SetWorldSpawn(InvocationID, WorldID, BlockPos) bool          { return false }
+func (noopHost) WorldPlayerSpawn(InvocationID, WorldID, [16]byte) (BlockPos, bool) {
+	return BlockPos{}, false
+}
+func (noopHost) SetWorldPlayerSpawn(InvocationID, WorldID, [16]byte, BlockPos) bool {
+	return false
+}
 func (noopHost) WorldDimension(InvocationID, WorldID) (WorldDimension, bool) {
 	return 0, false
 }

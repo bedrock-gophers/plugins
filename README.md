@@ -93,7 +93,7 @@ death, ground contact, body heights, and breathing. `World.New()` creates a writ
 directory. `World.BlockByName` resolves dynamic names and typed state properties through
 Dragonfly's default block registry, which makes external formats such as VAP usable without
 exposing raw transport data. Their AST-generated `Name`, `Range`, `HighestLightBlocker`, `Time`,
-`SetTime`, `Spawn`, `SetSpawn`, `Save`, and `Close` methods use the
+`SetTime`, `Spawn`, `SetSpawn`, `PlayerSpawn`, `SetPlayerSpawn`, `Save`, and `Close` methods use the
 same `World` type as handler callbacks. `Player.ChangeWorld` is the deliberately named host
 extension for safe cross-world movement; Dragonfly's `Transfer` still means another server.
 `World.GameMode` includes Dragonfly's four registered values and exact `GameModeByID`/`GameModeID`

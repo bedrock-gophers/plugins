@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 11u
-// Host version 48 adds callback-borrowed player packet writes.
-#define DF_HOST_ABI_VERSION 48u
+// Host version 49 adds per-player world spawn access.
+#define DF_HOST_ABI_VERSION 49u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -423,6 +423,8 @@ typedef DfStatus (*DfHostWorldTimeGetFn)(uint64_t context, DfInvocationId invoca
 typedef DfStatus (*DfHostWorldTimeSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int64_t time);
 typedef DfStatus (*DfHostWorldSpawnGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos *position);
 typedef DfStatus (*DfHostWorldSpawnSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBlockPos position);
+typedef DfStatus (*DfHostWorldPlayerSpawnGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfUuid player, DfBlockPos *position);
+typedef DfStatus (*DfHostWorldPlayerSpawnSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfUuid player, DfBlockPos position);
 typedef DfStatus (*DfHostWorldDimensionGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, uint32_t *dimension);
 typedef DfStatus (*DfHostWorldBoolGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t *value);
 typedef DfStatus (*DfHostWorldBoolSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t value);
@@ -622,6 +624,8 @@ typedef struct {
     DfHostWorldDifficultyGetFn world_difficulty_get;
     DfHostWorldDifficultySetFn world_difficulty_set;
     DfHostPlayerPacketWriteFn player_packet_write;
+    DfHostWorldPlayerSpawnGetFn world_player_spawn_get;
+    DfHostWorldPlayerSpawnSetFn world_player_spawn_set;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u

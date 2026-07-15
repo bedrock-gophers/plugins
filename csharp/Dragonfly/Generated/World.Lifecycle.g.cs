@@ -15,6 +15,10 @@ public sealed partial class World
     public Cube.Pos Spawn() => PluginBridge.Host.WorldSpawn(_invocation, Id);
     public void SetSpawn(Cube.Pos pos) =>
         PluginBridge.Host.SetWorldSpawn(_invocation, Id, pos);
+    public Cube.Pos PlayerSpawn(Guid id) =>
+        PluginBridge.Host.WorldPlayerSpawn(_invocation, Id, id);
+    public void SetPlayerSpawn(Guid id, Cube.Pos pos) =>
+        PluginBridge.Host.SetWorldPlayerSpawn(_invocation, Id, id, pos);
     public void SetRequiredSleepDuration(TimeSpan duration) =>
         PluginBridge.Host.SetWorldRequiredSleepDuration(_invocation, Id, duration);
     public GameMode DefaultGameMode() => PluginBridge.Host.WorldDefaultGameMode(_invocation, Id);

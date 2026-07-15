@@ -568,6 +568,8 @@ public sealed class KitchenSink : Plugin
             var difficulty = arena.Difficulty();
             arena.SetTime(time);
             arena.SetSpawn(spawn);
+            arena.SetPlayerSpawn(player.UUID(), spawn);
+            var playerSpawn = arena.PlayerSpawn(player.UUID());
             arena.StopTime();
             if (timeCycle) arena.StartTime();
             arena.SetRequiredSleepDuration(TimeSpan.FromSeconds(1));
@@ -581,13 +583,14 @@ public sealed class KitchenSink : Plugin
             player.ChangeWorld(arena, spawn.Vec3Middle());
             output.Printf(
                 "memory={0}, persistent={1}, spawn={2},{3},{4}, range={5}..{6}, " +
-                "highest_light_blocker={7}, time={8}, overworld={9}, cycle={10}, difficulty={11}",
+                "highest_light_blocker={7}, time={8}, overworld={9}, cycle={10}, difficulty={11}, player_spawn={12}",
                 memory.Name(), arena.Name(), spawn.X(), spawn.Y(), spawn.Z(),
                 range.Min(), range.Max(), highestLightBlocker, time,
                 dimension.Equals(Dragonfly.World.Overworld) ? "true" : "false",
                 arena.TimeCycle() == timeCycle ? "true" : "false",
                 customDifficulty.FoodRegenerates() && customDifficulty.StarvationHealthLimit() == 7.5 &&
-                    customDifficulty.FireSpreadIncrease() == -4 ? "true" : "false");
+                    customDifficulty.FireSpreadIncrease() == -4 ? "true" : "false",
+                playerSpawn.Equals(spawn) ? "true" : "false");
         }
     }
 

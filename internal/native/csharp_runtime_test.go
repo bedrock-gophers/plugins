@@ -938,7 +938,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	configuredWorld.Overload = 21
 	configuredWorld.Arguments = []string{"world"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, configuredWorld)
-	if err != nil || output.Failed || output.Message != "memory=World, persistent=kitchen:arena, spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000, overworld=true, cycle=true, difficulty=true" {
+	if err != nil || output.Failed || output.Message != "memory=World, persistent=kitchen:arena, spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000, overworld=true, cycle=true, difficulty=true, player_spawn=true" {
 		t.Fatalf("configured world output=%#v error=%v", output, err)
 	}
 	if len(host.worldConfigs) != 2 || host.worldConfigs[0] != (WorldConfig{
@@ -952,6 +952,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		RandomTickSpeed: -1,
 	}) || !host.worldSaved ||
 		host.worldSpawn != (BlockPos{X: 8, Y: 70, Z: -4}) || host.transferInvocation != 42 ||
+		host.worldPlayer != player.UUID || host.worldPlayerSpawn != (BlockPos{X: 8, Y: 70, Z: -4}) ||
 		host.transferPlayer != player || host.transferWorld != 91 ||
 		host.transferPosition != (Vec3{X: 8.5, Y: 70, Z: -3.5}) ||
 		host.worldRangeCalls != 1 || host.worldRangeInvocation != 0 || host.worldRangeWorld != 91 ||
@@ -971,7 +972,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	host.worldName = longWorldName
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, configuredWorld)
 	if err != nil || output.Failed || output.Message !=
-		"memory=World, persistent="+longWorldName+", spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000, overworld=true, cycle=true, difficulty=true" {
+		"memory=World, persistent="+longWorldName+", spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000, overworld=true, cycle=true, difficulty=true, player_spawn=true" {
 		t.Fatalf("long world name output=%#v error=%v", output, err)
 	}
 	host.worldName = "kitchen:arena"
