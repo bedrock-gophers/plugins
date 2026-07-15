@@ -28,6 +28,8 @@ through the command transaction while preserving handle identity.
 `/kitchen particle` emits every typed Dragonfly particle and exercises all typed note instruments.
 `/kitchen game-mode` exercises registered lookup, player reads, and a custom game mode without
 leaving the player changed.
+`/kitchen presentation` sends an AST-generated typed `Title` with subtitle, action text, and
+durations.
 `/kitchen item` builds a typed diamond sword, round-trips inventory, armour, and held-item APIs,
 then restores every changed slot.
 `/kitchen form` covers reflected menu, custom, and modal forms with every typed element;
