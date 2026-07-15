@@ -152,27 +152,24 @@ func TestValidEntityTypeDefinition(t *testing.T) {
 
 type recordingHost struct {
 	noopHost
-	player             PlayerID
-	textPlayers        []PlayerID
-	texts              []string
-	kinds              []PlayerTextKind
-	title              PlayerTitle
-	scoreboard         PlayerScoreboard
-	scoreboardRemoved  bool
-	transforms         []PlayerTransformKind
-	vectors            []Vec3
-	yaws               []float64
-	pitches            []float64
-	states             []PlayerStateKind
-	values             []PlayerStateValue
-	state              PlayerStateValue
-	stateValues        map[PlayerStateKind]PlayerStateValue
-	rejectStateWrites  bool
-	reads              []PlayerStateKind
-	experienceLevel    int32
-	experienceProgress float64
-	experienceCalls    int
-	heals              []struct {
+	player            PlayerID
+	textPlayers       []PlayerID
+	texts             []string
+	kinds             []PlayerTextKind
+	title             PlayerTitle
+	scoreboard        PlayerScoreboard
+	scoreboardRemoved bool
+	transforms        []PlayerTransformKind
+	vectors           []Vec3
+	yaws              []float64
+	pitches           []float64
+	states            []PlayerStateKind
+	values            []PlayerStateValue
+	state             PlayerStateValue
+	stateValues       map[PlayerStateKind]PlayerStateValue
+	rejectStateWrites bool
+	reads             []PlayerStateKind
+	heals             []struct {
 		Health float64
 		Source HealingSource
 	}
@@ -321,13 +318,6 @@ func (h *recordingHost) PlayerState(_ InvocationID, _ PlayerID, kind PlayerState
 		return value, true
 	}
 	return h.state, true
-}
-
-func (h *recordingHost) SetPlayerExperience(_ InvocationID, _ PlayerID, level int32, progress float64) bool {
-	h.experienceLevel = level
-	h.experienceProgress = progress
-	h.experienceCalls++
-	return true
 }
 
 func (h *recordingHost) HealPlayer(_ InvocationID, _ PlayerID, health float64, source HealingSource) (float64, bool) {

@@ -368,8 +368,6 @@ typedef DfStatus (*DfHostPlayerTransformFn)(uint64_t context, DfInvocationId inv
 typedef DfStatus (*DfHostPlayerKinematicsFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfPlayerKinematics *kinematics);
 typedef DfStatus (*DfHostPlayerStateSetFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue value);
 typedef DfStatus (*DfHostPlayerStateGetFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue *value);
-typedef DfStatus (*DfHostPlayerExperienceSetFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, int32_t level, double progress);
-
 typedef DfStatus (*DfHostPlayerHealFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, double health, const DfHealingSourceView *source, DfPlayerHealResult *result);
 typedef DfStatus (*DfHostPlayerHurtFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, double damage, const DfDamageSourceView *source, DfPlayerHurtResult *result);
 typedef DfStatus (*DfHostPlayerEffectFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t operation, DfEffectView effect);
@@ -560,7 +558,7 @@ typedef struct {
     DfHostPlayerEffectsFn player_effects;
     DfHostPlayerEffectsClearFn player_effects_clear;
     DfHostWorldLiquidGetFn world_liquid_get;
-    DfHostPlayerExperienceSetFn player_experience_set;
+    void *reserved_player_experience_set;
     DfHostWorldRangeFn world_range;
     DfHostWorldBlockLoadedFn world_block_loaded;
     DfHostWorldBlocksWithinOpenFn world_blocks_within_open;

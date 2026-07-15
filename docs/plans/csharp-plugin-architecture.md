@@ -7,6 +7,7 @@
 - Plugins subclass `Plugin`; generated build plumbing supplies the native entry point and project-name identity.
 - The Go host owns Dragonfly and exposes a private flat C ABI. Plugins never use ABI types.
 - Code generation reads the pinned Dragonfly Go source with `go/ast` and emits C#; there is no second public API schema.
+- Same generator owns matching private Go player transport constants and dispatch; deleted schema-era `abi-gen` output cannot drift outside `make check-generated`.
 - Packet generation reads the pinned gophertunnel packet structs and the intercept handler contract with
   `go/ast`; intercept hands the host packets that gophertunnel has already decoded.
 

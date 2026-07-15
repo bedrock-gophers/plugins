@@ -548,21 +548,11 @@ func (p *Players) EntityPlayer(invocation native.InvocationID, id native.EntityI
 }
 
 func (p *Players) SetPlayerState(invocation native.InvocationID, id native.PlayerID, kind native.PlayerStateKind, value native.PlayerStateValue) bool {
-	changed, ok := readPlayer(p, invocation, id, func(connected *player.Player) bool {
-		return setPlayerState(connected, kind, value)
+	changed := false
+	ok := p.mutatePlayer(invocation, id, func(connected *player.Player) {
+		changed = setPlayerState(connected, kind, value)
 	})
 	return ok && changed
-}
-
-// SetPlayerExperience updates level and progress in one owner-world operation.
-func (p *Players) SetPlayerExperience(invocation native.InvocationID, id native.PlayerID, level int32, progress float64) bool {
-	if level < 0 || !finite(progress) || progress < 0 || progress > 1 {
-		return false
-	}
-	return p.mutatePlayer(invocation, id, func(connected *player.Player) {
-		connected.SetExperienceLevel(int(level))
-		connected.SetExperienceProgress(progress)
-	})
 }
 
 func (p *Players) HealPlayer(invocation native.InvocationID, id native.PlayerID, health float64, source native.HealingSource) (float64, bool) {

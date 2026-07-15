@@ -54,8 +54,6 @@ static int dlclose(void *handle) {
 #include <dlfcn.h>
 #endif
 
-#include "player_operations_generated.h"
-
 #if UINTPTR_MAX == UINT64_MAX
 #define ASSERT_PLAYER_EVENT_LAYOUT(TYPE) _Static_assert(offsetof(TYPE, player) == 8, #TYPE ".player ABI offset changed")
 ASSERT_PLAYER_EVENT_LAYOUT(DfPlayerMoveInput);
@@ -307,6 +305,7 @@ _Static_assert(offsetof(DfHostApiV27, player_transfer) == 416, "DfHostApiV27.pla
 _Static_assert(offsetof(DfHostApiV27, player_effects) == 424, "DfHostApiV27.player_effects ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_effects_clear) == 432, "DfHostApiV27.player_effects_clear ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_liquid_get) == 440, "DfHostApiV27.world_liquid_get ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, reserved_player_experience_set) == 448, "DfHostApiV27.reserved_player_experience_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_range) == 456, "DfHostApiV27.world_range ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_block_loaded) == 464, "DfHostApiV27.world_block_loaded ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_blocks_within_open) == 472, "DfHostApiV27.world_blocks_within_open ABI offset changed");
@@ -836,7 +835,7 @@ DfStatus bg_runtime_open(
         .player_effects = host_player_effects,
         .player_effects_clear = host_player_effects_clear,
         .world_liquid_get = host_world_liquid_get,
-        BG_PLAYER_OPERATION_HOST_FIELDS
+        .reserved_player_experience_set = NULL,
         .world_range = host_world_range,
         .world_block_loaded = host_world_block_loaded,
         .world_blocks_within_open = host_world_blocks_within_open,

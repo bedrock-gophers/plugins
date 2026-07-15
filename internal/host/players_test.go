@@ -437,37 +437,7 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 	})
 }
 
-func TestPlayersSetExperienceValidatesAndBatches(t *testing.T) {
-	withPlayer(t, func(connected *player.Player) {
-		players := NewPlayers()
-		id := players.Register(connected, 73)
-		invocation, leave := players.BeginInvocation(connected.Tx())
-		defer leave()
-
-		for _, invalid := range []struct {
-			level    int32
-			progress float64
-		}{
-			{-1, 0.5},
-			{1, math.NaN()},
-			{1, math.Inf(1)},
-			{1, -0.1},
-			{1, 1.1},
-		} {
-			if players.SetPlayerExperience(invocation, id, invalid.level, invalid.progress) {
-				t.Fatalf("invalid experience accepted: %+v", invalid)
-			}
-		}
-		if !players.SetPlayerExperience(invocation, id, 30, 0.75) {
-			t.Fatal("valid experience rejected")
-		}
-		if connected.ExperienceLevel() != 30 || math.Abs(connected.ExperienceProgress()-0.75) > 0.02 {
-			t.Fatalf("experience = %d, %f", connected.ExperienceLevel(), connected.ExperienceProgress())
-		}
-	})
-}
-
-func TestPlayersSetExperienceSchedulesAcrossWorldInvocation(t *testing.T) {
+func TestPlayersSetPlayerStateSchedulesAcrossWorldInvocation(t *testing.T) {
 	source := world.Config{Synchronous: true}.New()
 	destination := world.Config{Synchronous: true}.New()
 	t.Cleanup(func() {
@@ -494,8 +464,11 @@ func TestPlayersSetExperienceSchedulesAcrossWorldInvocation(t *testing.T) {
 		players.Register(tx.AddEntity(sourceHandle).(*player.Player), 74)
 		invocation, leave := players.BeginInvocation(tx)
 		defer leave()
-		if !players.SetPlayerExperience(invocation, destinationID, 20, 0.5) {
-			t.Fatal("cross-world experience write was not scheduled")
+		if !players.SetPlayerState(invocation, destinationID, native.PlayerStateExperienceLevel, native.PlayerStateValue{Integer: 20}) {
+			t.Fatal("cross-world experience level write was not scheduled")
+		}
+		if !players.SetPlayerState(invocation, destinationID, native.PlayerStateExperienceProgress, native.PlayerStateValue{Number: 0.5}) {
+			t.Fatal("cross-world experience progress write was not scheduled")
 		}
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)

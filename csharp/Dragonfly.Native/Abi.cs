@@ -443,7 +443,7 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, EffectBuffer*, int> PlayerEffects;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, int> PlayerEffectsClear;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, byte*, BlockData*, int> WorldLiquidGet;
-    public void* PlayerExperienceSet;
+    public void* ReservedPlayerExperienceSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockRange*, int> WorldRange;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, byte*, BlockData*, int> WorldBlockLoaded;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, int, BlockView*, ulong, ulong*, int> WorldBlocksWithinOpen;

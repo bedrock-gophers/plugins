@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bedrock-gophers/plugins/internal/host"
+	"github.com/bedrock-gophers/plugins/internal/blockstate"
 	_ "github.com/df-mc/dragonfly/server/block"
 	dfitem "github.com/df-mc/dragonfly/server/item"
 	_ "github.com/df-mc/dragonfly/server/item/enchantment"
@@ -716,7 +716,27 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	playerTransport := playerTransportSpec{
+		StateMethods: playerStateMethods, TextMethods: playerMethods, Effects: effects,
+		Sounds: sounds, GameModeMethods: playerGameModes,
+	}
+	nativePlayerTransport, err := generateNativePlayerTransport(playerTransport)
+	if err != nil {
+		fatal(err)
+	}
+	hostPlayerTransport, err := generateHostPlayerTransport(playerTransport)
+	if err != nil {
+		fatal(err)
+	}
 	files := []generatedFile{
+		{
+			Path:    filepath.Join(*root, "internal", "native", "player_state_generated.go"),
+			Content: nativePlayerTransport,
+		},
+		{
+			Path:    filepath.Join(*root, "internal", "host", "player_state_generated.go"),
+			Content: hostPlayerTransport,
+		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Packet.Types.g.cs"),
 			Content: generatePacketTypes(packets),
@@ -4273,7 +4293,7 @@ func encodeRegisteredBlock(typeName string, value world.Block, registered []worl
 	if !found {
 		return encodedBlock{}, fmt.Errorf("block.%s state is not registered", typeName)
 	}
-	encoded, ok := host.EncodeBlockProperties(properties)
+	encoded, ok := blockstate.EncodeProperties(properties)
 	if !ok {
 		return encodedBlock{}, fmt.Errorf("block.%s has unsupported properties", typeName)
 	}
