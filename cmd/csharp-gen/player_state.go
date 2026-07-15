@@ -11,6 +11,9 @@ import (
 var selectedPlayerStateMethods = []string{
 	"Food",
 	"SetFood",
+	"AddFood",
+	"Saturate",
+	"Exhaust",
 	"Health",
 	"MaxHealth",
 	"SetMaxHealth",
@@ -20,6 +23,13 @@ var selectedPlayerStateMethods = []string{
 	"SetExperienceLevel",
 	"ExperienceProgress",
 	"SetExperienceProgress",
+	"Experience",
+	"EnchantmentSeed",
+	"ResetEnchantmentSeed",
+	"AddExperience",
+	"RemoveExperience",
+	"CanCollectExperience",
+	"CollectExperience",
 	"Scale",
 	"SetScale",
 	"Invisible",
@@ -91,6 +101,9 @@ func inspectPlayerStateMethods(path string) ([]playerStateMethod, error) {
 	want := map[string]goSignature{
 		"Food":                   {Results: "int"},
 		"SetFood":                {Parameters: "int"},
+		"AddFood":                {Parameters: "int"},
+		"Saturate":               {Parameters: "int, float64"},
+		"Exhaust":                {Parameters: "float64"},
 		"Health":                 {Results: "float64"},
 		"MaxHealth":              {Results: "float64"},
 		"SetMaxHealth":           {Parameters: "float64"},
@@ -100,6 +113,13 @@ func inspectPlayerStateMethods(path string) ([]playerStateMethod, error) {
 		"SetExperienceLevel":     {Parameters: "int"},
 		"ExperienceProgress":     {Results: "float64"},
 		"SetExperienceProgress":  {Parameters: "float64"},
+		"Experience":             {Results: "int"},
+		"EnchantmentSeed":        {Results: "int64"},
+		"ResetEnchantmentSeed":   {},
+		"AddExperience":          {Parameters: "int", Results: "int"},
+		"RemoveExperience":       {Parameters: "int"},
+		"CanCollectExperience":   {Results: "bool"},
+		"CollectExperience":      {Parameters: "int", Results: "bool"},
 		"Scale":                  {Results: "float64"},
 		"SetScale":               {Parameters: "float64"},
 		"Invisible":              {Results: "bool"},
@@ -197,6 +217,12 @@ func generatePlayerStateMethods(methods []playerStateMethod) []byte {
 			output.WriteString("    public int Food() => checked((int)PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateFood).Integer);\n")
 		case "SetFood":
 			fmt.Fprintf(&output, "    public void SetFood(int %s) => PluginBridge.Host.SetPlayerState(_invocation, Id, Abi.PlayerStateFood, new PlayerStateValue { Integer = %s });\n", parameter, parameter)
+		case "AddFood":
+			fmt.Fprintf(&output, "    public void AddFood(int %s) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionAddFood, new PlayerStateValue { Integer = %s });\n", parameter, parameter)
+		case "Saturate":
+			fmt.Fprintf(&output, "    public void Saturate(int %s, double %s) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionSaturate, new PlayerStateValue { Integer = %s, Number = %s });\n", methodsParameter(method, 0), methodsParameter(method, 1), methodsParameter(method, 0), methodsParameter(method, 1))
+		case "Exhaust":
+			fmt.Fprintf(&output, "    public void Exhaust(double %s) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionExhaust, new PlayerStateValue { Number = %s });\n", parameter, parameter)
 		case "Health":
 			output.WriteString("    public double Health() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateHealth).Number;\n")
 		case "MaxHealth":
@@ -226,6 +252,20 @@ func generatePlayerStateMethods(methods []playerStateMethod) []byte {
         PluginBridge.Host.SetPlayerState(_invocation, Id, Abi.PlayerStateExperienceProgress, new PlayerStateValue { Number = %[1]s });
     }
 `, parameter)
+		case "Experience":
+			output.WriteString("    public int Experience() => checked((int)PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateExperience).Integer);\n")
+		case "EnchantmentSeed":
+			output.WriteString("    public long EnchantmentSeed() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateEnchantmentSeed).Integer;\n")
+		case "ResetEnchantmentSeed":
+			output.WriteString("    public void ResetEnchantmentSeed() => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionResetEnchantmentSeed, default);\n")
+		case "AddExperience":
+			fmt.Fprintf(&output, "    public int AddExperience(int %s) => checked((int)PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionAddExperience, new PlayerStateValue { Integer = %s }).Integer);\n", parameter, parameter)
+		case "RemoveExperience":
+			fmt.Fprintf(&output, "    public void RemoveExperience(int %s) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionRemoveExperience, new PlayerStateValue { Integer = %s });\n", parameter, parameter)
+		case "CanCollectExperience":
+			output.WriteString("    public bool CanCollectExperience() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateCanCollectExperience).Integer != 0;\n")
+		case "CollectExperience":
+			fmt.Fprintf(&output, "    public bool CollectExperience(int %s) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionCollectExperience, new PlayerStateValue { Integer = %s }).Integer != 0;\n", parameter, parameter)
 		case "Scale":
 			output.WriteString("    public double Scale() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateScale).Number;\n")
 		case "SetScale":

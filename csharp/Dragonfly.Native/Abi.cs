@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static partial class Abi
 {
     public const uint PluginVersion = 11;
-    public const uint HostVersion = 49;
+    public const uint HostVersion = 50;
     public const int Ok = 0;
     public const int Error = 1;
 
@@ -434,7 +434,7 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, EffectBuffer*, int> PlayerEffects;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, int> PlayerEffectsClear;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, byte*, BlockData*, int> WorldLiquidGet;
-    public void* ReservedPlayerExperienceSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, PlayerStateValue, PlayerStateValue*, int> PlayerAction;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockRange*, int> WorldRange;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, byte*, BlockData*, int> WorldBlockLoaded;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, int, BlockView*, ulong, ulong*, int> WorldBlocksWithinOpen;

@@ -63,6 +63,20 @@ internal static unsafe class PluginBridge
             return value;
         }
 
+        internal static PlayerStateValue RunPlayerAction(
+            ulong invocation,
+            PlayerId player,
+            uint kind,
+            PlayerStateValue value)
+        {
+            var api = Api;
+            if (api is null || api->PlayerAction == null) return default;
+            PlayerStateValue result = default;
+            return api->PlayerAction(api->Context, invocation, player, kind, value, &result) == Abi.Ok
+                ? result
+                : default;
+        }
+
         internal static double HealPlayer(
             ulong invocation,
             PlayerId player,

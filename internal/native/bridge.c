@@ -263,7 +263,7 @@ _Static_assert(sizeof(DfPacketState) == 1, "DfPacketState ABI layout changed");
 _Static_assert(sizeof(DfDifficultyView) == 24, "DfDifficultyView ABI layout changed");
 _Static_assert(offsetof(DfDifficultyView, starvation_health_limit) == 8, "DfDifficultyView.starvation_health_limit ABI offset changed");
 _Static_assert(sizeof(DfHostApiV27) == 968, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 49u, "host ABI version changed without bridge review");
+_Static_assert(DF_HOST_ABI_VERSION == 50u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -308,7 +308,7 @@ _Static_assert(offsetof(DfHostApiV27, player_transfer) == 416, "DfHostApiV27.pla
 _Static_assert(offsetof(DfHostApiV27, player_effects) == 424, "DfHostApiV27.player_effects ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_effects_clear) == 432, "DfHostApiV27.player_effects_clear ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_liquid_get) == 440, "DfHostApiV27.world_liquid_get ABI offset changed");
-_Static_assert(offsetof(DfHostApiV27, reserved_player_experience_set) == 448, "DfHostApiV27.reserved_player_experience_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, player_action) == 448, "DfHostApiV27.player_action ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_range) == 456, "DfHostApiV27.world_range ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_block_loaded) == 464, "DfHostApiV27.world_block_loaded ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_blocks_within_open) == 472, "DfHostApiV27.world_blocks_within_open ABI offset changed");
@@ -359,6 +359,7 @@ extern DfStatus bg_go_player_transfer(uint64_t context, DfInvocationId invocatio
 extern DfStatus bg_go_player_kinematics(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfPlayerKinematics *kinematics);
 extern DfStatus bg_go_player_state_set(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue value);
 extern DfStatus bg_go_player_state_get(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue *value);
+extern DfStatus bg_go_player_action(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue value, DfPlayerStateValue *result);
 extern DfStatus bg_go_player_heal(uint64_t context, DfInvocationId invocation, DfPlayerId player, double health, const DfHealingSourceView *source, DfPlayerHealResult *result);
 extern DfStatus bg_go_player_hurt(uint64_t context, DfInvocationId invocation, DfPlayerId player, double damage, const DfDamageSourceView *source, DfPlayerHurtResult *result);
 extern DfStatus bg_go_player_effect(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t operation, DfEffectView effect);
@@ -499,6 +500,10 @@ static DfStatus host_player_state_set(uint64_t context, DfInvocationId invocatio
 
 static DfStatus host_player_state_get(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue *value) {
     return bg_go_player_state_get(context, invocation, player, kind, value);
+}
+
+static DfStatus host_player_action(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue value, DfPlayerStateValue *result) {
+    return bg_go_player_action(context, invocation, player, kind, value, result);
 }
 
 static DfStatus host_player_heal(uint64_t context, DfInvocationId invocation, DfPlayerId player, double health, const DfHealingSourceView *source, DfPlayerHealResult *result) {
@@ -844,7 +849,7 @@ DfStatus bg_runtime_open(
         .player_effects = host_player_effects,
         .player_effects_clear = host_player_effects_clear,
         .world_liquid_get = host_world_liquid_get,
-        .reserved_player_experience_set = NULL,
+        .player_action = host_player_action,
         .world_range = host_world_range,
         .world_block_loaded = host_world_block_loaded,
         .world_blocks_within_open = host_world_blocks_within_open,

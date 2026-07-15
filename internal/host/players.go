@@ -594,6 +594,20 @@ func (p *Players) PlayerState(invocation native.InvocationID, id native.PlayerID
 	return value.value, ok && value.ok
 }
 
+func (p *Players) PlayerAction(invocation native.InvocationID, id native.PlayerID, kind native.PlayerActionKind, input native.PlayerStateValue) (native.PlayerStateValue, bool) {
+	value, ok := readPlayer(p, invocation, id, func(connected *player.Player) struct {
+		value native.PlayerStateValue
+		ok    bool
+	} {
+		value, ok := runPlayerAction(connected, kind, input)
+		return struct {
+			value native.PlayerStateValue
+			ok    bool
+		}{value, ok}
+	})
+	return value.value, ok && value.ok
+}
+
 func (p *Players) ChangePlayerEffect(invocation native.InvocationID, id native.PlayerID, operation native.PlayerEffectOperation, value native.PlayerEffect) bool {
 	effectType, ok := effect.ByID(int(value.Type))
 	if !ok {

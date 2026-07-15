@@ -245,6 +245,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `World.Dimension` and `World.Difficulty` types while retaining identical call syntax.
    Host ABI 49 adds exact AST-generated `World.PlayerSpawn(Guid)` and
    `World.SetPlayerSpawn(Guid, Cube.Pos)` calls backed directly by Dragonfly's provider state.
+   Host ABI 50 activates one generated player-action transport in the old reserved slot. Exact
+   hunger and experience methods call Dragonfly directly; return-producing `AddExperience` and
+   `CollectExperience` return their real results instead of being faked as state setters.
    ABI 44 and plugin ABI 9 add AST-generated `EntitySpawnOpts`, `EntityType`, `EntityConfig`,
    `EntityData`, and `TickerEntity`. `EntitySpawnOpts.New` creates a worldless Dragonfly handle;
    `Tx.AddEntity`, `RemoveEntity`, and `AddEntityAt` preserve that handle across a fresh world-bound
@@ -336,6 +339,9 @@ visibility, mobility, walking-speed, flight-speed, and vertical-flight-speed met
 changing the restorable player state. It also reads absorption, fall distance, death, ground
 contact, body heights, and breathing, then exercises Dragonfly's fall-distance reset.
 It also exercises exact sprinting, sneaking, swimming, crawling, gliding, and flying state methods.
+It exercises exact hunger mutations, total experience, enchantment seed, experience mutations,
+and experience collection too. Enchantment-seed reset and the 100 ms collection delay are
+write-only upstream effects, so this diagnostic command intentionally changes those two values.
 `/kitchen item` exercises stack count, durability, unbreakable, attack damage, anvil cost,
 values, `WithItem`, `String`, semantic NBT comparison, and merging, then round-trips all eleven
 finite stateful item families plus both typed book and firework item families through player

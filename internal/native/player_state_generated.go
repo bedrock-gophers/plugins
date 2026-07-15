@@ -36,12 +36,27 @@ const (
 	PlayerStateFireProof           PlayerStateKind = 28
 	PlayerStateAirSupply           PlayerStateKind = 29
 	PlayerStateMaxAirSupply        PlayerStateKind = 30
+	PlayerStateExperience          PlayerStateKind = 31
+	PlayerStateEnchantmentSeed     PlayerStateKind = 32
+	PlayerStateCanCollectExperience PlayerStateKind = 33
 )
 
 type PlayerStateValue struct {
 	Number  float64
 	Integer int64
 }
+
+type PlayerActionKind uint32
+
+const (
+	PlayerActionAddFood                   PlayerActionKind = 0
+	PlayerActionSaturate                  PlayerActionKind = 1
+	PlayerActionExhaust                   PlayerActionKind = 2
+	PlayerActionResetEnchantmentSeed      PlayerActionKind = 3
+	PlayerActionAddExperience             PlayerActionKind = 4
+	PlayerActionRemoveExperience          PlayerActionKind = 5
+	PlayerActionCollectExperience         PlayerActionKind = 6
+)
 
 type EffectType int32
 

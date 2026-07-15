@@ -8,6 +8,9 @@ public sealed partial class Player
 {
     public int Food() => checked((int)PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateFood).Integer);
     public void SetFood(int level) => PluginBridge.Host.SetPlayerState(_invocation, Id, Abi.PlayerStateFood, new PlayerStateValue { Integer = level });
+    public void AddFood(int points) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionAddFood, new PlayerStateValue { Integer = points });
+    public void Saturate(int food, double saturation) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionSaturate, new PlayerStateValue { Integer = food, Number = saturation });
+    public void Exhaust(double points) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionExhaust, new PlayerStateValue { Number = points });
     public double Health() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateHealth).Number;
     public double MaxHealth() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateMaxHealth).Number;
     public void SetMaxHealth(double health) => PluginBridge.Host.SetPlayerState(_invocation, Id, Abi.PlayerStateMaxHealth, new PlayerStateValue { Number = health });
@@ -26,6 +29,13 @@ public sealed partial class Player
             throw new ArgumentOutOfRangeException(nameof(progress));
         PluginBridge.Host.SetPlayerState(_invocation, Id, Abi.PlayerStateExperienceProgress, new PlayerStateValue { Number = progress });
     }
+    public int Experience() => checked((int)PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateExperience).Integer);
+    public long EnchantmentSeed() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateEnchantmentSeed).Integer;
+    public void ResetEnchantmentSeed() => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionResetEnchantmentSeed, default);
+    public int AddExperience(int amount) => checked((int)PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionAddExperience, new PlayerStateValue { Integer = amount }).Integer);
+    public void RemoveExperience(int amount) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionRemoveExperience, new PlayerStateValue { Integer = amount });
+    public bool CanCollectExperience() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateCanCollectExperience).Integer != 0;
+    public bool CollectExperience(int value) => PluginBridge.Host.RunPlayerAction(_invocation, Id, Abi.PlayerActionCollectExperience, new PlayerStateValue { Integer = value }).Integer != 0;
     public double Scale() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateScale).Number;
     public void SetScale(double s) => PluginBridge.Host.SetPlayerState(_invocation, Id, Abi.PlayerStateScale, new PlayerStateValue { Number = s });
     public bool Invisible() => PluginBridge.Host.GetPlayerState(_invocation, Id, Abi.PlayerStateInvisible).Integer != 0;

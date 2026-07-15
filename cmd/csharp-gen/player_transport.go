@@ -52,11 +52,25 @@ var playerStateTransportIDs = []transportNameID{
 	{Name: "FireProof", ID: 28},
 	{Name: "AirSupply", ID: 29},
 	{Name: "MaxAirSupply", ID: 30},
+	{Name: "Experience", ID: 31},
+	{Name: "EnchantmentSeed", ID: 32},
+	{Name: "CanCollectExperience", ID: 33},
+}
+
+var playerActionTransportIDs = []transportNameID{
+	{Name: "AddFood", ID: 0},
+	{Name: "Saturate", ID: 1},
+	{Name: "Exhaust", ID: 2},
+	{Name: "ResetEnchantmentSeed", ID: 3},
+	{Name: "AddExperience", ID: 4},
+	{Name: "RemoveExperience", ID: 5},
+	{Name: "CollectExperience", ID: 6},
 }
 
 var playerStateTransportASTMethods = []string{
-	"Food", "SetFood", "Health", "MaxHealth", "SetMaxHealth", "Heal", "Hurt",
+	"Food", "SetFood", "AddFood", "Saturate", "Exhaust", "Health", "MaxHealth", "SetMaxHealth", "Heal", "Hurt",
 	"ExperienceLevel", "SetExperienceLevel", "ExperienceProgress", "SetExperienceProgress",
+	"Experience", "EnchantmentSeed", "ResetEnchantmentSeed", "AddExperience", "RemoveExperience", "CanCollectExperience", "CollectExperience",
 	"Scale", "SetScale", "Invisible", "SetInvisible", "SetVisible", "Immobile", "SetImmobile", "SetMobile",
 	"Speed", "SetSpeed", "FlightSpeed", "SetFlightSpeed", "VerticalFlightSpeed", "SetVerticalFlightSpeed",
 	"ResetFallDistance", "FallDistance", "SetAbsorption", "Absorption", "Dead", "OnGround", "EyeHeight", "TorsoHeight", "Breathing",
@@ -218,6 +232,15 @@ type PlayerStateValue struct {
 	Integer int64
 }
 
+type PlayerActionKind uint32
+
+const (
+`)
+	for _, entry := range playerActionTransportIDs {
+		fmt.Fprintf(&output, "\t%-37s PlayerActionKind = %d\n", "PlayerAction"+entry.Name, entry.ID)
+	}
+	output.WriteString(`)
+
 type EffectType int32
 
 const (
@@ -277,6 +300,9 @@ func generateCSharpPlayerStateTransport(spec playerTransportSpec) ([]byte, error
 	output.WriteString("// Code generated from Dragonfly Go AST by csharp-gen. DO NOT EDIT.\n\nnamespace Dragonfly.Native;\n\npublic static partial class Abi\n{\n")
 	for _, entry := range playerStateTransportIDs {
 		fmt.Fprintf(&output, "    public const uint PlayerState%s = %d;\n", entry.Name, entry.ID)
+	}
+	for _, entry := range playerActionTransportIDs {
+		fmt.Fprintf(&output, "    public const uint PlayerAction%s = %d;\n", entry.Name, entry.ID)
 	}
 	output.WriteString("}\n")
 	return output.Bytes(), nil
@@ -407,6 +433,28 @@ func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value
 	return true
 }
 
+func runPlayerAction(connected *player.Player, kind native.PlayerActionKind, value native.PlayerStateValue) (native.PlayerStateValue, bool) {
+	switch kind {
+	case native.PlayerActionAddFood:
+		connected.AddFood(int(value.Integer))
+	case native.PlayerActionSaturate:
+		connected.Saturate(int(value.Integer), value.Number)
+	case native.PlayerActionExhaust:
+		connected.Exhaust(value.Number)
+	case native.PlayerActionResetEnchantmentSeed:
+		connected.ResetEnchantmentSeed()
+	case native.PlayerActionAddExperience:
+		return native.PlayerStateValue{Integer: int64(connected.AddExperience(int(value.Integer)))}, true
+	case native.PlayerActionRemoveExperience:
+		connected.RemoveExperience(int(value.Integer))
+	case native.PlayerActionCollectExperience:
+		return native.PlayerStateValue{Integer: boolInteger(connected.CollectExperience(int(value.Integer)))}, true
+	default:
+		return native.PlayerStateValue{}, false
+	}
+	return native.PlayerStateValue{}, true
+}
+
 func readPlayerState(connected *player.Player, kind native.PlayerStateKind) (native.PlayerStateValue, bool) {
 	switch kind {
 	case native.PlayerStateGameMode:
@@ -474,6 +522,12 @@ func readPlayerState(connected *player.Player, kind native.PlayerStateKind) (nat
 		return native.PlayerStateValue{Integer: int64(connected.AirSupply())}, true
 	case native.PlayerStateMaxAirSupply:
 		return native.PlayerStateValue{Integer: int64(connected.MaxAirSupply())}, true
+	case native.PlayerStateExperience:
+		return native.PlayerStateValue{Integer: int64(connected.Experience())}, true
+	case native.PlayerStateEnchantmentSeed:
+		return native.PlayerStateValue{Integer: connected.EnchantmentSeed()}, true
+	case native.PlayerStateCanCollectExperience:
+		return native.PlayerStateValue{Integer: boolInteger(connected.CanCollectExperience())}, true
 	default:
 		return native.PlayerStateValue{}, false
 	}

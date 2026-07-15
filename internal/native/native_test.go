@@ -169,6 +169,9 @@ type recordingHost struct {
 	stateValues       map[PlayerStateKind]PlayerStateValue
 	rejectStateWrites bool
 	reads             []PlayerStateKind
+	actions           []PlayerActionKind
+	actionValues      []PlayerStateValue
+	actionResults     map[PlayerActionKind]PlayerStateValue
 	heals             []struct {
 		Health float64
 		Source HealingSource
@@ -320,6 +323,12 @@ func (h *recordingHost) PlayerState(_ InvocationID, _ PlayerID, kind PlayerState
 		return value, true
 	}
 	return h.state, true
+}
+
+func (h *recordingHost) PlayerAction(_ InvocationID, _ PlayerID, kind PlayerActionKind, value PlayerStateValue) (PlayerStateValue, bool) {
+	h.actions = append(h.actions, kind)
+	h.actionValues = append(h.actionValues, value)
+	return h.actionResults[kind], true
 }
 
 func (h *recordingHost) HealPlayer(_ InvocationID, _ PlayerID, health float64, source HealingSource) (float64, bool) {

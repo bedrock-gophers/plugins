@@ -256,6 +256,27 @@ func bg_go_player_state_get(context C.uint64_t, invocation C.DfInvocationId, pla
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_player_action
+func bg_go_player_action(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, kind C.uint32_t, value C.DfPlayerStateValue, result *C.DfPlayerStateValue) C.DfStatus {
+	if result == nil {
+		return C.DF_STATUS_ERROR
+	}
+	*result = C.DfPlayerStateValue{}
+	host, ok := resolveHost(uint64(context))
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	output, ok := host.PlayerAction(InvocationID(invocation), playerID(player), PlayerActionKind(kind), PlayerStateValue{
+		Number: float64(value.number), Integer: int64(value.integer),
+	})
+	if !ok {
+		return C.DF_STATUS_ERROR
+	}
+	result.number = C.double(output.Number)
+	result.integer = C.int64_t(output.Integer)
+	return C.DF_STATUS_OK
+}
+
 //export bg_go_player_heal
 func bg_go_player_heal(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, health C.double, view *C.DfHealingSourceView, result *C.DfPlayerHealResult) C.DfStatus {
 	if result == nil {

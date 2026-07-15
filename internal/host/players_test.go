@@ -477,6 +477,50 @@ func TestPlayersReadsAndChangesState(t *testing.T) {
 	})
 }
 
+func TestPlayersRunHungerAndExperienceActions(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		id := players.Register(player, 1)
+		invocation, leave := players.BeginInvocation(player.Tx())
+		defer leave()
+
+		player.SetFood(10)
+		for _, action := range []struct {
+			kind  native.PlayerActionKind
+			value native.PlayerStateValue
+		}{
+			{native.PlayerActionAddFood, native.PlayerStateValue{Integer: 2}},
+			{native.PlayerActionSaturate, native.PlayerStateValue{Integer: 1, Number: 2}},
+			{native.PlayerActionExhaust, native.PlayerStateValue{}},
+			{native.PlayerActionResetEnchantmentSeed, native.PlayerStateValue{}},
+		} {
+			if _, ok := players.PlayerAction(invocation, id, action.kind, action.value); !ok {
+				t.Fatalf("action %d failed", action.kind)
+			}
+		}
+		food, _ := players.PlayerState(invocation, id, native.PlayerStateFood)
+		seed, seedOK := players.PlayerState(invocation, id, native.PlayerStateEnchantmentSeed)
+		if food.Integer != 13 || !seedOK {
+			t.Fatalf("food=%+v seed=%+v ok=%v", food, seed, seedOK)
+		}
+
+		added, ok := players.PlayerAction(invocation, id, native.PlayerActionAddExperience, native.PlayerStateValue{Integer: 7})
+		if !ok || added.Integer != 7 {
+			t.Fatalf("added=%+v ok=%v", added, ok)
+		}
+		if _, ok = players.PlayerAction(invocation, id, native.PlayerActionRemoveExperience, native.PlayerStateValue{Integer: 2}); !ok {
+			t.Fatal("remove experience failed")
+		}
+		experience, _ := players.PlayerState(invocation, id, native.PlayerStateExperience)
+		canCollect, _ := players.PlayerState(invocation, id, native.PlayerStateCanCollectExperience)
+		collected, ok := players.PlayerAction(invocation, id, native.PlayerActionCollectExperience, native.PlayerStateValue{})
+		cannotCollect, _ := players.PlayerState(invocation, id, native.PlayerStateCanCollectExperience)
+		if experience.Integer != 5 || canCollect.Integer != 1 || !ok || collected.Integer != 1 || cannotCollect.Integer != 0 {
+			t.Fatalf("experience=%+v can=%+v collected=%+v ok=%v cannot=%+v", experience, canCollect, collected, ok, cannotCollect)
+		}
+	})
+}
+
 func TestPlayersSetPlayerStateSchedulesAcrossWorldInvocation(t *testing.T) {
 	source := world.Config{Synchronous: true}.New()
 	destination := world.Config{Synchronous: true}.New()

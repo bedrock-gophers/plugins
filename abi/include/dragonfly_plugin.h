@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 11u
-// Host version 49 adds per-player world spawn access.
-#define DF_HOST_ABI_VERSION 49u
+// Host version 50 activates the player action transport.
+#define DF_HOST_ABI_VERSION 50u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -368,6 +368,7 @@ typedef DfStatus (*DfHostPlayerTransformFn)(uint64_t context, DfInvocationId inv
 typedef DfStatus (*DfHostPlayerKinematicsFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfPlayerKinematics *kinematics);
 typedef DfStatus (*DfHostPlayerStateSetFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue value);
 typedef DfStatus (*DfHostPlayerStateGetFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue *value);
+typedef DfStatus (*DfHostPlayerActionFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfPlayerStateValue value, DfPlayerStateValue *result);
 typedef DfStatus (*DfHostPlayerHealFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, double health, const DfHealingSourceView *source, DfPlayerHealResult *result);
 typedef DfStatus (*DfHostPlayerHurtFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, double damage, const DfDamageSourceView *source, DfPlayerHurtResult *result);
 typedef DfStatus (*DfHostPlayerEffectFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t operation, DfEffectView effect);
@@ -561,7 +562,7 @@ typedef struct {
     DfHostPlayerEffectsFn player_effects;
     DfHostPlayerEffectsClearFn player_effects_clear;
     DfHostWorldLiquidGetFn world_liquid_get;
-    void *reserved_player_experience_set;
+    DfHostPlayerActionFn player_action;
     DfHostWorldRangeFn world_range;
     DfHostWorldBlockLoadedFn world_block_loaded;
     DfHostWorldBlocksWithinOpenFn world_blocks_within_open;

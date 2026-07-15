@@ -33,4 +33,14 @@ public static partial class Abi
     public const uint PlayerStateFireProof = 28;
     public const uint PlayerStateAirSupply = 29;
     public const uint PlayerStateMaxAirSupply = 30;
+    public const uint PlayerStateExperience = 31;
+    public const uint PlayerStateEnchantmentSeed = 32;
+    public const uint PlayerStateCanCollectExperience = 33;
+    public const uint PlayerActionAddFood = 0;
+    public const uint PlayerActionSaturate = 1;
+    public const uint PlayerActionExhaust = 2;
+    public const uint PlayerActionResetEnchantmentSeed = 3;
+    public const uint PlayerActionAddExperience = 4;
+    public const uint PlayerActionRemoveExperience = 5;
+    public const uint PlayerActionCollectExperience = 6;
 }

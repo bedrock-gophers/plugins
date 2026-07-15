@@ -121,6 +121,28 @@ func setPlayerState(connected *player.Player, kind native.PlayerStateKind, value
 	return true
 }
 
+func runPlayerAction(connected *player.Player, kind native.PlayerActionKind, value native.PlayerStateValue) (native.PlayerStateValue, bool) {
+	switch kind {
+	case native.PlayerActionAddFood:
+		connected.AddFood(int(value.Integer))
+	case native.PlayerActionSaturate:
+		connected.Saturate(int(value.Integer), value.Number)
+	case native.PlayerActionExhaust:
+		connected.Exhaust(value.Number)
+	case native.PlayerActionResetEnchantmentSeed:
+		connected.ResetEnchantmentSeed()
+	case native.PlayerActionAddExperience:
+		return native.PlayerStateValue{Integer: int64(connected.AddExperience(int(value.Integer)))}, true
+	case native.PlayerActionRemoveExperience:
+		connected.RemoveExperience(int(value.Integer))
+	case native.PlayerActionCollectExperience:
+		return native.PlayerStateValue{Integer: boolInteger(connected.CollectExperience(int(value.Integer)))}, true
+	default:
+		return native.PlayerStateValue{}, false
+	}
+	return native.PlayerStateValue{}, true
+}
+
 func readPlayerState(connected *player.Player, kind native.PlayerStateKind) (native.PlayerStateValue, bool) {
 	switch kind {
 	case native.PlayerStateGameMode:
@@ -188,6 +210,12 @@ func readPlayerState(connected *player.Player, kind native.PlayerStateKind) (nat
 		return native.PlayerStateValue{Integer: int64(connected.AirSupply())}, true
 	case native.PlayerStateMaxAirSupply:
 		return native.PlayerStateValue{Integer: int64(connected.MaxAirSupply())}, true
+	case native.PlayerStateExperience:
+		return native.PlayerStateValue{Integer: int64(connected.Experience())}, true
+	case native.PlayerStateEnchantmentSeed:
+		return native.PlayerStateValue{Integer: connected.EnchantmentSeed()}, true
+	case native.PlayerStateCanCollectExperience:
+		return native.PlayerStateValue{Integer: boolInteger(connected.CanCollectExperience())}, true
 	default:
 		return native.PlayerStateValue{}, false
 	}

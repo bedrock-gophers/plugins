@@ -90,6 +90,9 @@ vertical-flight speed getters and setters. Physical-state parity covers absorpti
 death, ground contact, body heights, and breathing. Sprint, sneak, swim, crawl, glide, and fly
 start/stop/state methods also map directly to Dragonfly. Fireproof/on-fire state and current/maximum
 air supply use Dragonfly's exact methods, with Go `time.Duration` mapped to C# `TimeSpan`.
+Hunger and experience parity includes `AddFood`, `Saturate`, `Exhaust`, total experience,
+enchantment seed access/reset, add/remove experience, and collection checks/actions. These call
+Dragonfly directly, preserving food-loss and experience-gain handlers, mending, and pickup delay.
 `World.New()` creates a writable in-memory world.
 `World.Config.New()` accepts Dragonfly's dimension and runtime settings, and an
 `MCDB.Config().Open(...)` provider creates a writable, saveable world below the configured worlds
