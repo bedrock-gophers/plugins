@@ -113,6 +113,8 @@ Player-backed attack and entity-use targets retain their concrete `Player` type,
 `Title.New(...)` and its immutable `WithSubtitle`, `WithActionText`, and duration methods mirror
 Dragonfly's title value API. `Player.SendTitle` carries signed nanosecond durations without the old
 unsigned-millisecond truncation.
+`Player.HasCooldown(item)` and `SetCooldown(item, duration)` use the generated typed item codec and
+call Dragonfly's live cooldown map directly.
 Forms use Dragonfly's reflected public-field model through `Form.New`, `NewMenu`, and `NewModal`,
 with typed elements, submitted values, `Closer`, and callback-owned `World.Tx`. `Form.Value`
 remains open for custom implementations, matching Dragonfly's public `form.Form` interface.

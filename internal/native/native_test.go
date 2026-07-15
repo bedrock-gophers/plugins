@@ -175,7 +175,14 @@ type recordingHost struct {
 	playerStrings     map[PlayerStringKind]string
 	stringReads       []PlayerStringKind
 	toasts            [][2]string
-	heals             []struct {
+	cooldowns         []struct {
+		Operation  PlayerCooldownOperation
+		Identifier string
+		Metadata   int32
+		Duration   time.Duration
+	}
+	cooldownActive bool
+	heals          []struct {
 		Health float64
 		Source HealingSource
 	}
@@ -343,6 +350,15 @@ func (h *recordingHost) PlayerString(_ InvocationID, _ PlayerID, kind PlayerStri
 func (h *recordingHost) SendPlayerToast(_ InvocationID, _ PlayerID, title, message string) bool {
 	h.toasts = append(h.toasts, [2]string{title, message})
 	return true
+}
+func (h *recordingHost) PlayerCooldown(_ InvocationID, _ PlayerID, operation PlayerCooldownOperation, identifier string, metadata int32, duration time.Duration) (bool, bool) {
+	h.cooldowns = append(h.cooldowns, struct {
+		Operation  PlayerCooldownOperation
+		Identifier string
+		Metadata   int32
+		Duration   time.Duration
+	}{operation, identifier, metadata, duration})
+	return h.cooldownActive, true
 }
 
 func (h *recordingHost) HealPlayer(_ InvocationID, _ PlayerID, health float64, source HealingSource) (float64, bool) {

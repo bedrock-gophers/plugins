@@ -44,6 +44,13 @@ type PlayerTitle struct {
 	FadeOut    time.Duration
 }
 
+type PlayerCooldownOperation uint32
+
+const (
+	PlayerCooldownHas PlayerCooldownOperation = iota
+	PlayerCooldownSet
+)
+
 type PlayerScoreboard struct {
 	Name       string
 	Lines      []string
@@ -421,6 +428,7 @@ type Host interface {
 	PlayerAction(InvocationID, PlayerID, PlayerActionKind, PlayerStateValue) (PlayerStateValue, bool)
 	PlayerString(InvocationID, PlayerID, PlayerStringKind) (string, bool)
 	SendPlayerToast(InvocationID, PlayerID, string, string) bool
+	PlayerCooldown(InvocationID, PlayerID, PlayerCooldownOperation, string, int32, time.Duration) (bool, bool)
 	HealPlayer(InvocationID, PlayerID, float64, HealingSource) (float64, bool)
 	HurtPlayer(InvocationID, PlayerID, float64, DamageSource) (PlayerHurtResult, bool)
 	ChangePlayerEffect(InvocationID, PlayerID, PlayerEffectOperation, PlayerEffect) bool
@@ -545,6 +553,9 @@ func (noopHost) PlayerString(InvocationID, PlayerID, PlayerStringKind) (string, 
 	return "", false
 }
 func (noopHost) SendPlayerToast(InvocationID, PlayerID, string, string) bool { return false }
+func (noopHost) PlayerCooldown(InvocationID, PlayerID, PlayerCooldownOperation, string, int32, time.Duration) (bool, bool) {
+	return false, false
+}
 func (noopHost) HealPlayer(InvocationID, PlayerID, float64, HealingSource) (float64, bool) {
 	return 0, false
 }

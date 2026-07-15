@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"math"
 	"reflect"
+	"time"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/item"
@@ -29,6 +30,32 @@ func init() {
 	gob.Register([]byte{})
 	gob.Register([]int32{})
 	gob.Register([]int64{})
+}
+
+func (p *Players) PlayerCooldown(
+	invocation native.InvocationID,
+	id native.PlayerID,
+	operation native.PlayerCooldownOperation,
+	identifier string,
+	metadata int32,
+	duration time.Duration,
+) (active, ok bool) {
+	if metadata < math.MinInt16 || metadata > math.MaxInt16 {
+		return false, false
+	}
+	value, found := world.ItemByName(identifier, int16(metadata))
+	if !found || operation > native.PlayerCooldownSet {
+		return false, false
+	}
+	ok = p.mutatePlayer(invocation, id, func(connected *player.Player) {
+		switch operation {
+		case native.PlayerCooldownHas:
+			active = connected.HasCooldown(value)
+		case native.PlayerCooldownSet:
+			connected.SetCooldown(value, duration)
+		}
+	})
+	return active, ok
 }
 
 func (p *Players) InventorySize(invocation native.InvocationID, id native.InventoryID) (uint32, bool) {

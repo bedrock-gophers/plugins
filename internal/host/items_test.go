@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server/item/inventory"
@@ -14,6 +15,32 @@ import (
 	"github.com/go-gl/mathgl/mgl64"
 	"github.com/google/uuid"
 )
+
+func TestPlayersItemCooldownRoundTrip(t *testing.T) {
+	withPlayer(t, func(connected *player.Player) {
+		players := NewPlayers()
+		playerID := players.Register(connected, 6)
+		invocation, leave := players.BeginInvocation(connected.Tx())
+		defer leave()
+		const identifier = "minecraft:diamond_sword"
+
+		if active, ok := players.PlayerCooldown(invocation, playerID, native.PlayerCooldownHas, identifier, 0, 0); !ok || active {
+			t.Fatalf("initial cooldown active=%v ok=%v", active, ok)
+		}
+		if _, ok := players.PlayerCooldown(invocation, playerID, native.PlayerCooldownSet, identifier, 0, time.Hour); !ok {
+			t.Fatal("set cooldown failed")
+		}
+		if active, ok := players.PlayerCooldown(invocation, playerID, native.PlayerCooldownHas, identifier, 0, 0); !ok || !active {
+			t.Fatalf("set cooldown active=%v ok=%v", active, ok)
+		}
+		if _, ok := players.PlayerCooldown(invocation, playerID, native.PlayerCooldownSet, identifier, 1<<20, time.Second); ok {
+			t.Fatal("out-of-range metadata accepted")
+		}
+		if _, ok := players.PlayerCooldown(invocation, playerID, native.PlayerCooldownOperation(99), identifier, 0, 0); ok {
+			t.Fatal("unknown cooldown operation accepted")
+		}
+	})
+}
 
 func TestPlayersInventoryItemRoundTrip(t *testing.T) {
 	withPlayer(t, func(player *player.Player) {

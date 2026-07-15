@@ -61,7 +61,8 @@ public sealed class KitchenSink : Plugin
             new KitchenCustomEntity(),
             new KitchenSound(),
             new KitchenControls(),
-            new KitchenConnection()));
+            new KitchenConnection(),
+            new KitchenCooldown()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -1334,6 +1335,24 @@ public sealed class KitchenSink : Plugin
                 .WithDuration(TimeSpan.FromSeconds(2))
                 .WithFadeOutDuration(TimeSpan.FromMilliseconds(75)));
             output.Printf("presentation={0}/{1}", nameTag, scoreTag);
+        }
+    }
+
+    internal sealed class KitchenCooldown : Cmd.Runnable
+    {
+        public Cmd.SubCommand Cooldown;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var sword = new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond);
+            var active = player.HasCooldown(sword);
+            player.SetCooldown(sword, TimeSpan.FromMilliseconds(1500));
+            output.Printf("cooldown={0}", active ? "true" : "false");
         }
     }
 

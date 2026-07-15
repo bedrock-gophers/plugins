@@ -250,6 +250,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `CollectExperience` return their real results instead of being faked as state setters.
    Host ABI 51 appends typed player-string reads and two-string toast sends. Name and score tags
    are read live with a bounded retrying buffer; toast title and message remain distinct strings.
+   Host ABI 52 replaces the dormant title bridge's unsigned millisecond durations with signed
+   nanoseconds. Host ABI 53 adds AST-generated `Player.HasCooldown` and `SetCooldown` using typed
+   item identities and signed durations.
    ABI 44 and plugin ABI 9 add AST-generated `EntitySpawnOpts`, `EntityType`, `EntityConfig`,
    `EntityData`, and `TickerEntity`. `EntitySpawnOpts.New` creates a worldless Dragonfly handle;
    `Tx.AddEntity`, `RemoveEntity`, and `AddEntityAt` preserve that handle across a fresh world-bound

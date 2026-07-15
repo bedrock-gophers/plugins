@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 11u
-// Host version 52 makes title durations signed nanoseconds.
-#define DF_HOST_ABI_VERSION 52u
+// Host version 53 adds typed player item cooldowns.
+#define DF_HOST_ABI_VERSION 53u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -438,6 +438,9 @@ typedef DfStatus (*DfHostWorldDifficultySetFn)(uint64_t context, DfInvocationId 
 typedef DfStatus (*DfHostPlayerPacketWriteFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint64_t packet);
 typedef DfStatus (*DfHostPlayerStringGetFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfStringBuffer *value);
 typedef DfStatus (*DfHostPlayerToastFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfStringView title, DfStringView message);
+typedef DfStatus (*DfHostPlayerCooldownFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t operation, DfStringView identifier, int32_t metadata, int64_t duration_nanoseconds, uint8_t *active);
+#define DF_PLAYER_COOLDOWN_HAS 0u
+#define DF_PLAYER_COOLDOWN_SET 1u
 typedef DfStatus (*DfHostWorldEntitySpawnFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV3 *entity, DfEntityId *output);
 typedef DfStatus (*DfHostEntityStateFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state);
 typedef DfStatus (*DfHostEntityPlayerFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfPlayerSnapshotBuffer *output);
@@ -631,6 +634,7 @@ typedef struct {
     DfHostWorldPlayerSpawnSetFn world_player_spawn_set;
     DfHostPlayerStringGetFn player_string_get;
     DfHostPlayerToastFn player_toast;
+    DfHostPlayerCooldownFn player_cooldown;
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u

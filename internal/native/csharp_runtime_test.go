@@ -402,6 +402,46 @@ func TestCSharpPlayerPresentationMethods(t *testing.T) {
 	}
 }
 
+func TestCSharpPlayerCooldownMethods(t *testing.T) {
+	host := &recordingHost{cooldownActive: true}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	var overload uint64
+	found := false
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "cooldown" {
+			overload, found = uint64(index), true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("cooldown overload missing: %#v", kitchen.Overloads)
+	}
+	player := PlayerID{UUID: [16]byte{6}, Generation: 4}
+	output, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 43, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Overload: overload, Arguments: []string{"cooldown"},
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Danick"}},
+	})
+	if err != nil || output.Failed || output.Message != "cooldown=true" {
+		t.Fatalf("cooldown output=%#v error=%v", output, err)
+	}
+	if len(host.cooldowns) != 2 ||
+		host.cooldowns[0].Operation != PlayerCooldownHas || host.cooldowns[0].Duration != 0 ||
+		host.cooldowns[1].Operation != PlayerCooldownSet || host.cooldowns[1].Duration != 1500*time.Millisecond {
+		t.Fatalf("cooldown calls=%+v", host.cooldowns)
+	}
+	for _, call := range host.cooldowns {
+		if call.Identifier != "minecraft:diamond_sword" || call.Metadata != 0 {
+			t.Fatalf("cooldown item=%+v", call)
+		}
+	}
+}
+
 func TestCSharpPlayerZeroArgumentActions(t *testing.T) {
 	host := &recordingHost{}
 	pluginRuntime := openCSharpRuntimeWithHost(t, host)
@@ -1078,7 +1118,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 31 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 32 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||

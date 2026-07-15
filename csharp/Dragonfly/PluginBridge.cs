@@ -1166,6 +1166,40 @@ internal static unsafe class PluginBridge
                 throw new InvalidOperationException("player is no longer available");
         }
 
+        internal static bool HasPlayerCooldown(ulong invocation, PlayerId player, World.Item? item) =>
+            PlayerCooldown(invocation, player, Abi.PlayerCooldownHas, item, TimeSpan.Zero);
+
+        internal static void SetPlayerCooldown(ulong invocation, PlayerId player, World.Item? item, TimeSpan cooldown) =>
+            _ = PlayerCooldown(invocation, player, Abi.PlayerCooldownSet, item, cooldown);
+
+        private static bool PlayerCooldown(
+            ulong invocation,
+            PlayerId player,
+            uint operation,
+            World.Item? item,
+            TimeSpan duration)
+        {
+            var api = Api;
+            if (item is null || api is null || api->PlayerCooldown == null ||
+                !ItemCodec.TryEncode(item, out var identifier, out var metadata))
+                return false;
+            var identifierBytes = Encoding.UTF8.GetBytes(identifier);
+            fixed (byte* identifierData = identifierBytes)
+            {
+                byte active;
+                var status = api->PlayerCooldown(
+                    api->Context,
+                    invocation,
+                    player,
+                    operation,
+                    new StringView { Data = identifierData, Length = (ulong)identifierBytes.Length },
+                    metadata,
+                    DurationNanoseconds(duration, nameof(duration)),
+                    &active);
+                return status == Abi.Ok && active != 0;
+            }
+        }
+
         private static Item.Stack ReadItemStack(HostApi* api, ulong invocation, ulong snapshot, ItemStackInfo info)
         {
             try
