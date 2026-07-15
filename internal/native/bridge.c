@@ -262,8 +262,8 @@ _Static_assert(sizeof(DfPacketInput) == 32, "DfPacketInput ABI layout changed");
 _Static_assert(sizeof(DfPacketState) == 1, "DfPacketState ABI layout changed");
 _Static_assert(sizeof(DfDifficultyView) == 24, "DfDifficultyView ABI layout changed");
 _Static_assert(offsetof(DfDifficultyView, starvation_health_limit) == 8, "DfDifficultyView.starvation_health_limit ABI offset changed");
-_Static_assert(sizeof(DfHostApiV27) == 944, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 47u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 952, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 48u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -293,6 +293,7 @@ _Static_assert(offsetof(DfHostApiV27, world_default_game_mode_set) == 912, "DfHo
 _Static_assert(offsetof(DfHostApiV27, world_tick_range_set) == 920, "DfHostApiV27.world_tick_range_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_difficulty_get) == 928, "DfHostApiV27.world_difficulty_get ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_difficulty_set) == 936, "DfHostApiV27.world_difficulty_set ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, player_packet_write) == 944, "DfHostApiV27.player_packet_write ABI offset changed");
 _Static_assert(sizeof(DfEntityNewView) == 152, "DfEntityNewView ABI layout changed");
 _Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
 _Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
@@ -421,6 +422,7 @@ extern DfStatus bg_go_world_default_game_mode_set(uint64_t context, DfInvocation
 extern DfStatus bg_go_world_tick_range_set(uint64_t context, DfInvocationId invocation, DfWorldId world, int32_t value);
 extern DfStatus bg_go_world_difficulty_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfDifficultyView *difficulty);
 extern DfStatus bg_go_world_difficulty_set(uint64_t context, DfInvocationId invocation, DfWorldId world, DfDifficultyView difficulty);
+extern DfStatus bg_go_player_packet_write(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint64_t packet);
 extern DfStatus bg_go_world_entity_spawn(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV3 *entity, DfEntityId *output);
 extern DfStatus bg_go_entity_state(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state);
 extern DfStatus bg_go_entity_player(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfPlayerSnapshotBuffer *output);
@@ -603,6 +605,7 @@ static DfStatus host_world_default_game_mode_set(uint64_t context, DfInvocationI
 static DfStatus host_world_tick_range_set(uint64_t context, DfInvocationId invocation, DfWorldId world, int32_t value) { return bg_go_world_tick_range_set(context, invocation, world, value); }
 static DfStatus host_world_difficulty_get(uint64_t context, DfInvocationId invocation, DfWorldId world, DfDifficultyView *difficulty) { return bg_go_world_difficulty_get(context, invocation, world, difficulty); }
 static DfStatus host_world_difficulty_set(uint64_t context, DfInvocationId invocation, DfWorldId world, DfDifficultyView difficulty) { return bg_go_world_difficulty_set(context, invocation, world, difficulty); }
+static DfStatus host_player_packet_write(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint64_t packet) { return bg_go_player_packet_write(context, invocation, player, packet); }
 static DfStatus host_packet_field_get(uint64_t context, uint64_t packet, uint32_t field, DfPacketFieldValue *value) { return bg_go_packet_field_get(context, packet, field, value); }
 static DfStatus host_packet_field_set(uint64_t context, uint64_t packet, uint32_t field, const DfPacketFieldValue *value) { return bg_go_packet_field_set(context, packet, field, value); }
 static DfStatus host_world_entity_spawn(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV3 *entity, DfEntityId *output) { return bg_go_world_entity_spawn(context, invocation, world, entity, output); }
@@ -897,6 +900,7 @@ DfStatus bg_runtime_open(
         .world_tick_range_set = host_world_tick_range_set,
         .world_difficulty_get = host_world_difficulty_get,
         .world_difficulty_set = host_world_difficulty_set,
+        .player_packet_write = host_player_packet_write,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

@@ -310,6 +310,7 @@ func generatePacketTypes(types []packetTypeSpec) []byte {
 		fmt.Fprintf(&output, "public sealed class %s : Packet\n{\n", definition.Name)
 		output.WriteString("    private readonly ulong _handle;\n")
 		fmt.Fprintf(&output, "    internal %s(ulong handle) => _handle = handle;\n", definition.Name)
+		output.WriteString("    ulong Packet.HostHandle() => _handle;\n")
 		fmt.Fprintf(&output, "    public uint ID() => %du;\n", definition.ID)
 		for _, field := range definition.Fields {
 			generatePacketField(&output, definition.Name, field)

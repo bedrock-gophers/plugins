@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
+	dfunsafe "github.com/bedrock-gophers/unsafe"
+	"github.com/df-mc/dragonfly/server/player"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 )
 
@@ -16,6 +18,7 @@ type Packets struct {
 	mu      sync.RWMutex
 	next    native.PacketHandle
 	packets map[native.PacketHandle]borrowedPacket
+	players *Players
 }
 
 type borrowedPacket struct {
@@ -23,8 +26,25 @@ type borrowedPacket struct {
 	mutable bool
 }
 
-func NewPackets() *Packets {
-	return &Packets{packets: map[native.PacketHandle]borrowedPacket{}}
+func NewPackets(players *Players) *Packets {
+	return &Packets{packets: map[native.PacketHandle]borrowedPacket{}, players: players}
+}
+
+func (p *Packets) WritePlayerPacket(invocation native.InvocationID, id native.PlayerID, handle native.PacketHandle) bool {
+	value, ok := p.packet(handle)
+	if !ok || p.players == nil {
+		return false
+	}
+	return p.players.mutatePlayer(invocation, id, func(connected *player.Player) {
+		dfunsafe.WritePacket(connected, value)
+	})
+}
+
+func (p *Packets) packet(handle native.PacketHandle) (packet.Packet, bool) {
+	p.mu.RLock()
+	borrowed, ok := p.packets[handle]
+	p.mu.RUnlock()
+	return borrowed.value, ok && borrowed.value != nil
 }
 
 func (p *Packets) Borrow(value packet.Packet, mutable bool) (native.PacketHandle, func(), bool) {

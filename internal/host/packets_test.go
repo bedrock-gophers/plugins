@@ -4,11 +4,13 @@ import (
 	"testing"
 
 	"github.com/bedrock-gophers/plugins/internal/native"
+	"github.com/df-mc/dragonfly/server/player"
+	"github.com/df-mc/dragonfly/server/world"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 )
 
 func TestPacketsBorrowReadMutateAndRelease(t *testing.T) {
-	registry := NewPackets()
+	registry := NewPackets(nil)
 	value := &packet.Text{Message: "before", Parameters: []string{"one", "two"}}
 	handle, release, ok := registry.Borrow(value, true)
 	if !ok || handle == 0 {
@@ -35,7 +37,7 @@ func TestPacketsBorrowReadMutateAndRelease(t *testing.T) {
 }
 
 func TestPacketsRejectWrongFieldKindsAndOverflow(t *testing.T) {
-	registry := NewPackets()
+	registry := NewPackets(nil)
 	value := &packet.Text{TextType: 1}
 	handle, release, ok := registry.Borrow(value, true)
 	if !ok {
@@ -51,7 +53,7 @@ func TestPacketsRejectWrongFieldKindsAndOverflow(t *testing.T) {
 }
 
 func TestPacketsRejectOutgoingMutation(t *testing.T) {
-	registry := NewPackets()
+	registry := NewPackets(nil)
 	value := &packet.Text{Message: "shared"}
 	handle, release, ok := registry.Borrow(value, false)
 	if !ok {
@@ -64,4 +66,22 @@ func TestPacketsRejectOutgoingMutation(t *testing.T) {
 	if value.Message != "shared" {
 		t.Fatalf("Message = %q, want shared", value.Message)
 	}
+}
+
+func TestPacketsWriteBorrowedPacketToPlayer(t *testing.T) {
+	withPlayerTx(t, func(tx *world.Tx, connected *player.Player) {
+		players := NewPlayers()
+		id := players.Register(connected, 91)
+		invocation, end := players.BeginInvocation(tx)
+		defer end()
+		registry := NewPackets(players)
+		handle, release, ok := registry.Borrow(&packet.Text{Message: "hello"}, true)
+		if !ok || !registry.WritePlayerPacket(invocation, id, handle) {
+			t.Fatal("live borrowed packet was not written")
+		}
+		release()
+		if registry.WritePlayerPacket(invocation, id, handle) {
+			t.Fatal("released packet handle was written")
+		}
+	})
 }

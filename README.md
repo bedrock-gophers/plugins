@@ -108,6 +108,8 @@ slice.
 Packet plugins override the exact intercept contract names:
 
 ```csharp
+using Packet = Dragonfly.Packet;
+
 public override void HandleClientPacket(Packet.Context ctx, Packet.Packet packet)
 {
     if (packet is Packet.Text text) text.Message = text.Message.Trim();
@@ -125,6 +127,11 @@ gophertunnel has already decoded these objects; the plugin does not parse raw pa
 mutable. Complex protocol fields currently expose lazy `Packet.Value.Json()` while recursive AST
 generation lands. Outgoing packets may be inspected or cancelled, but mutation is rejected:
 intercept v0.3 does not clone potentially shared broadcast packet objects per connection.
+
+`Player.WritePacket(packet)` forwards a callback-borrowed packet through
+`bedrock-gophers/unsafe.WritePacket`. Packet objects expire when their callback returns. Writing
+from an outgoing handler re-enters that handler, matching raw Go behavior, so plugins must prevent
+recursive forwarding. Owned packet construction is not exposed yet.
 
 Item code uses Dragonfly types, never Minecraft identifiers:
 

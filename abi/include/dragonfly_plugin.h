@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 11u
-// Host version 47 adds exact World state controls.
-#define DF_HOST_ABI_VERSION 47u
+// Host version 48 adds callback-borrowed player packet writes.
+#define DF_HOST_ABI_VERSION 48u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -432,6 +432,7 @@ typedef DfStatus (*DfHostWorldGameModeSetFn)(uint64_t context, DfInvocationId in
 typedef DfStatus (*DfHostWorldIntSetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, int32_t value);
 typedef DfStatus (*DfHostWorldDifficultyGetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfDifficultyView *difficulty);
 typedef DfStatus (*DfHostWorldDifficultySetFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfDifficultyView difficulty);
+typedef DfStatus (*DfHostPlayerPacketWriteFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint64_t packet);
 typedef DfStatus (*DfHostWorldEntitySpawnFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, const DfEntitySpawnViewV3 *entity, DfEntityId *output);
 typedef DfStatus (*DfHostEntityStateFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityState *state);
 typedef DfStatus (*DfHostEntityPlayerFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfPlayerSnapshotBuffer *output);
@@ -620,6 +621,7 @@ typedef struct {
     DfHostWorldIntSetFn world_tick_range_set;
     DfHostWorldDifficultyGetFn world_difficulty_get;
     DfHostWorldDifficultySetFn world_difficulty_set;
+    DfHostPlayerPacketWriteFn player_packet_write;
 
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u

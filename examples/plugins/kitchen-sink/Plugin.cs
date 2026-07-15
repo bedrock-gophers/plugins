@@ -345,6 +345,8 @@ public sealed class KitchenSink : Plugin
         _ = (ctx.XUID(), packet.ID());
     }
 
+    private static void WritePacket(Player player, Packet.Packet packet) => player.WritePacket(packet);
+
     private static void Increment(ref long counter) => Interlocked.Increment(ref counter);
 
     private static bool Finite(Vector3 value) =>

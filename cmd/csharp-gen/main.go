@@ -511,6 +511,7 @@ func main() {
 	dragonfly := flag.String("dragonfly", "", "Dragonfly module directory")
 	gophertunnel := flag.String("gophertunnel", "", "gophertunnel module directory")
 	intercept := flag.String("intercept", "", "bedrock-gophers/intercept module directory")
+	unsafeModule := flag.String("unsafe", "", "bedrock-gophers/unsafe module directory")
 	check := flag.Bool("check", false, "fail if generated output differs")
 	flag.Parse()
 
@@ -532,11 +533,18 @@ func main() {
 	if interceptDirectory == "" {
 		interceptDirectory = moduleDirectory(*root, "github.com/bedrock-gophers/intercept")
 	}
+	unsafeDirectory := *unsafeModule
+	if unsafeDirectory == "" {
+		unsafeDirectory = moduleDirectory(*root, "github.com/bedrock-gophers/unsafe")
+	}
 	packets, err := inspectPackets(filepath.Join(gophertunnelDirectory, "minecraft", "protocol", "packet"))
 	if err != nil {
 		fatal(err)
 	}
 	if err := inspectInterceptHandler(filepath.Join(interceptDirectory, "intercept", "handler.go")); err != nil {
+		fatal(err)
+	}
+	if err := inspectUnsafeWritePacket(filepath.Join(unsafeDirectory, "unsafe.go")); err != nil {
 		fatal(err)
 	}
 	methods, err := playerHandlerMethods(filepath.Join(directory, "server", "player", "handler.go"))
@@ -744,6 +752,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Packet.Handler.g.cs"),
 			Content: generatePacketHandler(),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Packet.g.cs"),
+			Content: generatePlayerWritePacket(),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Server.g.cs"),
@@ -4672,6 +4684,8 @@ func formatGoExpression(expression ast.Expr) string {
 		return "..." + formatGoExpression(value.Elt)
 	case *ast.MapType:
 		return "map[" + formatGoExpression(value.Key) + "]" + formatGoExpression(value.Value)
+	case *ast.BinaryExpr:
+		return formatGoExpression(value.X) + " " + value.Op.String() + " " + formatGoExpression(value.Y)
 	case *ast.FuncType:
 		result := "func(" + rawParameterTypes(value.Params) + ")"
 		if returns := rawResultTypes(value.Results); returns != "" {

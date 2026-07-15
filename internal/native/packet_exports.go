@@ -14,6 +14,10 @@ type packetHost interface {
 	SetPacketField(PacketHandle, uint32, PacketFieldValue) bool
 }
 
+type packetWriteHost interface {
+	WritePlayerPacket(InvocationID, PlayerID, PacketHandle) bool
+}
+
 //export bg_go_packet_field_get
 func bg_go_packet_field_get(context C.uint64_t, packet C.uint64_t, field C.uint32_t, output *C.DfPacketFieldValue) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
@@ -59,4 +63,18 @@ func bg_go_packet_field_set(context C.uint64_t, packet C.uint64_t, field C.uint3
 		return C.DF_STATUS_ERROR
 	}
 	return C.DF_STATUS_OK
+}
+
+//export bg_go_player_packet_write
+func bg_go_player_packet_write(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, packet C.uint64_t) C.DfStatus {
+	if !writePlayerPacket(uint64(context), InvocationID(invocation), playerID(player), PacketHandle(packet)) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+func writePlayerPacket(context uint64, invocation InvocationID, player PlayerID, packet PacketHandle) bool {
+	host, ok := resolveHost(context)
+	writer, supported := host.(packetWriteHost)
+	return ok && supported && packet != 0 && writer.WritePlayerPacket(invocation, player, packet)
 }

@@ -49,7 +49,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		return err
 	}
 	players := host.NewPlayers()
-	packets := host.NewPackets()
+	packets := host.NewPackets(players)
 	serverHost := host.NewServer(players)
 	worlds, err := NewPersistentWorldManager(config.Worlds.Directory, log, players)
 	if err != nil {

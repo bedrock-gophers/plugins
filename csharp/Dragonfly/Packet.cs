@@ -6,6 +6,7 @@ namespace Dragonfly.Packet;
 public interface Packet
 {
     uint ID();
+    internal ulong HostHandle() => 0;
 }
 
 public sealed class Context
@@ -49,6 +50,7 @@ public sealed class Unknown : Packet
     private readonly uint _id;
 
     internal Unknown(ulong handle, uint id) => (_handle, _id) = (handle, id);
+    ulong Packet.HostHandle() => _handle;
     public uint ID() => _id;
     public uint PacketID { get => checked((uint)PacketBridge.Unsigned(_handle, 0)); set => PacketBridge.SetUnsigned(_handle, 0, value); }
     public byte[] Payload { get => PacketBridge.Bytes(_handle, 1); set => PacketBridge.SetBytes(_handle, 1, value); }

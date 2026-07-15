@@ -38,6 +38,13 @@ internal static unsafe class PluginBridge
             }
         }
 
+        internal static void WritePlayerPacket(ulong invocation, PlayerId player, ulong packet)
+        {
+            var api = Api;
+            if (api is null || api->PlayerPacketWrite == null || packet == 0) return;
+            _ = api->PlayerPacketWrite(api->Context, invocation, player, packet);
+        }
+
         internal static void SetPlayerState(ulong invocation, PlayerId player, uint kind, PlayerStateValue value)
         {
             var api = Api;

@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/bedrock-gophers/intercept v0.3.0
+	github.com/bedrock-gophers/unsafe v0.1.1
 	github.com/df-mc/dragonfly v0.11.1-0.20260714151819-dbbd8b787946
 	github.com/go-gl/mathgl v1.2.0
 	github.com/google/uuid v1.6.0

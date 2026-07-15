@@ -46,6 +46,17 @@ func TestGeneratedPacketHandlersUseExactInterceptNames(t *testing.T) {
 	}
 }
 
+func TestGeneratedPacketsKeepHostHandlesInternal(t *testing.T) {
+	types := []packetTypeSpec{{Name: "Text", ID: 9}}
+	output := generatePacketTypes(types)
+	if !bytes.Contains(output, []byte("ulong Packet.HostHandle() => _handle;")) {
+		t.Fatal("generated packet does not implement hidden host handle")
+	}
+	if bytes.Contains(output, []byte("public ulong HostHandle")) {
+		t.Fatal("generated packet exposes host handle publicly")
+	}
+}
+
 func TestInterceptHandlerASTMatchesPinnedLibrary(t *testing.T) {
 	directory := moduleDirectoryForTest(t, "github.com/bedrock-gophers/intercept")
 	if err := inspectInterceptHandler(filepath.Join(directory, "intercept", "handler.go")); err != nil {
