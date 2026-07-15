@@ -115,6 +115,8 @@ func TestPlayerTransportPreservesExplicitIDs(t *testing.T) {
 		"EffectDarkness       EffectType = 30",
 		"PlayerTextTip          PlayerTextKind = 1",
 		"PlayerTextPopup        PlayerTextKind = 2",
+		"PlayerTextChat         PlayerTextKind = 6",
+		"PlayerTextExecuteCommand PlayerTextKind = 7",
 		"SoundTnt                        SoundKind = 57",
 		"SoundGoatHorn                   SoundKind = 86",
 	} {
@@ -137,6 +139,8 @@ func TestPlayerPresentationTransportCallsExactDragonflyMethods(t *testing.T) {
 		"connected.SendSleepingIndicator(int(value.Integer), int(value.Number))",
 		"connected.CloseDialogue()",
 		"connected.RemoveBossBar()",
+		"connected.Chat(message)",
+		"connected.ExecuteCommand(message)",
 		"return connected.NameTag(), true",
 		"return connected.ScoreTag(), true",
 		"return connected.DeviceID(), true",

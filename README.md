@@ -115,6 +115,9 @@ Entity-interaction parity includes exact AST-generated `UseItemOnEntity` and `At
 methods. Both accept `World.Entity` and return Dragonfly's real `bool` result.
 Item-action parity includes exact AST-generated `Collect(Item.Stack)` and `Drop(Item.Stack)`
 methods. Both reuse the complete typed stack codec and call Dragonfly directly.
+Text parity includes exact AST-generated `Chat(params object?[])` and
+`ExecuteCommand(string)` methods. Both dispatch to Dragonfly rather than duplicating chat or
+command behavior in C#.
 `World.New()` creates a writable in-memory world.
 `World.Config.New()` accepts Dragonfly's dimension and runtime settings, and an
 `MCDB.Config().Open(...)` provider creates a writable, saveable world below the configured worlds

@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 11u
-// Host version 61 adds exact player item actions.
-#define DF_HOST_ABI_VERSION 61u
+// Host version 62 adds exact player chat and command execution.
+#define DF_HOST_ABI_VERSION 62u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 

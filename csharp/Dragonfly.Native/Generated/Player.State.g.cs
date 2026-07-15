@@ -75,4 +75,12 @@ public static partial class Abi
     public const uint PlayerStringLocale = 5;
     public const uint PlayerStringAddrNetwork = 6;
     public const uint PlayerStringAddrString = 7;
+    public const uint PlayerTextMessage = 0;
+    public const uint PlayerTextTip = 1;
+    public const uint PlayerTextPopup = 2;
+    public const uint PlayerTextJukeboxPopup = 3;
+    public const uint PlayerTextNameTag = 4;
+    public const uint PlayerTextDisconnect = 5;
+    public const uint PlayerTextChat = 6;
+    public const uint PlayerTextExecuteCommand = 7;
 }

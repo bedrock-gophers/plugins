@@ -26,6 +26,10 @@ func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, messag
 		connected.SetNameTag(message)
 	case native.PlayerTextDisconnect:
 		connected.Disconnect(message)
+	case native.PlayerTextChat:
+		connected.Chat(message)
+	case native.PlayerTextExecuteCommand:
+		connected.ExecuteCommand(message)
 	default:
 		return false
 	}

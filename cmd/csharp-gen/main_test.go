@@ -168,7 +168,9 @@ func (p *Player) SendPopup(a ...any) {}
 func (p *Player) SendTip(a ...any) {}
 func (p *Player) SendJukeboxPopup(a ...any) {}
 func (p *Player) SetNameTag(name string) {}
-func (p *Player) Disconnect(msg ...any) {}`
+func (p *Player) Disconnect(msg ...any) {}
+func (p *Player) Chat(msg ...any) {}
+func (p *Player) ExecuteCommand(commandLine string) {}`
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -184,6 +186,8 @@ func (p *Player) Disconnect(msg ...any) {}`
 		"public void SendJukeboxPopup(params object?[] a) => SendText(Abi.PlayerTextJukeboxPopup, FormatArguments(a));",
 		"public void SetNameTag(string name) => SendText(Abi.PlayerTextNameTag, name);",
 		"public void Disconnect(params object?[] msg) => SendText(Abi.PlayerTextDisconnect, FormatArguments(msg));",
+		"public void Chat(params object?[] msg) => SendText(Abi.PlayerTextChat, FormatArguments(msg));",
+		"public void ExecuteCommand(string commandLine) => SendText(Abi.PlayerTextExecuteCommand, commandLine);",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("generated output missing %q:\n%s", expected, output)

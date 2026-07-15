@@ -12,4 +12,6 @@ public sealed partial class Player
     public void SendJukeboxPopup(params object?[] a) => SendText(Abi.PlayerTextJukeboxPopup, FormatArguments(a));
     public void SetNameTag(string name) => SendText(Abi.PlayerTextNameTag, name);
     public void Disconnect(params object?[] msg) => SendText(Abi.PlayerTextDisconnect, FormatArguments(msg));
+    public void Chat(params object?[] msg) => SendText(Abi.PlayerTextChat, FormatArguments(msg));
+    public void ExecuteCommand(string commandLine) => SendText(Abi.PlayerTextExecuteCommand, commandLine);
 }

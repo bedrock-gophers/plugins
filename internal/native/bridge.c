@@ -268,7 +268,7 @@ _Static_assert(DF_PLAYER_COOLDOWN_SET == 1u, "player cooldown set operation chan
 _Static_assert(sizeof(DfDifficultyView) == 24, "DfDifficultyView ABI layout changed");
 _Static_assert(offsetof(DfDifficultyView, starvation_health_limit) == 8, "DfDifficultyView.starvation_health_limit ABI offset changed");
 _Static_assert(sizeof(DfHostApiV27) == 1064, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 61u, "host ABI version changed without bridge review");
+_Static_assert(DF_HOST_ABI_VERSION == 62u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");

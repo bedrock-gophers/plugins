@@ -454,6 +454,8 @@ var selectedPlayerTextMethods = []string{
 	"SendJukeboxPopup",
 	"SetNameTag",
 	"Disconnect",
+	"Chat",
+	"ExecuteCommand",
 }
 
 var selectedPlayerFormMethods = []string{
@@ -4906,17 +4908,20 @@ func generatePlayerTextMethods(methods []method) []byte {
 	for _, method := range methods {
 		fmt.Fprintf(&output, "    public void %s(%s) => ", method.Name, formatParameters(method.Parameters))
 		switch method.Name {
-		case "Message", "SendPopup", "SendTip", "SendJukeboxPopup", "Disconnect":
+		case "Message", "SendPopup", "SendTip", "SendJukeboxPopup", "Disconnect", "Chat":
 			kind := map[string]string{
 				"Message":          "Message",
 				"SendPopup":        "Popup",
 				"SendTip":          "Tip",
 				"SendJukeboxPopup": "JukeboxPopup",
 				"Disconnect":       "Disconnect",
+				"Chat":             "Chat",
 			}[method.Name]
 			fmt.Fprintf(&output, "SendText(Abi.PlayerText%s, FormatArguments(%s));\n", kind, method.Parameters[0].Name)
 		case "SetNameTag":
 			fmt.Fprintf(&output, "SendText(Abi.PlayerTextNameTag, %s);\n", method.Parameters[0].Name)
+		case "ExecuteCommand":
+			fmt.Fprintf(&output, "SendText(Abi.PlayerTextExecuteCommand, %s);\n", method.Parameters[0].Name)
 		default:
 			panic("unsupported player text method: " + method.Name)
 		}

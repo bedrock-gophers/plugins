@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static partial class Abi
 {
     public const uint PluginVersion = 11;
-    public const uint HostVersion = 61;
+    public const uint HostVersion = 62;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerCooldownHas = 0;
@@ -159,12 +159,6 @@ public static partial class Abi
     public const uint CommandSourceUnknown = 0;
     public const uint CommandSourcePlayer = 1;
     public const uint CommandSourceConsole = 2;
-    public const uint PlayerTextMessage = 0;
-    public const uint PlayerTextTip = 1;
-    public const uint PlayerTextPopup = 2;
-    public const uint PlayerTextJukeboxPopup = 3;
-    public const uint PlayerTextNameTag = 4;
-    public const uint PlayerTextDisconnect = 5;
     public const uint InventoryMain = 0;
     public const uint InventoryArmour = 1;
     public const uint InventoryOffhand = 2;

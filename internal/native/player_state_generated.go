@@ -155,6 +155,8 @@ const (
 	PlayerTextJukeboxPopup PlayerTextKind = 3
 	PlayerTextNameTag      PlayerTextKind = 4
 	PlayerTextDisconnect   PlayerTextKind = 5
+	PlayerTextChat         PlayerTextKind = 6
+	PlayerTextExecuteCommand PlayerTextKind = 7
 )
 
 type SoundKind uint32

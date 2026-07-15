@@ -1536,6 +1536,8 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		{"jukebox", PlayerTextJukeboxPopup, "hello"},
 		{"nametag", PlayerTextNameTag, "hello"},
 		{"disconnect", PlayerTextDisconnect, "hello"},
+		{"chat", PlayerTextChat, "hello"},
+		{"executecommand", PlayerTextExecuteCommand, "hello"},
 	} {
 		input := base
 		input.Overload = 6

@@ -20,6 +20,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
   `/kitchen entity-actions`;
 - exact `Collect` and `Drop` results with complete typed item stacks in `/kitchen item-actions`;
 - reflected command arguments and overloads;
+- exact player chat and command execution through `/kitchen text chat ...` and
+  `/kitchen text executecommand ...`;
 - direct `Player.Message` output;
 - transaction-safe range, lazy block/entity/player/bounding-box iteration, current-world lookup, height/light
   queries, and block access through `World.Tx`;

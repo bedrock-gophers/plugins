@@ -127,10 +127,12 @@ var playerTextTransportIDs = []transportNameID{
 	{Name: "JukeboxPopup", ID: 3},
 	{Name: "NameTag", ID: 4},
 	{Name: "Disconnect", ID: 5},
+	{Name: "Chat", ID: 6},
+	{Name: "ExecuteCommand", ID: 7},
 }
 
 var playerTextTransportASTMethods = []string{
-	"Message", "SendPopup", "SendTip", "SendJukeboxPopup", "SetNameTag", "Disconnect",
+	"Message", "SendPopup", "SendTip", "SendJukeboxPopup", "SetNameTag", "Disconnect", "Chat", "ExecuteCommand",
 }
 
 var effectTransportIDs = []transportNameID{
@@ -355,6 +357,9 @@ func generateCSharpPlayerStateTransport(spec playerTransportSpec) ([]byte, error
 	for _, entry := range playerStringTransportIDs {
 		fmt.Fprintf(&output, "    public const uint PlayerString%s = %d;\n", entry.Name, entry.ID)
 	}
+	for _, entry := range playerTextTransportIDs {
+		fmt.Fprintf(&output, "    public const uint PlayerText%s = %d;\n", entry.Name, entry.ID)
+	}
 	output.WriteString("}\n")
 	return output.Bytes(), nil
 }
@@ -385,7 +390,7 @@ func sendPlayerText(connected *player.Player, kind native.PlayerTextKind, messag
 		method := map[string]string{
 			"Message": "Message", "Tip": "SendTip", "Popup": "SendPopup",
 			"JukeboxPopup": "SendJukeboxPopup", "NameTag": "SetNameTag",
-			"Disconnect": "Disconnect",
+			"Disconnect": "Disconnect", "Chat": "Chat", "ExecuteCommand": "ExecuteCommand",
 		}[entry.Name]
 		fmt.Fprintf(&output, "\tcase native.PlayerText%s:\n\t\tconnected.%s(message)\n", entry.Name, method)
 	}
