@@ -56,6 +56,13 @@ const (
 	PlayerActionAddExperience             PlayerActionKind = 4
 	PlayerActionRemoveExperience          PlayerActionKind = 5
 	PlayerActionCollectExperience         PlayerActionKind = 6
+	PlayerActionEnableInstantRespawn      PlayerActionKind = 7
+	PlayerActionDisableInstantRespawn     PlayerActionKind = 8
+	PlayerActionShowCoordinates           PlayerActionKind = 9
+	PlayerActionHideCoordinates           PlayerActionKind = 10
+	PlayerActionSendSleepingIndicator     PlayerActionKind = 11
+	PlayerActionCloseDialogue             PlayerActionKind = 12
+	PlayerActionRemoveBossBar             PlayerActionKind = 13
 )
 
 type EffectType int32

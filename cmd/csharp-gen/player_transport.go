@@ -9,11 +9,12 @@ import (
 // Transport IDs are private ABI, not Dragonfly registry order. Keep every ID
 // explicit so adding or reordering an AST-discovered API cannot renumber it.
 type playerTransportSpec struct {
-	StateMethods    []playerStateMethod
-	TextMethods     []method
-	Effects         effectSpec
-	Sounds          []soundTypeSpec
-	GameModeMethods []commandMethod
+	StateMethods        []playerStateMethod
+	PresentationMethods []playerPresentationMethod
+	TextMethods         []method
+	Effects             effectSpec
+	Sounds              []soundTypeSpec
+	GameModeMethods     []commandMethod
 }
 
 type transportNameID struct {
@@ -65,6 +66,13 @@ var playerActionTransportIDs = []transportNameID{
 	{Name: "AddExperience", ID: 4},
 	{Name: "RemoveExperience", ID: 5},
 	{Name: "CollectExperience", ID: 6},
+	{Name: "EnableInstantRespawn", ID: 7},
+	{Name: "DisableInstantRespawn", ID: 8},
+	{Name: "ShowCoordinates", ID: 9},
+	{Name: "HideCoordinates", ID: 10},
+	{Name: "SendSleepingIndicator", ID: 11},
+	{Name: "CloseDialogue", ID: 12},
+	{Name: "RemoveBossBar", ID: 13},
 }
 
 var playerStateTransportASTMethods = []string{
@@ -449,6 +457,24 @@ func runPlayerAction(connected *player.Player, kind native.PlayerActionKind, val
 		connected.RemoveExperience(int(value.Integer))
 	case native.PlayerActionCollectExperience:
 		return native.PlayerStateValue{Integer: boolInteger(connected.CollectExperience(int(value.Integer)))}, true
+	case native.PlayerActionEnableInstantRespawn:
+		connected.EnableInstantRespawn()
+	case native.PlayerActionDisableInstantRespawn:
+		connected.DisableInstantRespawn()
+	case native.PlayerActionShowCoordinates:
+		connected.ShowCoordinates()
+	case native.PlayerActionHideCoordinates:
+		connected.HideCoordinates()
+	case native.PlayerActionSendSleepingIndicator:
+		if value.Integer < math.MinInt32 || value.Integer > math.MaxInt32 ||
+			value.Number < math.MinInt32 || value.Number > math.MaxInt32 || math.Trunc(value.Number) != value.Number {
+			return native.PlayerStateValue{}, false
+		}
+		connected.SendSleepingIndicator(int(value.Integer), int(value.Number))
+	case native.PlayerActionCloseDialogue:
+		connected.CloseDialogue()
+	case native.PlayerActionRemoveBossBar:
+		connected.RemoveBossBar()
 	default:
 		return native.PlayerStateValue{}, false
 	}
@@ -561,6 +587,13 @@ func validatePlayerTransportSpec(spec playerTransportSpec) error {
 		stateNames = append(stateNames, value.Name)
 	}
 	if err := requireTransportNames("player state methods", stateNames, playerStateTransportASTMethods); err != nil {
+		return err
+	}
+	presentationNames := make([]string, 0, len(spec.PresentationMethods))
+	for _, value := range spec.PresentationMethods {
+		presentationNames = append(presentationNames, value.Name)
+	}
+	if err := requireTransportNames("player presentation methods", presentationNames, selectedPlayerPresentationMethods); err != nil {
 		return err
 	}
 	textNames := make([]string, 0, len(spec.TextMethods))

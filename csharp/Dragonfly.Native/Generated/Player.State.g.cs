@@ -43,4 +43,11 @@ public static partial class Abi
     public const uint PlayerActionAddExperience = 4;
     public const uint PlayerActionRemoveExperience = 5;
     public const uint PlayerActionCollectExperience = 6;
+    public const uint PlayerActionEnableInstantRespawn = 7;
+    public const uint PlayerActionDisableInstantRespawn = 8;
+    public const uint PlayerActionShowCoordinates = 9;
+    public const uint PlayerActionHideCoordinates = 10;
+    public const uint PlayerActionSendSleepingIndicator = 11;
+    public const uint PlayerActionCloseDialogue = 12;
+    public const uint PlayerActionRemoveBossBar = 13;
 }

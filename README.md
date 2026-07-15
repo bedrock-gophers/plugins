@@ -93,6 +93,8 @@ air supply use Dragonfly's exact methods, with Go `time.Duration` mapped to C# `
 Hunger and experience parity includes `AddFood`, `Saturate`, `Exhaust`, total experience,
 enchantment seed access/reset, add/remove experience, and collection checks/actions. These call
 Dragonfly directly, preserving food-loss and experience-gain handlers, mending, and pickup delay.
+Presentation parity includes instant-respawn and coordinate toggles, sleeping indicators,
+dialogue/boss-bar/scoreboard removal, using the exact Dragonfly `Player` method names.
 `World.New()` creates a writable in-memory world.
 `World.Config.New()` accepts Dragonfly's dimension and runtime settings, and an
 `MCDB.Config().Open(...)` provider creates a writable, saveable world below the configured worlds

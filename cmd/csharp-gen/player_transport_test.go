@@ -105,6 +105,7 @@ func TestPlayerTransportPreservesExplicitIDs(t *testing.T) {
 		"PlayerStateCanCollectExperience PlayerStateKind = 33",
 		"PlayerActionAddFood                   PlayerActionKind = 0",
 		"PlayerActionCollectExperience         PlayerActionKind = 6",
+		"PlayerActionRemoveBossBar             PlayerActionKind = 13",
 		"EffectSlowFalling    EffectType = 27",
 		"EffectDarkness       EffectType = 30",
 		"PlayerTextTip          PlayerTextKind = 1",
@@ -114,6 +115,26 @@ func TestPlayerTransportPreservesExplicitIDs(t *testing.T) {
 	} {
 		if !strings.Contains(string(generated), expected) {
 			t.Fatalf("generated native transport missing %q", expected)
+		}
+	}
+}
+
+func TestPlayerPresentationTransportCallsExactDragonflyMethods(t *testing.T) {
+	generated, err := generateHostPlayerTransport(inspectPinnedPlayerTransport(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"connected.EnableInstantRespawn()",
+		"connected.DisableInstantRespawn()",
+		"connected.ShowCoordinates()",
+		"connected.HideCoordinates()",
+		"connected.SendSleepingIndicator(int(value.Integer), int(value.Number))",
+		"connected.CloseDialogue()",
+		"connected.RemoveBossBar()",
+	} {
+		if !strings.Contains(string(generated), expected) {
+			t.Fatalf("generated host transport missing %q", expected)
 		}
 	}
 }
@@ -131,6 +152,10 @@ func TestPlayerTransportRejectsSpecDrift(t *testing.T) {
 		"text name": {
 			mutate: func(spec *playerTransportSpec) { spec.TextMethods[0].Name = "Changed" },
 			want:   "player text methods changed",
+		},
+		"presentation name": {
+			mutate: func(spec *playerTransportSpec) { spec.PresentationMethods[0].Name = "Changed" },
+			want:   "player presentation methods changed",
 		},
 		"game mode name": {
 			mutate: func(spec *playerTransportSpec) { spec.GameModeMethods[0].Name = "Changed" },
@@ -172,6 +197,10 @@ func inspectPinnedPlayerTransport(t *testing.T) playerTransportSpec {
 	if err != nil {
 		t.Fatal(err)
 	}
+	presentation, err := inspectPlayerPresentationMethods(playerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	text, err := playerTextMethods(playerPath)
 	if err != nil {
 		t.Fatal(err)
@@ -189,12 +218,14 @@ func inspectPinnedPlayerTransport(t *testing.T) playerTransportSpec {
 		t.Fatal(err)
 	}
 	return playerTransportSpec{
-		StateMethods: state, TextMethods: text, Effects: effects, Sounds: sounds, GameModeMethods: gameModes,
+		StateMethods: state, PresentationMethods: presentation, TextMethods: text,
+		Effects: effects, Sounds: sounds, GameModeMethods: gameModes,
 	}
 }
 
 func clonePlayerTransportSpec(spec playerTransportSpec) playerTransportSpec {
 	spec.StateMethods = append([]playerStateMethod(nil), spec.StateMethods...)
+	spec.PresentationMethods = append([]playerPresentationMethod(nil), spec.PresentationMethods...)
 	spec.TextMethods = append([]method(nil), spec.TextMethods...)
 	spec.Effects.Types = append([]effectTypeSpec(nil), spec.Effects.Types...)
 	spec.Sounds = append([]soundTypeSpec(nil), spec.Sounds...)

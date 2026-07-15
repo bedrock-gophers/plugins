@@ -137,6 +137,24 @@ func runPlayerAction(connected *player.Player, kind native.PlayerActionKind, val
 		connected.RemoveExperience(int(value.Integer))
 	case native.PlayerActionCollectExperience:
 		return native.PlayerStateValue{Integer: boolInteger(connected.CollectExperience(int(value.Integer)))}, true
+	case native.PlayerActionEnableInstantRespawn:
+		connected.EnableInstantRespawn()
+	case native.PlayerActionDisableInstantRespawn:
+		connected.DisableInstantRespawn()
+	case native.PlayerActionShowCoordinates:
+		connected.ShowCoordinates()
+	case native.PlayerActionHideCoordinates:
+		connected.HideCoordinates()
+	case native.PlayerActionSendSleepingIndicator:
+		if value.Integer < math.MinInt32 || value.Integer > math.MaxInt32 ||
+			value.Number < math.MinInt32 || value.Number > math.MaxInt32 || math.Trunc(value.Number) != value.Number {
+			return native.PlayerStateValue{}, false
+		}
+		connected.SendSleepingIndicator(int(value.Integer), int(value.Number))
+	case native.PlayerActionCloseDialogue:
+		connected.CloseDialogue()
+	case native.PlayerActionRemoveBossBar:
+		connected.RemoveBossBar()
 	default:
 		return native.PlayerStateValue{}, false
 	}

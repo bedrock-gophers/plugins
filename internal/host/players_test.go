@@ -276,6 +276,38 @@ func TestPlayersSendsAndRemovesScoreboard(t *testing.T) {
 	})
 }
 
+func TestPlayersRunPresentationActions(t *testing.T) {
+	withPlayer(t, func(player *player.Player) {
+		players := NewPlayers()
+		id := players.Register(player, 1)
+		invocation, leave := players.BeginInvocation(player.Tx())
+		defer leave()
+
+		for _, action := range []struct {
+			kind  native.PlayerActionKind
+			value native.PlayerStateValue
+		}{
+			{native.PlayerActionEnableInstantRespawn, native.PlayerStateValue{}},
+			{native.PlayerActionDisableInstantRespawn, native.PlayerStateValue{}},
+			{native.PlayerActionShowCoordinates, native.PlayerStateValue{}},
+			{native.PlayerActionHideCoordinates, native.PlayerStateValue{}},
+			{native.PlayerActionSendSleepingIndicator, native.PlayerStateValue{Integer: 1, Number: 2}},
+		} {
+			if _, ok := players.PlayerAction(invocation, id, action.kind, action.value); !ok {
+				t.Fatalf("action %d failed", action.kind)
+			}
+		}
+		for _, invalid := range []native.PlayerStateValue{
+			{Integer: math.MaxInt64, Number: 1},
+			{Integer: 1, Number: 1.5},
+		} {
+			if _, ok := players.PlayerAction(invocation, id, native.PlayerActionSendSleepingIndicator, invalid); ok {
+				t.Fatalf("invalid sleeping indicator accepted: %+v", invalid)
+			}
+		}
+	})
+}
+
 func TestPlayersTracksStableGenerationAndNames(t *testing.T) {
 	withPlayer(t, func(player *player.Player) {
 		players := NewPlayers()

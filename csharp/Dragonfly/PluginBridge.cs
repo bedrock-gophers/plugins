@@ -45,6 +45,13 @@ internal static unsafe class PluginBridge
             _ = api->PlayerPacketWrite(api->Context, invocation, player, packet);
         }
 
+        internal static void RemovePlayerScoreboard(ulong invocation, PlayerId player)
+        {
+            var api = Api;
+            if (api is null || api->PlayerScoreboardRemove == null) return;
+            _ = api->PlayerScoreboardRemove(api->Context, invocation, player);
+        }
+
         internal static void SetPlayerState(ulong invocation, PlayerId player, uint kind, PlayerStateValue value)
         {
             var api = Api;

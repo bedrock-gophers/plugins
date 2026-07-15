@@ -405,7 +405,7 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, ItemStackViewV3*, ItemStackViewV3*, int> PlayerHeldItemsSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, int> PlayerHeldSlotSet;
     public void* PlayerScoreboard;
-    public void* PlayerScoreboardRemove;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, int> PlayerScoreboardRemove;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, FormView*, int> PlayerFormSend;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, int> PlayerFormClose;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, StringBuffer*, int> WorldName;

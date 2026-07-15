@@ -607,6 +607,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	playerPresentationMethods, err := inspectPlayerPresentationMethods(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		fatal(err)
+	}
 	playerKinematicsMethods, err := inspectPlayerKinematicsMethods(filepath.Join(directory, "server", "player", "player.go"))
 	if err != nil {
 		fatal(err)
@@ -725,8 +729,8 @@ func main() {
 		fatal(err)
 	}
 	playerTransport := playerTransportSpec{
-		StateMethods: playerStateMethods, TextMethods: playerMethods, Effects: effects,
-		Sounds: sounds, GameModeMethods: playerGameModes,
+		StateMethods: playerStateMethods, PresentationMethods: playerPresentationMethods,
+		TextMethods: playerMethods, Effects: effects, Sounds: sounds, GameModeMethods: playerGameModes,
 	}
 	nativePlayerTransport, err := generateNativePlayerTransport(playerTransport)
 	if err != nil {
@@ -804,6 +808,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.State.g.cs"),
 			Content: generatePlayerStateMethods(playerStateMethods),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Presentation.g.cs"),
+			Content: generatePlayerPresentationMethods(playerPresentationMethods),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Kinematics.g.cs"),

@@ -336,6 +336,54 @@ func TestCSharpPlayerStateMethods(t *testing.T) {
 	}
 }
 
+func TestCSharpPlayerPresentationMethods(t *testing.T) {
+	host := &recordingHost{}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	var overload uint64
+	found := false
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "presentation" {
+			overload, found = uint64(index), true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("presentation overload missing: %#v", kitchen.Overloads)
+	}
+	player := PlayerID{UUID: [16]byte{5}, Generation: 4}
+	output, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Overload: overload, Arguments: []string{"presentation"},
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Danick"}},
+	})
+	if err != nil || output.Failed || output.Message != "presentation=ok" {
+		t.Fatalf("presentation output=%#v error=%v", output, err)
+	}
+	wantActions := []PlayerActionKind{
+		PlayerActionEnableInstantRespawn,
+		PlayerActionDisableInstantRespawn,
+		PlayerActionShowCoordinates,
+		PlayerActionHideCoordinates,
+		PlayerActionSendSleepingIndicator,
+		PlayerActionCloseDialogue,
+		PlayerActionRemoveBossBar,
+	}
+	if !slices.Equal(host.actions, wantActions) {
+		t.Fatalf("presentation actions=%v, want %v", host.actions, wantActions)
+	}
+	if value := host.actionValues[4]; value.Integer != 1 || value.Number != 1 {
+		t.Fatalf("sleeping indicator=%+v", value)
+	}
+	if !host.scoreboardRemoved {
+		t.Fatal("scoreboard removal was not routed")
+	}
+}
+
 func TestCSharpTypedEffects(t *testing.T) {
 	host := &recordingHost{}
 	pluginRuntime := openCSharpRuntimeWithHost(t, host)
@@ -867,7 +915,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 27 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 28 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -925,7 +973,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatalf("targeted player: output=%#v error=%v", output, err)
 	}
 	kinematics := base
-	kinematics.Overload = 18
+	kinematics.Overload = 19
 	kinematics.Arguments = []string{"kinematics"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, kinematics)
 	if err != nil || output.Failed || output.Message !=
@@ -942,7 +990,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatalf("kinematics transforms=%v vectors=%+v", host.transforms, host.vectors)
 	}
 	heal := base
-	heal.Overload = 19
+	heal.Overload = 20
 	heal.Arguments = []string{"heal"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, heal)
 	if err != nil || output.Failed || output.Message != "healed=4, damage=1, vulnerable=True, health=16" || len(host.heals) != 1 ||
@@ -954,7 +1002,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatalf("hurt calls=%+v", host.hurts)
 	}
 	sources := base
-	sources.Overload = 20
+	sources.Overload = 21
 	sources.Arguments = []string{"sources"}
 	playerEntityID := EntityID{UUID: player.UUID, Generation: player.Generation}
 	host.entityHandle = EntityHandleID{Value: 70, Generation: 4}
@@ -989,7 +1037,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatalf("healing source calls=%+v", host.heals)
 	}
 	configuredWorld := base
-	configuredWorld.Overload = 21
+	configuredWorld.Overload = 22
 	configuredWorld.Arguments = []string{"world"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, configuredWorld)
 	if err != nil || output.Failed || output.Message != "memory=World, persistent=kitchen:arena, spawn=8,70,-4, range=-64..319, highest_light_blocker=70, time=6000, overworld=true, cycle=true, difficulty=true, player_spawn=true" {
@@ -1040,7 +1088,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		Position: Vec3{X: 1, Y: 64, Z: 2},
 	}
 	entities := base
-	entities.Overload = 22
+	entities.Overload = 23
 	entities.Arguments = []string{"entities"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, entities)
 	if err != nil || output.Failed || output.Message != "world=kitchen:arena, entities=2, nearby=2, players=1" {
@@ -1068,7 +1116,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	host.entityHandleCalls = nil
 	host.entityHandleEntityCalls = 0
 	handle := base
-	handle.Overload = 24
+	handle.Overload = 25
 	handle.Arguments = []string{"handle"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, handle)
 	if err != nil || output.Failed || output.Message !=
@@ -1413,7 +1461,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatalf("dynamic enum options=%q error=%v", options, err)
 	}
 	input = base
-	input.Overload = 17
+	input.Overload = 18
 	input.Arguments = []string{"crop"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
 	if err != nil || output.Failed || output.Message != "crop=-1, planted=7" {

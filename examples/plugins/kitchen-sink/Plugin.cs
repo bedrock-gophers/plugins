@@ -44,6 +44,7 @@ public sealed class KitchenSink : Plugin
             new KitchenParticle(),
             new KitchenGameMode(),
             new KitchenState(),
+            new KitchenPresentation(),
             new KitchenItem(),
             new KitchenForm(),
             new KitchenRawFormCommand(),
@@ -1225,6 +1226,29 @@ public sealed class KitchenSink : Plugin
                 canCollectExperience ? "true" : "false",
                 addedExperience,
                 collectedExperience ? "true" : "false");
+        }
+    }
+
+    internal sealed class KitchenPresentation : Cmd.Runnable
+    {
+        public Cmd.SubCommand Presentation;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            player.EnableInstantRespawn();
+            player.DisableInstantRespawn();
+            player.ShowCoordinates();
+            player.HideCoordinates();
+            player.SendSleepingIndicator(1, 1);
+            player.CloseDialogue();
+            player.RemoveBossBar();
+            player.RemoveScoreboard();
+            output.Print("presentation=ok");
         }
     }
 
