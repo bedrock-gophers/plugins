@@ -19,10 +19,15 @@ func (s *customWorldSound) Play(_ *world.World, position mgl64.Vec3) {
 	s.ok = native.CallWorldSound(s.callback, s.world, native.Vec3{X: position.X(), Y: position.Y(), Z: position.Z()})
 }
 
+func (s *customWorldSound) SoundCallback() native.WorldSoundCallback { return s.callback }
+
 func (m *WorldManager) PlayWorldSound(invocation native.InvocationID, id native.WorldID, position native.Vec3, value native.WorldSound) bool {
 	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok || !finiteVec3(position) || !host.ValidSound(value) {
 		return false
+	}
+	if value.Callback != nil {
+		return m.playCustomWorldSound(invocation, entry, position, *value.Callback)
 	}
 	entry.lifecycle.RLock()
 	defer entry.lifecycle.RUnlock()
@@ -51,13 +56,7 @@ func (m *WorldManager) PlayWorldSound(invocation native.InvocationID, id native.
 	return true
 }
 
-// PlayCustomWorldSound invokes a C# implementation of world.Sound through the
-// exact synchronous transaction that received Tx.PlaySound.
-func (m *WorldManager) PlayCustomWorldSound(invocation native.InvocationID, id native.WorldID, position native.Vec3, callback native.WorldSoundCallback) bool {
-	entry, ok := m.entryForInvocation(invocation, id)
-	if !ok || !finiteVec3(position) || callback.Function == 0 || callback.Context == 0 {
-		return false
-	}
+func (m *WorldManager) playCustomWorldSound(invocation native.InvocationID, entry *managedWorld, position native.Vec3, callback native.WorldSoundCallback) bool {
 	entry.lifecycle.RLock()
 	closed := entry.closed
 	entry.lifecycle.RUnlock()

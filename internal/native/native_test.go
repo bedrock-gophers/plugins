@@ -749,9 +749,6 @@ func (h *recordingHost) PlayWorldSound(_ InvocationID, id WorldID, position Vec3
 	return id == h.worldID
 }
 
-func (h *recordingHost) PlayCustomWorldSound(InvocationID, WorldID, Vec3, WorldSoundCallback) bool {
-	return false
-}
 func (h *recordingHost) PlayPlayerSound(_ InvocationID, player PlayerID, value WorldSound) bool {
 	h.player = player
 	h.playerSounds = append(h.playerSounds, value)

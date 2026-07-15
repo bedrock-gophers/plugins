@@ -9,12 +9,17 @@ import (
 	"github.com/df-mc/dragonfly/server/player"
 	"github.com/df-mc/dragonfly/server/world"
 	dfsound "github.com/df-mc/dragonfly/server/world/sound"
+	"github.com/go-gl/mathgl/mgl64"
 )
 
 const soundFlagPrimary uint32 = 1
 
 // ValidSound validates payload fields that do not depend on a world registry.
 func ValidSound(value native.WorldSound) bool {
+	if value.Callback != nil {
+		return value.Callback.Function != 0 && value.Callback.Context != 0 && value.Kind == 0 && value.Data == 0 &&
+			value.Integer == 0 && value.Flags == 0 && value.Scalar == 0 && value.Block == nil && value.Item == nil
+	}
 	if value.Kind > native.SoundGoatHorn || math.IsNaN(value.Scalar) || math.IsInf(value.Scalar, 0) {
 		return false
 	}
@@ -54,6 +59,9 @@ func validSoundBlock(value *native.WorldBlock) bool {
 func SoundFromNative(tx *world.Tx, value native.WorldSound) (world.Sound, bool) {
 	if tx == nil || !ValidSound(value) {
 		return nil, false
+	}
+	if value.Callback != nil {
+		return opaqueNativeSound{}, true
 	}
 	switch value.Kind {
 	case native.SoundAnvilBreak:
@@ -250,6 +258,14 @@ func SoundToNative(tx *world.Tx, sound world.Sound) (native.WorldSound, bool) {
 		return native.WorldSound{}, false
 	}
 	switch value := sound.(type) {
+	case interface {
+		SoundCallback() native.WorldSoundCallback
+	}:
+		callback := value.SoundCallback()
+		if callback.Function == 0 || callback.Context == 0 {
+			return native.WorldSound{}, false
+		}
+		return native.WorldSound{Callback: &callback}, true
 	case dfsound.AnvilBreak:
 		return native.WorldSound{Kind: native.SoundAnvilBreak}, true
 	case dfsound.AnvilLand:
@@ -650,6 +666,10 @@ func SoundToNative(tx *world.Tx, sound world.Sound) (native.WorldSound, bool) {
 		return native.WorldSound{}, false
 	}
 }
+
+type opaqueNativeSound struct{}
+
+func (opaqueNativeSound) Play(*world.World, mgl64.Vec3) {}
 
 func encodeSoundPointer[T world.Sound](tx *world.Tx, value *T) (native.WorldSound, bool) {
 	if value == nil {

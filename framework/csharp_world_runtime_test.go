@@ -165,7 +165,7 @@ func TestCSharpKitchenWorldCommandCanRunInsideCreatedWorld(t *testing.T) {
 	soundCommand, soundOverload := kitchenCommand(t, pluginRuntime, "sound")
 	select {
 	case output := <-run(arena, soundCommand, soundOverload, "sound"):
-		if output.Failed || output.Message != "world_sounds=11, player_sounds=1, custom_sounds=1" {
+		if output.Failed || output.Message != "world_sounds=11, player_sounds=2, custom_sounds=1" {
 			t.Fatalf("sound command failed: %#v", output)
 		}
 	case <-time.After(5 * time.Second):

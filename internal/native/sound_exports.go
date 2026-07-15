@@ -8,22 +8,10 @@ import "C"
 import "unicode/utf8"
 
 //export bg_go_world_sound_play
-func bg_go_world_sound_play(context C.uint64_t, invocation C.DfInvocationId, worldID C.DfWorldId, position C.DfVec3, view *C.DfSoundViewV1) C.DfStatus {
+func bg_go_world_sound_play(context C.uint64_t, invocation C.DfInvocationId, worldID C.DfWorldId, position C.DfVec3, view *C.DfSoundViewV2) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
 	value, valid := copySoundView(view)
 	if !ok || !valid || !host.PlayWorldSound(InvocationID(invocation), WorldID(worldID.value), nativeEntityVec3(position), value) {
-		return C.DF_STATUS_ERROR
-	}
-	return C.DF_STATUS_OK
-}
-
-//export bg_go_world_custom_sound_play
-func bg_go_world_custom_sound_play(context C.uint64_t, invocation C.DfInvocationId, worldID C.DfWorldId, position C.DfVec3, callback, callbackContext C.uintptr_t) C.DfStatus {
-	host, ok := resolveHost(uint64(context))
-	if !ok || callback == 0 || callbackContext == 0 || !host.PlayCustomWorldSound(
-		InvocationID(invocation), WorldID(worldID.value), nativeEntityVec3(position),
-		WorldSoundCallback{Function: uint64(callback), Context: uint64(callbackContext)},
-	) {
 		return C.DF_STATUS_ERROR
 	}
 	return C.DF_STATUS_OK
@@ -42,7 +30,7 @@ func CallWorldSound(callback WorldSoundCallback, world WorldID, position Vec3) b
 }
 
 //export bg_go_player_sound_play
-func bg_go_player_sound_play(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, view *C.DfSoundViewV1) C.DfStatus {
+func bg_go_player_sound_play(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, view *C.DfSoundViewV2) C.DfStatus {
 	host, ok := resolveHost(uint64(context))
 	value, valid := copySoundView(view)
 	if !ok || !valid || !host.PlayPlayerSound(InvocationID(invocation), playerID(player), value) {
@@ -51,8 +39,19 @@ func bg_go_player_sound_play(context C.uint64_t, invocation C.DfInvocationId, pl
 	return C.DF_STATUS_OK
 }
 
-func copySoundView(view *C.DfSoundViewV1) (WorldSound, bool) {
-	if view == nil || SoundKind(view.kind) > SoundGoatHorn {
+func copySoundView(view *C.DfSoundViewV2) (WorldSound, bool) {
+	if view == nil || view.callback == 0 != (view.callback_context == 0) {
+		return WorldSound{}, false
+	}
+	if view.callback != 0 {
+		if view.kind != 0 || view.data != 0 || view.integer != 0 || view.flags != 0 || view.scalar != 0 ||
+			view.block != nil || view.item != nil {
+			return WorldSound{}, false
+		}
+		callback := WorldSoundCallback{Function: uint64(view.callback), Context: uint64(view.callback_context)}
+		return WorldSound{Callback: &callback}, true
+	}
+	if SoundKind(view.kind) > SoundGoatHorn {
 		return WorldSound{}, false
 	}
 	value := WorldSound{

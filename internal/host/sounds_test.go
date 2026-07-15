@@ -315,6 +315,9 @@ func assertParameterizedSound(t *testing.T, kind native.SoundKind, decoded world
 }
 
 func TestValidSoundRejectsMalformedPayloads(t *testing.T) {
+	if !ValidSound(native.WorldSound{Callback: &native.WorldSoundCallback{Function: 1, Context: 2}}) {
+		t.Fatal("rejected valid custom sound")
+	}
 	for _, value := range []native.WorldSound{
 		{Kind: native.SoundGoatHorn + 1},
 		{Kind: native.SoundBlockPlace},
@@ -324,6 +327,8 @@ func TestValidSoundRejectsMalformedPayloads(t *testing.T) {
 		{Kind: native.SoundBucketFill, Data: 2},
 		{Kind: native.SoundCrossbowLoad, Integer: 3},
 		{Kind: native.SoundGoatHorn, Data: 8},
+		{Callback: &native.WorldSoundCallback{Function: 1}},
+		{Kind: native.SoundExplosion, Callback: &native.WorldSoundCallback{Function: 1, Context: 2}},
 	} {
 		if ValidSound(value) {
 			t.Fatalf("accepted malformed sound %#v", value)

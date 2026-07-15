@@ -1281,7 +1281,8 @@ public sealed class KitchenSink : Plugin
             var custom = new KitchenCustomSound();
             tx.PlaySound(source.Position(), custom);
             player.PlaySound(new Sound.LevelUp());
-            output.Printf("world_sounds={0}, player_sounds=1, custom_sounds={1}", sounds.Length, custom.Played);
+            player.PlaySound(custom);
+            output.Printf("world_sounds={0}, player_sounds=2, custom_sounds={1}", sounds.Length, custom.Played);
         }
     }
 
@@ -1291,8 +1292,8 @@ public sealed class KitchenSink : Plugin
 
         public void Play(World w, Vector3 pos)
         {
+            _ = (w, pos);
             Played++;
-            new Sound.Click().Play(w, pos);
         }
     }
 

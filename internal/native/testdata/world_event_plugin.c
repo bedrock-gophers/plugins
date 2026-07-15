@@ -73,6 +73,9 @@ static DfStatus handle_event(void *opaque, DfEventId event, const void *raw_inpu
         case DF_EVENT_WORLD_SOUND: {
             const DfWorldSoundInput *input = raw_input;
             if (input->invocation != 73 || input->sound.kind != 0 || input->position.y != 64) return DF_STATUS_ERROR;
+            if (input->position.x == 9) {
+                if (input->sound.callback != 41 || input->sound.callback_context != 73) return DF_STATUS_ERROR;
+            } else if (input->sound.callback != 0 || input->sound.callback_context != 0) return DF_STATUS_ERROR;
             ((DfWorldCancellableState *)raw_state)->cancelled = 1;
             return DF_STATUS_OK;
         }
@@ -134,10 +137,10 @@ static DfStatus handle_event(void *opaque, DfEventId event, const void *raw_inpu
     }
 }
 
-static const DfPluginApiV11 api = {
+static const DfPluginApiV12 api = {
     .header = {
         .abi_version = DF_ABI_VERSION,
-        .struct_size = sizeof(DfPluginApiV11),
+        .struct_size = sizeof(DfPluginApiV12),
         .subscriptions = ((UINT64_C(1) << 13) - 1) << (DF_EVENT_WORLD_LIQUID_FLOW - 1),
     },
     .plugin_id = {plugin_id, sizeof(plugin_id) - 1},
@@ -147,6 +150,6 @@ static const DfPluginApiV11 api = {
     .handle_event = handle_event,
 };
 
-const DfPluginApiV11 *df_plugin_entry_v11(void) {
+const DfPluginApiV12 *df_plugin_entry_v12(void) {
     return &api;
 }

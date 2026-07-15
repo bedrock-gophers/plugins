@@ -104,8 +104,17 @@ func inspectSounds(directory string) ([]soundTypeSpec, error) {
 		return nil, fmt.Errorf("Dragonfly sound package not found")
 	}
 	concrete := map[string]*ast.StructType{}
+	implementation := false
 	for _, file := range pkg.Files {
 		for _, declaration := range file.Decls {
+			if function, ok := declaration.(*ast.FuncDecl); ok && function.Name.Name == "Play" && valueReceiver(function, "sound") {
+				if signature := goFunctionSignature(function); signature != (goSignature{Parameters: "*world.World, mgl64.Vec3"}) ||
+					function.Body == nil || len(function.Body.List) != 0 {
+					return nil, fmt.Errorf("Dragonfly sound.Play implementation changed")
+				}
+				implementation = true
+				continue
+			}
 			gen, ok := declaration.(*ast.GenDecl)
 			if !ok || gen.Tok != token.TYPE {
 				continue
@@ -122,6 +131,9 @@ func inspectSounds(directory string) ([]soundTypeSpec, error) {
 				concrete[typeSpec.Name.Name] = structure
 			}
 		}
+	}
+	if !implementation {
+		return nil, fmt.Errorf("Dragonfly sound.Play implementation not found")
 	}
 	unknown := make([]string, 0)
 	for name := range concrete {
@@ -223,12 +235,12 @@ func generateSounds(soundMethod method, types []soundTypeSpec) []byte {
 	for _, definition := range types {
 		if len(definition.Fields) == 0 {
 			fmt.Fprintf(&output, "    public readonly record struct %s : World.Sound\n    {\n", definition.Name)
-			fmt.Fprintf(&output, "        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);\n    }\n")
+			fmt.Fprintf(&output, "        public void Play(World w, Vector3 pos) { }\n    }\n")
 			continue
 		}
 		fmt.Fprintf(&output, "    public readonly record struct %s(%s) : World.Sound\n    {\n",
 			definition.Name, formatParameters(definition.Fields))
-		fmt.Fprintf(&output, "        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);\n    }\n")
+		fmt.Fprintf(&output, "        public void Play(World w, Vector3 pos) { }\n    }\n")
 	}
 	output.WriteString("\n    internal static World.Sound DecodeEvent(\n")
 	output.WriteString("        uint kind, uint data, int integer, uint flags, double scalar, World.Block? block, World.Item? item) =>\n")

@@ -121,6 +121,13 @@ func TestWorldEventRuntimeRoundTrip(t *testing.T) {
 			}
 		})
 	}
+	customCancelled, err := runtime.HandleWorldSound(73, WorldSoundInput{
+		Sound:    WorldSound{Callback: &WorldSoundCallback{Function: 41, Context: 73}},
+		Position: Vec3{X: 9, Y: 64},
+	}, false)
+	if err != nil || !customCancelled {
+		t.Fatalf("custom sound cancelled=%v error=%v", customCancelled, err)
+	}
 
 	entity := WorldEntityInput{Entity: EntityID{UUID: [16]byte{3}, Generation: 4}}
 	if err := runtime.HandleWorldEntitySpawn(73, entity); err != nil {

@@ -37,8 +37,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
 - transaction-owned `CurrentTick` in `/kitchen tick`;
 - exact FIFO `World.Tx.Defer` and `DeferErr` callbacks in `/kitchen defer`;
 - all 20 generated particle types and all 16 typed note instruments in `/kitchen particle`;
-- exact world-broadcast and player-only concrete sound playback across every payload family, plus a
-  custom `World.Sound.Play` callback, in `/kitchen sound`;
+- exact world-broadcast and player-only playback across every concrete payload family, plus one custom
+  `World.Sound` through both paths and `HandleSound`, in `/kitchen sound`;
 - registered lookup, player reads, and custom `World.GameMode` in `/kitchen game-mode`;
 - exact hide/show and all six per-viewer name-tag, score-tag, and visibility overrides in
   `/kitchen visibility`;

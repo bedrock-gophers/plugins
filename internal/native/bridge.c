@@ -169,7 +169,7 @@ _Static_assert(sizeof(DfCommandState) == 32, "DfCommandState ABI layout changed"
 _Static_assert(sizeof(DfAllowInput) == 104, "DfAllowInput ABI layout changed");
 _Static_assert(offsetof(DfAllowInput, identity_json) == 64, "DfAllowInput.identity_json ABI offset changed");
 _Static_assert(offsetof(DfAllowInput, port) == 96, "DfAllowInput.port ABI offset changed");
-_Static_assert(sizeof(DfPluginApiV11) == 144, "DfPluginApiV11 ABI layout changed");
+_Static_assert(sizeof(DfPluginApiV12) == 144, "DfPluginApiV12 ABI layout changed");
 _Static_assert(sizeof(DfInventoryId) == 32, "DfInventoryId ABI layout changed");
 _Static_assert(sizeof(DfItemStackInfo) == 80, "DfItemStackInfo ABI layout changed");
 _Static_assert(sizeof(DfItemStackSnapshot) == 88, "DfItemStackSnapshot ABI layout changed");
@@ -212,13 +212,13 @@ _Static_assert(sizeof(DfEntityTypeDescriptorV2) == 40, "DfEntityTypeDescriptorV2
 _Static_assert(offsetof(DfEntityTypeDescriptorV2, type_key) == 32, "DfEntityTypeDescriptorV2.type_key ABI offset changed");
 _Static_assert(sizeof(DfEntitySpawnViewV3) == 200, "DfEntitySpawnViewV3 ABI layout changed");
 _Static_assert(offsetof(DfEntitySpawnViewV3, custom_instance) == 176, "DfEntitySpawnViewV3.custom_instance ABI offset changed");
-_Static_assert(sizeof(DfPluginApiV11) == 144, "DfPluginApiV11 ABI layout changed");
-_Static_assert(offsetof(DfPluginApiV11, entity_type_count) == 64, "DfPluginApiV11.entity_type_count ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV11, handle_entity) == 80, "DfPluginApiV11.handle_entity ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV11, handle_event) == 120, "DfPluginApiV11.handle_event ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV11, handle_scheduled) == 128, "DfPluginApiV11.handle_scheduled ABI offset changed");
-_Static_assert(offsetof(DfPluginApiV11, allow) == 136, "DfPluginApiV11.allow ABI offset changed");
-_Static_assert(DF_ABI_VERSION == 11u, "plugin ABI version changed without bridge review");
+_Static_assert(sizeof(DfPluginApiV12) == 144, "DfPluginApiV12 ABI layout changed");
+_Static_assert(offsetof(DfPluginApiV12, entity_type_count) == 64, "DfPluginApiV12.entity_type_count ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV12, handle_entity) == 80, "DfPluginApiV12.handle_entity ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV12, handle_event) == 120, "DfPluginApiV12.handle_event ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV12, handle_scheduled) == 128, "DfPluginApiV12.handle_scheduled ABI offset changed");
+_Static_assert(offsetof(DfPluginApiV12, allow) == 136, "DfPluginApiV12.allow ABI offset changed");
+_Static_assert(DF_ABI_VERSION == 12u, "plugin ABI version changed without bridge review");
 _Static_assert(sizeof(DfEntityState) == 128, "DfEntityState ABI layout changed");
 _Static_assert(offsetof(DfEntityState, world) == 72, "DfEntityState.world ABI offset changed");
 _Static_assert(sizeof(DfPlayerKinematics) == 64, "DfPlayerKinematics ABI layout changed");
@@ -226,9 +226,11 @@ _Static_assert(offsetof(DfPlayerKinematics, rotation) == 48, "DfPlayerKinematics
 _Static_assert(DF_PLAYER_TRANSFORM_DISPLACE == 3u, "player transform ABI changed");
 _Static_assert(sizeof(DfParticleViewV1) == 40, "DfParticleViewV1 ABI layout changed");
 _Static_assert(offsetof(DfParticleViewV1, block) == 32, "DfParticleViewV1.block ABI offset changed");
-_Static_assert(sizeof(DfSoundViewV1) == 40, "DfSoundViewV1 ABI layout changed");
-_Static_assert(offsetof(DfSoundViewV1, scalar) == 16, "DfSoundViewV1.scalar ABI offset changed");
-_Static_assert(offsetof(DfSoundViewV1, item) == 32, "DfSoundViewV1.item ABI offset changed");
+_Static_assert(sizeof(DfSoundViewV2) == 56, "DfSoundViewV2 ABI layout changed");
+_Static_assert(offsetof(DfSoundViewV2, scalar) == 16, "DfSoundViewV2.scalar ABI offset changed");
+_Static_assert(offsetof(DfSoundViewV2, item) == 32, "DfSoundViewV2.item ABI offset changed");
+_Static_assert(offsetof(DfSoundViewV2, callback) == 40, "DfSoundViewV2.callback ABI offset changed");
+_Static_assert(offsetof(DfSoundViewV2, callback_context) == 48, "DfSoundViewV2.callback_context ABI offset changed");
 _Static_assert(sizeof(DfWorldCancellableState) == 1, "DfWorldCancellableState ABI layout changed");
 _Static_assert(sizeof(DfWorldNotificationState) == 1, "DfWorldNotificationState ABI layout changed");
 _Static_assert(sizeof(DfWorldLiquidFlowInput) == 96, "DfWorldLiquidFlowInput ABI layout changed");
@@ -238,9 +240,9 @@ _Static_assert(offsetof(DfWorldLiquidDecayInput, before) == 24, "DfWorldLiquidDe
 _Static_assert(offsetof(DfWorldLiquidDecayInput, after) == 56, "DfWorldLiquidDecayInput.after ABI offset changed");
 _Static_assert(sizeof(DfWorldLiquidHardenInput) == 120, "DfWorldLiquidHardenInput ABI layout changed");
 _Static_assert(offsetof(DfWorldLiquidHardenInput, liquid_hardened) == 24, "DfWorldLiquidHardenInput.liquid_hardened ABI offset changed");
-_Static_assert(sizeof(DfWorldSoundInput) == 72, "DfWorldSoundInput ABI layout changed");
+_Static_assert(sizeof(DfWorldSoundInput) == 88, "DfWorldSoundInput ABI layout changed");
 _Static_assert(offsetof(DfWorldSoundInput, sound) == 8, "DfWorldSoundInput.sound ABI offset changed");
-_Static_assert(offsetof(DfWorldSoundInput, position) == 48, "DfWorldSoundInput.position ABI offset changed");
+_Static_assert(offsetof(DfWorldSoundInput, position) == 64, "DfWorldSoundInput.position ABI offset changed");
 _Static_assert(sizeof(DfWorldFireSpreadInput) == 32, "DfWorldFireSpreadInput ABI layout changed");
 _Static_assert(sizeof(DfWorldPositionInput) == 24, "DfWorldPositionInput ABI layout changed");
 _Static_assert(sizeof(DfWorldEntityInput) == 32, "DfWorldEntityInput ABI layout changed");
@@ -274,8 +276,8 @@ _Static_assert(DF_PLAYER_COOLDOWN_HAS == 0u, "player cooldown has operation chan
 _Static_assert(DF_PLAYER_COOLDOWN_SET == 1u, "player cooldown set operation changed");
 _Static_assert(sizeof(DfDifficultyView) == 24, "DfDifficultyView ABI layout changed");
 _Static_assert(offsetof(DfDifficultyView, starvation_health_limit) == 8, "DfDifficultyView.starvation_health_limit ABI offset changed");
-_Static_assert(sizeof(DfHostApiV27) == 1080, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 64u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 1072, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 65u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -321,7 +323,6 @@ _Static_assert(offsetof(DfHostApiV27, player_view_layer) == 1040, "DfHostApiV27.
 _Static_assert(offsetof(DfHostApiV27, player_entity_action) == 1048, "DfHostApiV27.player_entity_action ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_item_action) == 1056, "DfHostApiV27.player_item_action ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_tx_defer) == 1064, "DfHostApiV27.world_tx_defer ABI offset changed");
-_Static_assert(offsetof(DfHostApiV27, world_custom_sound_play) == 1072, "DfHostApiV27.world_custom_sound_play ABI offset changed");
 _Static_assert(sizeof(DfEntityNewView) == 152, "DfEntityNewView ABI layout changed");
 _Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
 _Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
@@ -477,8 +478,8 @@ extern DfStatus bg_go_entity_velocity_set(uint64_t context, DfInvocationId invoc
 extern DfStatus bg_go_entity_name_tag_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag);
 extern DfStatus bg_go_entity_despawn(uint64_t context, DfInvocationId invocation, DfEntityId entity);
 extern DfStatus bg_go_world_particle_add(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfParticleViewV1 *particle);
-extern DfStatus bg_go_world_sound_play(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfSoundViewV1 *sound);
-extern DfStatus bg_go_player_sound_play(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV1 *sound);
+extern DfStatus bg_go_world_sound_play(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfSoundViewV2 *sound);
+extern DfStatus bg_go_player_sound_play(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV2 *sound);
 extern DfStatus bg_go_world_current(uint64_t context, DfInvocationId invocation, DfWorldId *world);
 extern DfStatus bg_go_world_entity_iterator_open(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t players_only, DfEntityIteratorId *iterator);
 extern DfStatus bg_go_world_entities_within_open(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBBox box, DfEntityIteratorId *iterator);
@@ -505,7 +506,6 @@ extern DfStatus bg_go_player_xuid(uint64_t context, DfInvocationId invocation, D
 extern DfStatus bg_go_server_world(uint64_t context, uint32_t dimension, DfWorldId *world);
 extern DfStatus bg_go_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds);
 extern DfStatus bg_go_world_tx_defer(uint64_t context, DfInvocationId invocation, uint64_t plugin, uint64_t callback, uint32_t kind);
-extern DfStatus bg_go_world_custom_sound_play(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, uintptr_t callback, uintptr_t callback_context);
 extern DfStatus bg_go_world_task_cancel(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled);
 extern DfStatus bg_go_world_new(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world);
 extern DfStatus bg_go_packet_field_get(uint64_t context, uint64_t packet, uint32_t field, DfPacketFieldValue *value);
@@ -718,8 +718,8 @@ static DfStatus host_entity_velocity_set(uint64_t context, DfInvocationId invoca
 static DfStatus host_entity_name_tag_set(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag) { return bg_go_entity_name_tag_set(context, invocation, entity, name_tag); }
 static DfStatus host_entity_despawn(uint64_t context, DfInvocationId invocation, DfEntityId entity) { return bg_go_entity_despawn(context, invocation, entity); }
 static DfStatus host_world_particle_add(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfParticleViewV1 *particle) { return bg_go_world_particle_add(context, invocation, world, position, particle); }
-static DfStatus host_world_sound_play(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfSoundViewV1 *sound) { return bg_go_world_sound_play(context, invocation, world, position, sound); }
-static DfStatus host_player_sound_play(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV1 *sound) { return bg_go_player_sound_play(context, invocation, player, sound); }
+static DfStatus host_world_sound_play(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfSoundViewV2 *sound) { return bg_go_world_sound_play(context, invocation, world, position, sound); }
+static DfStatus host_player_sound_play(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV2 *sound) { return bg_go_player_sound_play(context, invocation, player, sound); }
 static DfStatus host_world_current(uint64_t context, DfInvocationId invocation, DfWorldId *world) { return bg_go_world_current(context, invocation, world); }
 static DfStatus host_world_entity_iterator_open(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t players_only, DfEntityIteratorId *iterator) { return bg_go_world_entity_iterator_open(context, invocation, world, players_only, iterator); }
 static DfStatus host_world_entities_within_open(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBBox box, DfEntityIteratorId *iterator) { return bg_go_world_entities_within_open(context, invocation, world, box, iterator); }
@@ -746,7 +746,6 @@ static DfStatus host_player_xuid(uint64_t context, DfInvocationId invocation, Df
 static DfStatus host_server_world(uint64_t context, uint32_t dimension, DfWorldId *world) { return bg_go_server_world(context, dimension, world); }
 static DfStatus host_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds) { return bg_go_world_schedule(context, world, plugin, callback, delay_nanoseconds); }
 static DfStatus host_world_tx_defer(uint64_t context, DfInvocationId invocation, uint64_t plugin, uint64_t callback, uint32_t kind) { return bg_go_world_tx_defer(context, invocation, plugin, callback, kind); }
-static DfStatus host_world_custom_sound_play(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, uintptr_t callback, uintptr_t callback_context) { return bg_go_world_custom_sound_play(context, invocation, world, position, callback, callback_context); }
 static DfStatus host_world_task_cancel(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled) { return bg_go_world_task_cancel(context, plugin, callback, cancelled); }
 static DfStatus host_world_new(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world) { return bg_go_world_new(context, config, world); }
 
@@ -1020,7 +1019,6 @@ DfStatus bg_runtime_open(
         .player_entity_action = host_player_entity_action,
         .player_item_action = host_player_item_action,
         .world_tx_defer = host_world_tx_defer,
-        .world_custom_sound_play = host_world_custom_sound_play,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

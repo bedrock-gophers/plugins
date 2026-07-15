@@ -63,6 +63,11 @@ type worldRuntimeStub struct {
 	flowErr             error
 }
 
+type callbackWorldSound struct{ callback native.WorldSoundCallback }
+
+func (s callbackWorldSound) Play(*world.World, mgl64.Vec3)            {}
+func (s callbackWorldSound) SoundCallback() native.WorldSoundCallback { return s.callback }
+
 func (r *worldRuntimeStub) Subscriptions() uint64 { return r.subscriptions }
 func (r *worldRuntimeStub) HandleWorldScheduled(
 	uint64, uint64, native.InvocationID, native.WorldTaskPhase, native.WorldTaskResult,
@@ -275,6 +280,32 @@ func TestWorldHandlerForwardsAllCallbacks(t *testing.T) {
 		runtime.sound.Sound.Kind != native.SoundNote || runtime.sound.Sound.Data != 15 || runtime.sound.Sound.Integer != 30 ||
 		runtime.redstone.Cause != native.RedstoneUpdateCauseScheduledTick || runtime.redstone.NewPower != 12 {
 		t.Fatalf("converted callbacks flow=%#v decay=%#v harden=%#v sound=%#v redstone=%#v", runtime.flow, runtime.decay, runtime.harden, runtime.sound, runtime.redstone)
+	}
+}
+
+func TestWorldHandlerForwardsCustomSound(t *testing.T) {
+	players := NewPlayers()
+	runtime := &worldRuntimeStub{
+		players: players, calls: map[string]int{}, subscriptions: native.WorldSoundSubscription,
+	}
+	handler := NewWorldHandler(players.EntityRegistry(), players, 1)
+	handler.AttachRuntime(runtime, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
+	w := world.Config{Synchronous: true}.New()
+	t.Cleanup(func() { _ = w.Close() })
+	if err := w.Do(func(tx *world.Tx) {
+		ctx := tx.Event()
+		handler.HandleSound(ctx, callbackWorldSound{callback: native.WorldSoundCallback{
+			Function: 41, Context: 73,
+		}}, mgl64.Vec3{1, 2, 3})
+		if !ctx.Cancelled() {
+			t.Fatal("custom sound was not cancellable")
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.calls["sound"] != 1 || runtime.sound.Sound.Callback == nil ||
+		runtime.sound.Sound.Callback.Function != 41 || runtime.sound.Sound.Callback.Context != 73 {
+		t.Fatalf("custom sound callback = %#v", runtime.sound)
 	}
 }
 

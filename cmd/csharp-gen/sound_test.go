@@ -14,6 +14,7 @@ func TestInspectSoundsRejectsUnknownConcreteSound(t *testing.T) {
 	source := `package sound
 
 type sound struct{}
+func (sound) Play(*world.World, mgl64.Vec3) {}
 type NewUpstreamSound struct{ sound }
 `
 	if err := os.WriteFile(filepath.Join(directory, "sound.go"), []byte(source), 0o600); err != nil {
@@ -22,6 +23,21 @@ type NewUpstreamSound struct{ sound }
 	_, err := inspectSounds(directory)
 	if err == nil || !strings.Contains(err.Error(), "NewUpstreamSound") || !strings.Contains(err.Error(), "ABI review") {
 		t.Fatalf("inspectSounds() error = %v, want unknown concrete sound ABI review", err)
+	}
+}
+
+func TestInspectSoundsRejectsPlayImplementationDrift(t *testing.T) {
+	directory := t.TempDir()
+	source := `package sound
+
+type sound struct{}
+func (sound) Play(*world.World, mgl64.Vec3) { panic("changed") }
+`
+	if err := os.WriteFile(filepath.Join(directory, "sound.go"), []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inspectSounds(directory); err == nil || !strings.Contains(err.Error(), "implementation changed") {
+		t.Fatalf("inspectSounds() error = %v, want Play implementation drift", err)
 	}
 }
 
@@ -66,7 +82,7 @@ func TestPinnedDragonflySoundsUseGoAST(t *testing.T) {
 		"record struct BucketFill(World.Liquid Liquid) : World.Sound",
 		"record struct CrossbowLoad(int Stage, bool QuickCharge) : World.Sound",
 		"record struct GoatHorn(Horn Horn) : World.Sound",
-		"public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);",
+		"public void Play(World w, Vector3 pos) { }",
 		"86 => new GoatHorn(new Horn(checked((int)data)))",
 		"83 => new BucketFill(block is World.Liquid liquid ? liquid",
 		"internal static class SoundCodec",

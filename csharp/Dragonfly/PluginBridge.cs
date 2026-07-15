@@ -2643,13 +2643,6 @@ internal static unsafe class PluginBridge
         internal static void PlayWorldSound(ulong invocation, Vector3 position, World.Sound sound) =>
             PlaySound(invocation, default, default, position, sound, world: true);
 
-        internal static void PlaySound(World world, Vector3 position, World.Sound sound)
-        {
-            ArgumentNullException.ThrowIfNull(world);
-            ArgumentNullException.ThrowIfNull(sound);
-            _ = world.Do(tx => tx.PlaySound(position, sound));
-        }
-
         internal static void PlayPlayerSound(ulong invocation, PlayerId player, World.Sound sound) =>
             PlaySound(invocation, default, player, default, sound, world: false);
 
@@ -2667,19 +2660,26 @@ internal static unsafe class PluginBridge
                 throw new InvalidOperationException(world ? "world transaction is unavailable" : "player is unavailable");
             if (!SoundCodec.TryEncode(sound, out var encoded))
             {
-                if (!world || api->WorldCustomSoundPlay == null)
-                    throw new ArgumentException("sound type is not registered", nameof(sound));
                 var lease = GCHandle.Alloc(sound);
                 try
                 {
-                    if (api->WorldCustomSoundPlay(
+                    var custom = new SoundViewV2
+                    {
+                        Callback = (nuint)(delegate* unmanaged[Cdecl]<void*, WorldId, Vec3, int>)&PlayCustomSound,
+                        CallbackContext = (nuint)GCHandle.ToIntPtr(lease),
+                    };
+                    var status = world
+                        ? api->WorldSoundPlay(
                             api->Context,
                             invocation,
                             worldId,
                             new Vec3 { X = position.X, Y = position.Y, Z = position.Z },
-                            (nuint)(delegate* unmanaged[Cdecl]<void*, WorldId, Vec3, int>)&PlayCustomSound,
-                            (nuint)GCHandle.ToIntPtr(lease)) != Abi.Ok)
-                        throw new InvalidOperationException("world transaction is no longer valid");
+                            &custom)
+                        : api->PlayerSoundPlay(api->Context, invocation, player, &custom);
+                    if (status != Abi.Ok)
+                        throw new InvalidOperationException(world
+                            ? "world transaction is no longer valid"
+                            : "player is no longer available");
                     return;
                 }
                 finally
@@ -2717,7 +2717,7 @@ internal static unsafe class PluginBridge
                         Length = (ulong)propertyBytes.Length,
                     },
                 };
-                var view = new SoundViewV1
+                var view = new SoundViewV2
                 {
                     Kind = encoded.Kind,
                     Data = encoded.Data,
@@ -4368,10 +4368,18 @@ internal static unsafe class PluginBridge
                     var value = (WorldSoundInput*)input;
                     var result = (WorldCancellableState*)state;
                     var context = new World.Context(value->Invocation, result->Cancelled != 0);
-                    plugin.HandleSound(
-                        context,
-                        EventSound(value->Sound),
-                        new Vector3(value->Position.X, value->Position.Y, value->Position.Z));
+                    var sound = EventSound(value->Sound);
+                    try
+                    {
+                        plugin.HandleSound(
+                            context,
+                            sound,
+                            new Vector3(value->Position.X, value->Position.Y, value->Position.Z));
+                    }
+                    finally
+                    {
+                        if (sound is EventCustomSound custom) custom.Expire();
+                    }
                     ApplyCancellation(context, &result->Cancelled);
                     return Abi.Ok;
                 }
@@ -4595,7 +4603,7 @@ internal static unsafe class PluginBridge
         return BlockCodec.DecodeLiquid(Utf8(block.Identifier), properties);
     }
 
-    private static World.Sound EventSound(SoundViewV1 sound)
+    private static World.Sound EventSound(SoundViewV2 sound)
     {
         const uint goatHorn = 86;
         const uint attack = 68;
@@ -4604,6 +4612,15 @@ internal static unsafe class PluginBridge
         const uint bucketFill = 83;
         const uint bucketEmpty = 84;
         const uint crossbowLoad = 85;
+        if ((sound.Callback == 0) != (sound.CallbackContext == 0))
+            throw new InvalidOperationException("invalid custom sound returned by server");
+        if (sound.Callback != 0)
+        {
+            if (sound.Kind != 0 || sound.Data != 0 || sound.Integer != 0 || sound.Flags != 0 || sound.Scalar != 0 ||
+                sound.Block is not null || sound.Item is not null)
+                throw new InvalidOperationException("invalid custom sound returned by server");
+            return new EventCustomSound(sound.Callback, sound.CallbackContext);
+        }
         if (sound.Kind > goatHorn || !double.IsFinite(sound.Scalar) ||
             sound.Kind == attack && sound.Flags > 1 ||
             sound.Kind == note && sound.Data >= 16 ||
@@ -4625,6 +4642,26 @@ internal static unsafe class PluginBridge
             sound.Scalar,
             block,
             sound.Item is null ? null : Host.EventItem(*sound.Item).Item());
+    }
+
+    private sealed class EventCustomSound(nuint callback, nuint context) : World.Sound
+    {
+        private int _alive = 1;
+
+        public void Play(World w, Vector3 pos)
+        {
+            ArgumentNullException.ThrowIfNull(w);
+            if (System.Threading.Volatile.Read(ref _alive) == 0)
+                throw new InvalidOperationException("sound callback has expired");
+            var play = (delegate* unmanaged[Cdecl]<void*, WorldId, Vec3, int>)callback;
+            if (play(
+                    (void*)context,
+                    w.Id,
+                    new Vec3 { X = pos.X, Y = pos.Y, Z = pos.Z }) != Abi.Ok)
+                throw new InvalidOperationException("sound callback failed");
+        }
+
+        internal void Expire() => System.Threading.Interlocked.Exchange(ref _alive, 0);
     }
 
     private static World.Entity[] EventEntities(EntityId* values, ulong count, ulong invocation)

@@ -8,9 +8,9 @@
 extern "C" {
 #endif
 
-#define DF_ABI_VERSION 11u
-// Host version 64 adds synchronous custom world sound callbacks.
-#define DF_HOST_ABI_VERSION 64u
+#define DF_ABI_VERSION 12u
+// Host version 65 carries concrete and custom sounds through one V2 view.
+#define DF_HOST_ABI_VERSION 65u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -192,7 +192,17 @@ typedef struct { uint64_t instance; uint32_t capabilities; uint32_t reserved; Df
 #define DF_PARTICLE_ENTITY_FLAME 19u
 typedef struct { uint8_t r; uint8_t g; uint8_t b; uint8_t a; } DfRgba;
 typedef struct { uint32_t kind; uint32_t data; int32_t pitch; DfRgba colour; DfBlockPos diff; const DfBlockView *block; } DfParticleViewV1;
-typedef struct { uint32_t kind; uint32_t data; int32_t integer; uint32_t flags; double scalar; const DfBlockView *block; const DfItemStackViewV3 *item; } DfSoundViewV1;
+typedef struct {
+    uint32_t kind;
+    uint32_t data;
+    int32_t integer;
+    uint32_t flags;
+    double scalar;
+    const DfBlockView *block;
+    const DfItemStackViewV3 *item;
+    uintptr_t callback;
+    uintptr_t callback_context;
+} DfSoundViewV2;
 #define DF_PLAYER_TRANSFORM_TELEPORT 0u
 #define DF_PLAYER_TRANSFORM_MOVE 1u
 #define DF_PLAYER_TRANSFORM_VELOCITY 2u
@@ -459,8 +469,8 @@ typedef DfStatus (*DfHostEntityVelocitySetFn)(uint64_t context, DfInvocationId i
 typedef DfStatus (*DfHostEntityNameTagSetFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfStringView name_tag);
 typedef DfStatus (*DfHostEntityDespawnFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity);
 typedef DfStatus (*DfHostWorldParticleAddFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfParticleViewV1 *particle);
-typedef DfStatus (*DfHostWorldSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfSoundViewV1 *sound);
-typedef DfStatus (*DfHostPlayerSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV1 *sound);
+typedef DfStatus (*DfHostWorldSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, const DfSoundViewV2 *sound);
+typedef DfStatus (*DfHostPlayerSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfSoundViewV2 *sound);
 typedef DfStatus (*DfHostWorldCurrentFn)(uint64_t context, DfInvocationId invocation, DfWorldId *world);
 typedef DfStatus (*DfHostWorldEntityIteratorOpenFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, uint8_t players_only, DfEntityIteratorId *iterator);
 typedef DfStatus (*DfHostWorldEntitiesWithinOpenFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfBBox box, DfEntityIteratorId *iterator);
@@ -485,7 +495,6 @@ typedef DfStatus (*DfHostServerWorldFn)(uint64_t context, uint32_t dimension, Df
 typedef DfStatus (*DfHostWorldScheduleFn)(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds);
 typedef DfStatus (*DfHostWorldTaskCancelFn)(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled);
 typedef DfStatus (*DfHostWorldTxDeferFn)(uint64_t context, DfInvocationId invocation, uint64_t plugin, uint64_t callback, uint32_t kind);
-typedef DfStatus (*DfHostWorldCustomSoundPlayFn)(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, uintptr_t callback, uintptr_t callback_context);
 typedef DfStatus (*DfHostWorldNewFn)(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world);
 typedef DfStatus (*DfHostEntityHandleFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityHandleId *handle);
 typedef DfStatus (*DfHostEntityHandleEntityFn)(uint64_t context, DfInvocationId invocation, DfEntityHandleId handle, DfEntityId *entity, uint8_t *found);
@@ -657,7 +666,6 @@ typedef struct {
     DfHostPlayerEntityActionFn player_entity_action;
     DfHostPlayerItemActionFn player_item_action;
     DfHostWorldTxDeferFn world_tx_defer;
-    DfHostWorldCustomSoundPlayFn world_custom_sound_play;
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u
@@ -1268,7 +1276,7 @@ typedef struct {
 
 typedef struct {
     DfInvocationId invocation;
-    DfSoundViewV1 sound;
+    DfSoundViewV2 sound;
     DfVec3 position;
 } DfWorldSoundInput;
 
@@ -1410,9 +1418,9 @@ typedef struct {
     DfHandleEventFn handle_event;
     DfPluginScheduledFn handle_scheduled;
     DfPluginAllowFn allow;
-} DfPluginApiV11;
+} DfPluginApiV12;
 
-typedef const DfPluginApiV11 *(*DfPluginEntryV11Fn)(void);
+typedef const DfPluginApiV12 *(*DfPluginEntryV12Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
 typedef struct { DfStringView plugin_directory; const DfHostApiV27 *host; } DfRuntimeConfig;

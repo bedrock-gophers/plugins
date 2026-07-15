@@ -23,10 +23,10 @@ static DfStatus allow(void *instance, const DfAllowInput *input, DfStringBuffer 
     return DF_STATUS_OK;
 }
 
-static const DfPluginApiV11 api = {
+static const DfPluginApiV12 api = {
     .header = {
         .abi_version = DF_ABI_VERSION,
-        .struct_size = sizeof(DfPluginApiV11),
+        .struct_size = sizeof(DfPluginApiV12),
     },
     .plugin_id = { .data = plugin_id, .len = sizeof(plugin_id) - 1 },
     .create = create,
@@ -37,4 +37,4 @@ static const DfPluginApiV11 api = {
     .allow = allow,
 };
 
-const DfPluginApiV11 *df_plugin_entry_v11(void) { return &api; }
+const DfPluginApiV12 *df_plugin_entry_v12(void) { return &api; }

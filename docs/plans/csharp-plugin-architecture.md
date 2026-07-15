@@ -282,9 +282,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    `ExecuteCommand` calls. Their transport IDs are generated for both Go and C#.
    Host ABI 63 adds exact AST-generated `World.Tx.Defer` and `DeferErr`. Both use Dragonfly's FIFO
    deferred queue and existing task completion/cancellation transport.
-   Host ABI 64 appends a synchronous borrowed callback for custom `World.Sound.Play` implementations.
-   The callback receives Dragonfly's exact persistent `World` plus position and cannot outlive the
-   enclosing transaction playback call.
+   Host ABI 65 and plugin ABI 12 replace the temporary split custom-sound call with one `SoundViewV2`
+   path shared by world playback, player playback, and `HandleSound`. Borrowed custom callbacks receive
+   Dragonfly's exact persistent `World` plus position and cannot outlive the enclosing callback.
    The AST-generated `Scoreboard` class mirrors Dragonfly's mutable name, write, set/remove,
    padding, line-copy, and descending-order behavior. `Player.SendScoreboard` activates the
    existing private transport with raw lines so the Go host applies padding and ordering once.
@@ -303,10 +303,10 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    their exported bool, scalar, block, item,
    liquid, instrument, disc, horn, pitch, and stage fields. Bucket sounds preserve the exact typed
    liquid block state rather than reducing it to a Minecraft identifier or liquid-kind enum.
-   `World.Sound` now AST-generates the exact `Play(World, Vector3)` method. Custom implementations passed
-   through `World.Tx.PlaySound` dispatch synchronously through Host ABI 64; generated concrete sounds
-   implement the same method and can be composed inside a custom callback. `HandleSound` reflection and
-   player-only playback still accept only the 87 generated concrete sound values.
+   `World.Sound` now AST-generates the exact `Play(World, Vector3)` method. Custom implementations pass
+   through `World.Tx.PlaySound`, `Player.PlaySound`, and callback-scoped `HandleSound` proxies using the
+   same V2 view. The generator also verifies Dragonfly's embedded built-in implementation remains empty
+   and emits exact no-op `Play` methods for all 87 concrete sounds.
    Later entity slices add the remaining concrete `entity.Ent` capabilities and transaction methods.
 9. Convert practice-core and expand parity tests against Dragonfly.
 
@@ -369,8 +369,8 @@ messages them inside their borrowed loop bodies, retains only a stable handle, a
 and exact-name lookup resolve to the same handle.
 `/kitchen particle` emits all 20 particle types and exercises every one of Dragonfly's 16 note
 instruments through the transaction-owned `AddParticle` call.
-`/kitchen sound` exercises both concrete playback methods, every sound payload family, and a custom
-`World.Sound.Play` implementation that composes a generated sound.
+`/kitchen sound` exercises both concrete playback methods, every sound payload family, and one custom
+`World.Sound` through world events, world playback, and player-only playback.
 `/kitchen game-mode` exercises registered lookup, player reads, and a custom capability-backed
 game mode.
 `/kitchen world` exercises world dimension, time-cycle stop/start, sleep duration, default game

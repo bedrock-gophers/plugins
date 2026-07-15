@@ -375,22 +375,31 @@ func (r *Runtime) handleWorldCancellable(event uint32, input unsafe.Pointer, can
 	return result, nil
 }
 
-func nativeWorldSoundView(value WorldSound, arena *nativeViewArena) (C.DfSoundViewV1, bool) {
-	if value.Kind > SoundGoatHorn || !finiteWorldEventFloat(value.Scalar) {
-		return C.DfSoundViewV1{}, false
+func nativeWorldSoundView(value WorldSound, arena *nativeViewArena) (C.DfSoundViewV2, bool) {
+	if value.Callback != nil {
+		if value.Callback.Function == 0 || value.Callback.Context == 0 || value.Kind != 0 || value.Data != 0 ||
+			value.Integer != 0 || value.Flags != 0 || value.Scalar != 0 || value.Block != nil || value.Item != nil {
+			return C.DfSoundViewV2{}, false
+		}
+		return C.DfSoundViewV2{
+			callback: C.uintptr_t(value.Callback.Function), callback_context: C.uintptr_t(value.Callback.Context),
+		}, true
 	}
-	view := C.DfSoundViewV1{
+	if value.Kind > SoundGoatHorn || !finiteWorldEventFloat(value.Scalar) {
+		return C.DfSoundViewV2{}, false
+	}
+	view := C.DfSoundViewV2{
 		kind: C.uint32_t(value.Kind), data: C.uint32_t(value.Data), integer: C.int32_t(value.Integer),
 		flags: C.uint32_t(value.Flags), scalar: C.double(value.Scalar),
 	}
 	if value.Block != nil {
 		block, ok := nativeBlockView(*value.Block, arena)
 		if !ok {
-			return C.DfSoundViewV1{}, false
+			return C.DfSoundViewV2{}, false
 		}
 		pointer, ok := arena.allocate(C.sizeof_DfBlockView)
 		if !ok {
-			return C.DfSoundViewV1{}, false
+			return C.DfSoundViewV2{}, false
 		}
 		*(*C.DfBlockView)(pointer) = block
 		view.block = (*C.DfBlockView)(pointer)
@@ -398,11 +407,11 @@ func nativeWorldSoundView(value WorldSound, arena *nativeViewArena) (C.DfSoundVi
 	if value.Item != nil {
 		item, ok := nativeItemStackView(*value.Item, arena)
 		if !ok {
-			return C.DfSoundViewV1{}, false
+			return C.DfSoundViewV2{}, false
 		}
 		pointer, ok := arena.allocate(C.sizeof_DfItemStackViewV3)
 		if !ok {
-			return C.DfSoundViewV1{}, false
+			return C.DfSoundViewV2{}, false
 		}
 		*(*C.DfItemStackViewV3)(pointer) = item
 		view.item = (*C.DfItemStackViewV3)(pointer)

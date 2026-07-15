@@ -4,8 +4,8 @@ namespace Dragonfly.Native;
 
 public static partial class Abi
 {
-    public const uint PluginVersion = 11;
-    public const uint HostVersion = 64;
+    public const uint PluginVersion = 12;
+    public const uint HostVersion = 65;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerCooldownHas = 0;
@@ -441,8 +441,8 @@ public unsafe struct HostApi
     public void* EntityNameTagSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, EntityId, int> EntityDespawn;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, Vec3, ParticleView*, int> WorldParticleAdd;
-    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, Vec3, SoundViewV1*, int> WorldSoundPlay;
-    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, SoundViewV1*, int> PlayerSoundPlay;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, Vec3, SoundViewV2*, int> WorldSoundPlay;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, SoundViewV2*, int> PlayerSoundPlay;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, double, HealingSourceView*, PlayerHealResult*, int> PlayerHeal;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, double, DamageSourceView*, PlayerHurtResult*, int> PlayerHurt;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, SkinInfo*, int> SkinSnapshotInfo;
@@ -529,7 +529,6 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, EntityId, uint, byte*, int> PlayerEntityAction;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, ItemStackViewV3*, long*, byte*, int> PlayerItemAction;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, ulong, uint, int> WorldTxDefer;
-    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, Vec3, nuint, nuint, int> WorldCustomSoundPlay;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -926,7 +925,7 @@ public unsafe struct ParticleView
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public unsafe struct SoundViewV1
+public unsafe struct SoundViewV2
 {
     public uint Kind;
     public uint Data;
@@ -935,6 +934,8 @@ public unsafe struct SoundViewV1
     public double Scalar;
     public BlockView* Block;
     public ItemStackViewV3* Item;
+    public nuint Callback;
+    public nuint CallbackContext;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -1411,7 +1412,7 @@ public struct WorldLiquidHardenInput
 public struct WorldSoundInput
 {
     public ulong Invocation;
-    public SoundViewV1 Sound;
+    public SoundViewV2 Sound;
     public Vec3 Position;
 }
 
