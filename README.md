@@ -93,6 +93,8 @@ air supply use Dragonfly's exact methods, with Go `time.Duration` mapped to C# `
 Hunger and experience parity includes `AddFood`, `Saturate`, `Exhaust`, total experience,
 enchantment seed access/reset, add/remove experience, and collection checks/actions. These call
 Dragonfly directly, preserving food-loss and experience-gain handlers, mending, and pickup delay.
+`Player.Skin()` and `Player.SetSkin(Skin)` round-trip the complete Dragonfly skin value, including
+persona IDs, model data, cape pixels, and animations.
 Presentation parity includes instant-respawn and coordinate toggles, sleeping indicators,
 dialogue/boss-bar/scoreboard removal, live name/score tags, and toasts, using the exact Dragonfly
 `Player` method names.

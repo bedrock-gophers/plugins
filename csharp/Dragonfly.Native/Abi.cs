@@ -411,11 +411,11 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, PlayerStateValue*, int> PlayerStateGet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, EffectView, int> PlayerEffect;
     public void* PlayerEntityVisibility;
-    public void* PlayerSkinOpen;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, ulong*, SkinInfo*, int> PlayerSkinOpen;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, ulong, SkinAnimationInfo*, int> PlayerSkinAnimationInfo;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, SkinData*, int> PlayerSkinRead;
-    public void* PlayerSkinClose;
-    public void* PlayerSkinSet;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, void> PlayerSkinClose;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, SkinView*, int> PlayerSkinSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, InventoryId, uint*, int> InventorySize;
     public delegate* unmanaged[Cdecl]<ulong, ulong, InventoryId, uint, ulong*, ItemStackInfo*, int> InventoryItemOpen;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, uint, ulong*, ItemStackInfo*, int> PlayerHeldItemOpen;

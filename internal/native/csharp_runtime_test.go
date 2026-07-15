@@ -478,6 +478,48 @@ func TestCSharpPlayerScoreboardMethods(t *testing.T) {
 	}
 }
 
+func TestCSharpPlayerSkinMethods(t *testing.T) {
+	want := PlayerSkin{
+		Width: 2, Height: 2, Persona: true, PlayFabID: "playfab", FullID: "kitchen",
+		Pixels:       []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+		ModelDefault: "geometry.humanoid", ModelAnimatedFace: "face", Model: []byte(`{"format_version":"1.12.0"}`),
+		CapeWidth: 1, CapeHeight: 1, CapePixels: []byte{16, 17, 18, 19},
+		Animations: []SkinAnimation{{
+			Width: 1, Height: 1, Type: 2, FrameCount: 1, Expression: 4, Pixels: []byte{20, 21, 22, 23},
+		}},
+	}
+	host := &recordingHost{skin: want}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	var overload uint64
+	found := false
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "skin" {
+			overload, found = uint64(index), true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("skin overload missing: %#v", kitchen.Overloads)
+	}
+	player := PlayerID{UUID: [16]byte{8}, Generation: 5}
+	output, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 45, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Overload: overload, Arguments: []string{"skin"},
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Danick"}},
+	})
+	if err != nil || output.Failed || output.Message != "skin=2x2/kitchen/1" {
+		t.Fatalf("skin output=%#v error=%v", output, err)
+	}
+	if len(host.setSkins) != 1 || !reflect.DeepEqual(host.setSkins[0], want) {
+		t.Fatalf("set skins=%+v, want %+v", host.setSkins, want)
+	}
+}
+
 func TestCSharpPlayerZeroArgumentActions(t *testing.T) {
 	host := &recordingHost{}
 	pluginRuntime := openCSharpRuntimeWithHost(t, host)
@@ -1154,7 +1196,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 33 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 34 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||

@@ -1444,6 +1444,39 @@ internal static unsafe class PluginBridge
             }
         }
 
+        internal static Skin PlayerSkin(ulong invocation, PlayerId player)
+        {
+            var api = Api;
+            if (api is null || api->PlayerSkinOpen == null || api->PlayerSkinClose == null)
+                return new Skin(0, 0);
+            ulong snapshot;
+            SkinInfo info;
+            if (api->PlayerSkinOpen(api->Context, invocation, player, &snapshot, &info) != Abi.Ok || snapshot == 0)
+                return new Skin(0, 0);
+            try
+            {
+                return EventSkin(invocation, snapshot);
+            }
+            catch (InvalidOperationException)
+            {
+                return new Skin(0, 0);
+            }
+            finally
+            {
+                api->PlayerSkinClose(api->Context, invocation, snapshot);
+            }
+        }
+
+        internal static void SetPlayerSkin(ulong invocation, PlayerId player, Skin skin)
+        {
+            ArgumentNullException.ThrowIfNull(skin);
+            var api = Api;
+            if (api is null || api->PlayerSkinSet == null) return;
+            using var lease = new SkinViewLease(skin);
+            var view = lease.View;
+            _ = api->PlayerSkinSet(api->Context, invocation, player, &view);
+        }
+
         internal static Skin EventSkin(ulong invocation, ulong snapshot)
         {
             const ulong maxSkinData = 64UL << 20;

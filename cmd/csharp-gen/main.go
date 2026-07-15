@@ -628,6 +628,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	playerSkin, err := inspectPlayerSkin(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		fatal(err)
+	}
 	if err := inspectTitle(
 		filepath.Join(directory, "server", "player", "title", "title.go"),
 		filepath.Join(directory, "server", "player", "player.go"),
@@ -861,6 +865,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Cooldown.g.cs"),
 			Content: generatePlayerCooldown(playerCooldown),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Skin.g.cs"),
+			Content: generatePlayerSkin(playerSkin),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Kinematics.g.cs"),

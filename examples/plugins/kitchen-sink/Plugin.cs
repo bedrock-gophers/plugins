@@ -63,7 +63,8 @@ public sealed class KitchenSink : Plugin
             new KitchenControls(),
             new KitchenConnection(),
             new KitchenCooldown(),
-            new KitchenScoreboard()));
+            new KitchenScoreboard(),
+            new KitchenSkin()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -1377,6 +1378,29 @@ public sealed class KitchenSink : Plugin
             player.SendScoreboard(board);
             var lines = board.Lines();
             output.Printf("scoreboard={0}/{1}/{2}", board.Name(), lines[0], lines[1]);
+        }
+    }
+
+    internal sealed class KitchenSkin : Cmd.Runnable
+    {
+        public Cmd.SubCommand Skin;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var skin = player.Skin();
+            var bounds = skin.Bounds();
+            player.SetSkin(skin);
+            output.Printf(
+                "skin={0}x{1}/{2}/{3}",
+                bounds.Width,
+                bounds.Height,
+                skin.FullID,
+                skin.Animations.Length);
         }
     }
 
