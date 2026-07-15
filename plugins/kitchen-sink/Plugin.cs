@@ -1278,8 +1278,21 @@ public sealed class KitchenSink : Plugin
                 new Sound.GoatHorn(Dragonfly.Sound.Ponder()),
             ];
             foreach (var sound in sounds) tx.PlaySound(source.Position(), sound);
+            var custom = new KitchenCustomSound();
+            tx.PlaySound(source.Position(), custom);
             player.PlaySound(new Sound.LevelUp());
-            output.Printf("world_sounds={0}, player_sounds=1", sounds.Length);
+            output.Printf("world_sounds={0}, player_sounds=1, custom_sounds={1}", sounds.Length, custom.Played);
+        }
+    }
+
+    internal sealed class KitchenCustomSound : World.Sound
+    {
+        public int Played { get; private set; }
+
+        public void Play(World w, Vector3 pos)
+        {
+            Played++;
+            new Sound.Click().Play(w, pos);
         }
     }
 
