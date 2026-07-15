@@ -36,7 +36,10 @@ durations.
 `/kitchen visibility` exercises exact per-player entity hide/show calls.
 `/kitchen kinematics` exercises exact player transforms, reads, and Dragonfly knockback.
 `/kitchen heal` exercises direct healing, hurting, and final-damage calculation.
-`/kitchen state` includes live item-use and sleeping state reads.
+`/kitchen state` includes live item-use, sleeping, and exact death-position/dimension reads.
+`/kitchen world` creates a custom-dimension in-memory world and a writable MCDB arena. It is safe
+to run repeatedly after entering the arena and only performs chunk-backed height reads while the
+command owns that arena's transaction.
 `/kitchen item` builds a typed diamond sword, round-trips inventory, armour, and held-item APIs,
 then restores every changed slot.
 `/kitchen form` covers reflected menu, custom, and modal forms with every typed element;
