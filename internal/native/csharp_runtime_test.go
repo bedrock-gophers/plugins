@@ -893,6 +893,7 @@ type csharpWorldHost struct {
 	scheduledWorlds            []WorldID
 	scheduledPlugins           []uint64
 	scheduledCallbacks         []uint64
+	customSounds               int
 }
 
 type csharpWorldQueryCall struct {
@@ -1246,6 +1247,11 @@ func (h *csharpWorldHost) AddWorldParticle(invocation InvocationID, world WorldI
 func (h *csharpWorldHost) PlayWorldSound(invocation InvocationID, world WorldID, position Vec3, sound WorldSound) bool {
 	_ = h.recordingHost.PlayWorldSound(invocation, world, position, sound)
 	return true
+}
+
+func (h *csharpWorldHost) PlayCustomWorldSound(_ InvocationID, _ WorldID, position Vec3, callback WorldSoundCallback) bool {
+	h.customSounds++
+	return CallWorldSound(callback, h.worldID, position)
 }
 
 func TestCSharpReflectedCommands(t *testing.T) {
@@ -1792,11 +1798,11 @@ func TestCSharpReflectedCommands(t *testing.T) {
 	input.Overload = soundOverload
 	input.Arguments = []string{"sound"}
 	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
-	if err != nil || output.Failed || output.Message != "world_sounds=11, player_sounds=1" {
+	if err != nil || output.Failed || output.Message != "world_sounds=11, player_sounds=1, custom_sounds=1" {
 		t.Fatalf("sound output=%#v error=%v", output, err)
 	}
 	if len(host.worldSounds) != 11 || len(host.playerSounds) != 1 ||
-		host.worldSoundID != 0 || host.playerSounds[0].Kind != SoundLevelUp || host.player != *base.SourcePlayer {
+		host.customSounds != 1 || host.worldSoundID != 0 || host.playerSounds[0].Kind != SoundLevelUp || host.player != *base.SourcePlayer {
 		t.Fatalf("sound host calls: world=%+v player=%+v target=%+v", host.worldSounds, host.playerSounds, host.player)
 	}
 	wantSoundKinds := []SoundKind{

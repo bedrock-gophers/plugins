@@ -3,95 +3,361 @@
 
 namespace Dragonfly;
 
+public sealed partial class World
+{
+    public interface Sound { void Play(World w, Vector3 pos); }
+}
+
 public static partial class Sound
 {
-    public readonly record struct AnvilBreak : World.Sound;
-    public readonly record struct AnvilLand : World.Sound;
-    public readonly record struct AnvilUse : World.Sound;
-    public readonly record struct ArrowHit : World.Sound;
-    public readonly record struct BarrelClose : World.Sound;
-    public readonly record struct BarrelOpen : World.Sound;
-    public readonly record struct BlastFurnaceCrackle : World.Sound;
-    public readonly record struct BowShoot : World.Sound;
-    public readonly record struct Burning : World.Sound;
-    public readonly record struct Burp : World.Sound;
-    public readonly record struct CampfireCrackle : World.Sound;
-    public readonly record struct ChestClose : World.Sound;
-    public readonly record struct ChestOpen : World.Sound;
-    public readonly record struct Click : World.Sound;
-    public readonly record struct ComposterEmpty : World.Sound;
-    public readonly record struct ComposterFill : World.Sound;
-    public readonly record struct ComposterFillLayer : World.Sound;
-    public readonly record struct ComposterReady : World.Sound;
-    public readonly record struct CopperScraped : World.Sound;
-    public readonly record struct CrossbowShoot : World.Sound;
-    public readonly record struct DecoratedPotInsertFailed : World.Sound;
-    public readonly record struct Deny : World.Sound;
-    public readonly record struct DoorCrash : World.Sound;
-    public readonly record struct Drowning : World.Sound;
-    public readonly record struct EnderChestClose : World.Sound;
-    public readonly record struct EnderChestOpen : World.Sound;
-    public readonly record struct Experience : World.Sound;
-    public readonly record struct Explosion : World.Sound;
-    public readonly record struct FireCharge : World.Sound;
-    public readonly record struct FireExtinguish : World.Sound;
-    public readonly record struct FireworkBlast : World.Sound;
-    public readonly record struct FireworkHugeBlast : World.Sound;
-    public readonly record struct FireworkLaunch : World.Sound;
-    public readonly record struct FireworkTwinkle : World.Sound;
-    public readonly record struct Fizz : World.Sound;
-    public readonly record struct FurnaceCrackle : World.Sound;
-    public readonly record struct GhastShoot : World.Sound;
-    public readonly record struct GhastWarning : World.Sound;
-    public readonly record struct GlassBreak : World.Sound;
-    public readonly record struct Ignite : World.Sound;
-    public readonly record struct ItemAdd : World.Sound;
-    public readonly record struct ItemBreak : World.Sound;
-    public readonly record struct ItemFrameRemove : World.Sound;
-    public readonly record struct ItemFrameRotate : World.Sound;
-    public readonly record struct ItemThrow : World.Sound;
-    public readonly record struct LecternBookPlace : World.Sound;
-    public readonly record struct LevelUp : World.Sound;
-    public readonly record struct LightningExplode : World.Sound;
-    public readonly record struct LightningThunder : World.Sound;
-    public readonly record struct MusicDiscEnd : World.Sound;
-    public readonly record struct Pop : World.Sound;
-    public readonly record struct PotionBrewed : World.Sound;
-    public readonly record struct PowerOff : World.Sound;
-    public readonly record struct PowerOn : World.Sound;
-    public readonly record struct SignWaxed : World.Sound;
-    public readonly record struct SmokerCrackle : World.Sound;
-    public readonly record struct StopUsingSpyglass : World.Sound;
-    public readonly record struct TNT : World.Sound;
-    public readonly record struct Teleport : World.Sound;
-    public readonly record struct Thunder : World.Sound;
-    public readonly record struct Totem : World.Sound;
-    public readonly record struct UseSpyglass : World.Sound;
-    public readonly record struct WaxRemoved : World.Sound;
-    public readonly record struct WaxedSignFailedInteraction : World.Sound;
-    public readonly record struct ShulkerBoxOpen : World.Sound;
-    public readonly record struct ShulkerBoxClose : World.Sound;
-    public readonly record struct EnderEyePlaced : World.Sound;
-    public readonly record struct EndPortalCreated : World.Sound;
-    public readonly record struct Attack(bool Damage) : World.Sound;
-    public readonly record struct Fall(double Distance) : World.Sound;
-    public readonly record struct BlockPlace(World.Block Block) : World.Sound;
-    public readonly record struct BlockBreaking(World.Block Block) : World.Sound;
-    public readonly record struct DoorOpen(World.Block Block) : World.Sound;
-    public readonly record struct DoorClose(World.Block Block) : World.Sound;
-    public readonly record struct TrapdoorOpen(World.Block Block) : World.Sound;
-    public readonly record struct TrapdoorClose(World.Block Block) : World.Sound;
-    public readonly record struct FenceGateOpen(World.Block Block) : World.Sound;
-    public readonly record struct FenceGateClose(World.Block Block) : World.Sound;
-    public readonly record struct Note(Instrument Instrument, int Pitch) : World.Sound;
-    public readonly record struct MusicDiscPlay(DiscType DiscType) : World.Sound;
-    public readonly record struct DecoratedPotInserted(double Progress) : World.Sound;
-    public readonly record struct ItemUseOn(World.Block Block) : World.Sound;
-    public readonly record struct EquipItem(World.Item Item) : World.Sound;
-    public readonly record struct BucketFill(World.Liquid Liquid) : World.Sound;
-    public readonly record struct BucketEmpty(World.Liquid Liquid) : World.Sound;
-    public readonly record struct CrossbowLoad(int Stage, bool QuickCharge) : World.Sound;
-    public readonly record struct GoatHorn(Horn Horn) : World.Sound;
+    public readonly record struct AnvilBreak : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct AnvilLand : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct AnvilUse : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ArrowHit : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct BarrelClose : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct BarrelOpen : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct BlastFurnaceCrackle : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct BowShoot : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Burning : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Burp : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct CampfireCrackle : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ChestClose : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ChestOpen : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Click : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ComposterEmpty : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ComposterFill : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ComposterFillLayer : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ComposterReady : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct CopperScraped : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct CrossbowShoot : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct DecoratedPotInsertFailed : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Deny : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct DoorCrash : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Drowning : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct EnderChestClose : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct EnderChestOpen : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Experience : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Explosion : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FireCharge : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FireExtinguish : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FireworkBlast : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FireworkHugeBlast : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FireworkLaunch : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FireworkTwinkle : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Fizz : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FurnaceCrackle : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct GhastShoot : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct GhastWarning : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct GlassBreak : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Ignite : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ItemAdd : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ItemBreak : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ItemFrameRemove : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ItemFrameRotate : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ItemThrow : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct LecternBookPlace : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct LevelUp : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct LightningExplode : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct LightningThunder : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct MusicDiscEnd : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Pop : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct PotionBrewed : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct PowerOff : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct PowerOn : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct SignWaxed : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct SmokerCrackle : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct StopUsingSpyglass : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct TNT : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Teleport : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Thunder : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Totem : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct UseSpyglass : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct WaxRemoved : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct WaxedSignFailedInteraction : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ShulkerBoxOpen : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ShulkerBoxClose : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct EnderEyePlaced : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct EndPortalCreated : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Attack(bool Damage) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Fall(double Distance) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct BlockPlace(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct BlockBreaking(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct DoorOpen(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct DoorClose(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct TrapdoorOpen(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct TrapdoorClose(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FenceGateOpen(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct FenceGateClose(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct Note(Instrument Instrument, int Pitch) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct MusicDiscPlay(DiscType DiscType) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct DecoratedPotInserted(double Progress) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct ItemUseOn(World.Block Block) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct EquipItem(World.Item Item) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct BucketFill(World.Liquid Liquid) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct BucketEmpty(World.Liquid Liquid) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct CrossbowLoad(int Stage, bool QuickCharge) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
+    public readonly record struct GoatHorn(Horn Horn) : World.Sound
+    {
+        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);
+    }
 
     internal static World.Sound DecodeEvent(
         uint kind, uint data, int integer, uint flags, double scalar, World.Block? block, World.Item? item) =>

@@ -4,8 +4,6 @@ namespace Dragonfly;
 
 public sealed partial class World
 {
-    public interface Sound { }
-
     public enum RedstoneUpdateCause
     {
         BlockUpdate = 0,

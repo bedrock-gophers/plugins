@@ -398,8 +398,18 @@ All 87 concrete `sound` package types are AST-generated under `Sound.*`. `World.
 at a position and `Player.PlaySound` targets one player for those concrete sounds. `HandleSound` receives
 their exact exported fields, including stateful blocks and bucket liquids, typed items,
 instruments, music discs, goat horns, crossbow stages, and scalar values.
-Custom implementations of Dragonfly's `Sound.Play` callback remain unsupported; `World.Sound` is
-currently limited to generated concrete values.
+`World.Sound` exposes Dragonfly's exact `Play(World, Vector3)` method. Custom implementations passed to
+`World.Tx.PlaySound` run synchronously with a persistent `World` and may compose generated sounds:
+
+```csharp
+public sealed class Alert : World.Sound
+{
+    public void Play(World w, Vector3 pos) => new Sound.Click().Play(w, pos);
+}
+```
+
+The callback object is borrowed only for the enclosing `PlaySound` call. `HandleSound` reflection and
+player-only playback remain limited to generated concrete values.
 
 The generated effect slice exposes all 28 registered Dragonfly effects, `Effect.Value`, the five
 constructors, value methods, colour mixing, registry lookup, and `Player.AddEffect`, `RemoveEffect`,

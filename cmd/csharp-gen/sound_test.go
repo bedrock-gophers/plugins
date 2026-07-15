@@ -36,6 +36,11 @@ func TestPinnedDragonflySoundsUseGoAST(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	soundMethod, err := inspectSoundInterface(filepath.Join(
+		string(bytes.TrimSpace(module)), "server", "world", "sound.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(types) != 87 || len(selectedSoundTypes) != 87 {
 		t.Fatalf("generated %d sounds from %d selected types, want 87", len(types), len(selectedSoundTypes))
 	}
@@ -49,8 +54,9 @@ func TestPinnedDragonflySoundsUseGoAST(t *testing.T) {
 		}
 		seen[definition.Name] = struct{}{}
 	}
-	generated := string(generateSounds(types))
+	generated := string(generateSounds(soundMethod, types))
 	for _, expected := range []string{
+		"public interface Sound { void Play(World w, Vector3 pos); }",
 		"record struct AnvilBreak : World.Sound",
 		"record struct Attack(bool Damage) : World.Sound",
 		"record struct Fall(double Distance) : World.Sound",
@@ -60,6 +66,7 @@ func TestPinnedDragonflySoundsUseGoAST(t *testing.T) {
 		"record struct BucketFill(World.Liquid Liquid) : World.Sound",
 		"record struct CrossbowLoad(int Stage, bool QuickCharge) : World.Sound",
 		"record struct GoatHorn(Horn Horn) : World.Sound",
+		"public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);",
 		"86 => new GoatHorn(new Horn(checked((int)data)))",
 		"83 => new BucketFill(block is World.Liquid liquid ? liquid",
 		"internal static class SoundCodec",
@@ -102,6 +109,24 @@ func TestInspectPlayerPlaySoundRejectsDrift(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "signature changed") &&
 				!strings.Contains(err.Error(), "parameter shape changed") {
 				t.Fatalf("expected Player.PlaySound drift error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestInspectSoundInterfaceRejectsDrift(t *testing.T) {
+	for name, source := range map[string]string{
+		"world":    "package world\ntype Sound interface { Play(w *Tx, pos mgl64.Vec3) }",
+		"position": "package world\ntype Sound interface { Play(w *World, pos cube.Pos) }",
+		"result":   "package world\ntype Sound interface { Play(w *World, pos mgl64.Vec3) bool }",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "sound.go")
+			if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := inspectSoundInterface(path); err == nil || !strings.Contains(err.Error(), "signature changed") {
+				t.Fatalf("expected Sound.Play drift error, got %v", err)
 			}
 		})
 	}

@@ -17,6 +17,30 @@ func bg_go_world_sound_play(context C.uint64_t, invocation C.DfInvocationId, wor
 	return C.DF_STATUS_OK
 }
 
+//export bg_go_world_custom_sound_play
+func bg_go_world_custom_sound_play(context C.uint64_t, invocation C.DfInvocationId, worldID C.DfWorldId, position C.DfVec3, callback, callbackContext C.uintptr_t) C.DfStatus {
+	host, ok := resolveHost(uint64(context))
+	if !ok || callback == 0 || callbackContext == 0 || !host.PlayCustomWorldSound(
+		InvocationID(invocation), WorldID(worldID.value), nativeEntityVec3(position),
+		WorldSoundCallback{Function: uint64(callback), Context: uint64(callbackContext)},
+	) {
+		return C.DF_STATUS_ERROR
+	}
+	return C.DF_STATUS_OK
+}
+
+// CallWorldSound invokes one borrowed C# World.Sound.Play callback.
+func CallWorldSound(callback WorldSoundCallback, world WorldID, position Vec3) bool {
+	if callback.Function == 0 || callback.Context == 0 || world == 0 {
+		return false
+	}
+	return C.bg_call_world_sound(
+		C.uintptr_t(callback.Function), C.uintptr_t(callback.Context),
+		C.DfWorldId{value: C.uint64_t(world)},
+		C.DfVec3{x: C.double(position.X), y: C.double(position.Y), z: C.double(position.Z)},
+	) == C.DF_STATUS_OK
+}
+
 //export bg_go_player_sound_play
 func bg_go_player_sound_play(context C.uint64_t, invocation C.DfInvocationId, player C.DfPlayerId, view *C.DfSoundViewV1) C.DfStatus {
 	host, ok := resolveHost(uint64(context))

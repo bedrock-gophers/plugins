@@ -246,7 +246,6 @@ func generateWorldHandler(methods []method, redstone redstoneUpdateSpec) []byte 
 	output.WriteString("#nullable enable\n")
 	output.WriteString("namespace Dragonfly;\n\n")
 	output.WriteString("public sealed partial class World\n{\n")
-	output.WriteString("    public interface Sound { }\n\n")
 	output.WriteString("    public enum RedstoneUpdateCause\n    {\n")
 	for index, cause := range redstone.Causes {
 		fmt.Fprintf(&output, "        %s = %d,\n", cause, index)

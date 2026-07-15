@@ -32,6 +32,43 @@ type soundTypeSpec struct {
 	Fields []parameter
 }
 
+func inspectSoundInterface(path string) (method, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return method{}, err
+	}
+	for _, declaration := range file.Decls {
+		gen, ok := declaration.(*ast.GenDecl)
+		if !ok || gen.Tok != token.TYPE {
+			continue
+		}
+		for _, raw := range gen.Specs {
+			typeSpec, ok := raw.(*ast.TypeSpec)
+			if !ok || typeSpec.Name.Name != "Sound" {
+				continue
+			}
+			interfaceType, ok := typeSpec.Type.(*ast.InterfaceType)
+			if !ok || len(interfaceType.Methods.List) != 1 {
+				return method{}, fmt.Errorf("Dragonfly world.Sound is not the expected one-method interface")
+			}
+			field := interfaceType.Methods.List[0]
+			function, ok := field.Type.(*ast.FuncType)
+			if !ok || len(field.Names) != 1 || field.Names[0].Name != "Play" ||
+				function.Results != nil && len(function.Results.List) != 0 || function.Params == nil || len(function.Params.List) != 2 ||
+				len(function.Params.List[0].Names) != 1 || len(function.Params.List[1].Names) != 1 ||
+				formatGoExpression(function.Params.List[0].Type) != "*World" ||
+				formatGoExpression(function.Params.List[1].Type) != "mgl64.Vec3" {
+				return method{}, fmt.Errorf("Dragonfly world.Sound.Play signature changed")
+			}
+			return method{Name: "Play", Parameters: []parameter{
+				{Name: function.Params.List[0].Names[0].Name, Type: "World"},
+				{Name: function.Params.List[1].Names[0].Name, Type: "Vector3"},
+			}}, nil
+		}
+	}
+	return method{}, fmt.Errorf("Dragonfly world.Sound interface not found")
+}
+
 func inspectPlayerPlaySound(path string) (commandMethod, error) {
 	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 	if err != nil {
@@ -175,18 +212,23 @@ func soundCSharpType(expression ast.Expr) (string, bool) {
 	}
 }
 
-func generateSounds(types []soundTypeSpec) []byte {
+func generateSounds(soundMethod method, types []soundTypeSpec) []byte {
 	var output bytes.Buffer
 	output.WriteString("// Code generated from Dragonfly server/world/sound Go AST. DO NOT EDIT.\n")
 	output.WriteString("#nullable enable\n\nnamespace Dragonfly;\n\n")
+	output.WriteString("public sealed partial class World\n{\n")
+	fmt.Fprintf(&output, "    public interface Sound { void %s(%s); }\n", soundMethod.Name, formatParameters(soundMethod.Parameters))
+	output.WriteString("}\n\n")
 	output.WriteString("public static partial class Sound\n{\n")
 	for _, definition := range types {
 		if len(definition.Fields) == 0 {
-			fmt.Fprintf(&output, "    public readonly record struct %s : World.Sound;\n", definition.Name)
+			fmt.Fprintf(&output, "    public readonly record struct %s : World.Sound\n    {\n", definition.Name)
+			fmt.Fprintf(&output, "        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);\n    }\n")
 			continue
 		}
-		fmt.Fprintf(&output, "    public readonly record struct %s(%s) : World.Sound;\n",
+		fmt.Fprintf(&output, "    public readonly record struct %s(%s) : World.Sound\n    {\n",
 			definition.Name, formatParameters(definition.Fields))
+		fmt.Fprintf(&output, "        public void Play(World w, Vector3 pos) => PluginBridge.Host.PlaySound(w, pos, this);\n    }\n")
 	}
 	output.WriteString("\n    internal static World.Sound DecodeEvent(\n")
 	output.WriteString("        uint kind, uint data, int integer, uint flags, double scalar, World.Block? block, World.Item? item) =>\n")

@@ -2643,6 +2643,13 @@ internal static unsafe class PluginBridge
         internal static void PlayWorldSound(ulong invocation, Vector3 position, World.Sound sound) =>
             PlaySound(invocation, default, default, position, sound, world: true);
 
+        internal static void PlaySound(World world, Vector3 position, World.Sound sound)
+        {
+            ArgumentNullException.ThrowIfNull(world);
+            ArgumentNullException.ThrowIfNull(sound);
+            _ = world.Do(tx => tx.PlaySound(position, sound));
+        }
+
         internal static void PlayPlayerSound(ulong invocation, PlayerId player, World.Sound sound) =>
             PlaySound(invocation, default, player, default, sound, world: false);
 
@@ -2659,7 +2666,27 @@ internal static unsafe class PluginBridge
             if (api is null || world && api->WorldSoundPlay == null || !world && api->PlayerSoundPlay == null)
                 throw new InvalidOperationException(world ? "world transaction is unavailable" : "player is unavailable");
             if (!SoundCodec.TryEncode(sound, out var encoded))
-                throw new ArgumentException("sound type is not registered", nameof(sound));
+            {
+                if (!world || api->WorldCustomSoundPlay == null)
+                    throw new ArgumentException("sound type is not registered", nameof(sound));
+                var lease = GCHandle.Alloc(sound);
+                try
+                {
+                    if (api->WorldCustomSoundPlay(
+                            api->Context,
+                            invocation,
+                            worldId,
+                            new Vec3 { X = position.X, Y = position.Y, Z = position.Z },
+                            (nuint)(delegate* unmanaged[Cdecl]<void*, WorldId, Vec3, int>)&PlayCustomSound,
+                            (nuint)GCHandle.ToIntPtr(lease)) != Abi.Ok)
+                        throw new InvalidOperationException("world transaction is no longer valid");
+                    return;
+                }
+                finally
+                {
+                    lease.Free();
+                }
+            }
 
             var identifierBytes = Array.Empty<byte>();
             var propertyBytes = Array.Empty<byte>();
@@ -2712,6 +2739,23 @@ internal static unsafe class PluginBridge
                     throw new InvalidOperationException(world
                         ? "world transaction is no longer valid"
                         : "player is no longer available");
+            }
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static int PlayCustomSound(void* context, WorldId world, Vec3 position)
+        {
+            try
+            {
+                if (context is null || world.Value == 0) return Abi.Error;
+                var sound = GCHandle.FromIntPtr((nint)context).Target as World.Sound;
+                if (sound is null) return Abi.Error;
+                sound.Play(new World(0, world), new Vector3(position.X, position.Y, position.Z));
+                return Abi.Ok;
+            }
+            catch
+            {
+                return Abi.Error;
             }
         }
 

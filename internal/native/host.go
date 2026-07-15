@@ -426,6 +426,13 @@ type WorldSound struct {
 	Item    *ItemStack
 }
 
+// WorldSoundCallback is a synchronous NativeAOT callback borrowed for one
+// World.Tx.PlaySound call.
+type WorldSoundCallback struct {
+	Function uint64
+	Context  uint64
+}
+
 // Host executes synchronous actions requested by native plugins.
 type Host interface {
 	SendPlayerText(InvocationID, PlayerID, PlayerTextKind, string) bool
@@ -546,6 +553,7 @@ type Host interface {
 	DespawnEntity(InvocationID, EntityID) bool
 	AddWorldParticle(InvocationID, WorldID, Vec3, WorldParticle) bool
 	PlayWorldSound(InvocationID, WorldID, Vec3, WorldSound) bool
+	PlayCustomWorldSound(InvocationID, WorldID, Vec3, WorldSoundCallback) bool
 	PlayPlayerSound(InvocationID, PlayerID, WorldSound) bool
 }
 
@@ -785,7 +793,10 @@ func (noopHost) AddWorldParticle(InvocationID, WorldID, Vec3, WorldParticle) boo
 	return false
 }
 func (noopHost) PlayWorldSound(InvocationID, WorldID, Vec3, WorldSound) bool { return false }
-func (noopHost) PlayPlayerSound(InvocationID, PlayerID, WorldSound) bool     { return false }
+func (noopHost) PlayCustomWorldSound(InvocationID, WorldID, Vec3, WorldSoundCallback) bool {
+	return false
+}
+func (noopHost) PlayPlayerSound(InvocationID, PlayerID, WorldSound) bool { return false }
 
 var (
 	hostSequence         atomic.Uint64

@@ -5,6 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef DfStatus (*BgWorldSoundCallback)(void *context, DfWorldId world, DfVec3 position);
+
+DfStatus bg_call_world_sound(uintptr_t callback, uintptr_t context, DfWorldId world, DfVec3 position) {
+    if (callback == 0 || context == 0) return DF_STATUS_ERROR;
+    return ((BgWorldSoundCallback) callback)((void *) context, world, position);
+}
+
 #ifdef _WIN32
 #include <windows.h>
 
@@ -267,8 +274,8 @@ _Static_assert(DF_PLAYER_COOLDOWN_HAS == 0u, "player cooldown has operation chan
 _Static_assert(DF_PLAYER_COOLDOWN_SET == 1u, "player cooldown set operation changed");
 _Static_assert(sizeof(DfDifficultyView) == 24, "DfDifficultyView ABI layout changed");
 _Static_assert(offsetof(DfDifficultyView, starvation_health_limit) == 8, "DfDifficultyView.starvation_health_limit ABI offset changed");
-_Static_assert(sizeof(DfHostApiV27) == 1072, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 63u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 1080, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 64u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -314,6 +321,7 @@ _Static_assert(offsetof(DfHostApiV27, player_view_layer) == 1040, "DfHostApiV27.
 _Static_assert(offsetof(DfHostApiV27, player_entity_action) == 1048, "DfHostApiV27.player_entity_action ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_item_action) == 1056, "DfHostApiV27.player_item_action ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_tx_defer) == 1064, "DfHostApiV27.world_tx_defer ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, world_custom_sound_play) == 1072, "DfHostApiV27.world_custom_sound_play ABI offset changed");
 _Static_assert(sizeof(DfEntityNewView) == 152, "DfEntityNewView ABI layout changed");
 _Static_assert(sizeof(DfBBox) == 48, "DfBBox ABI layout changed");
 _Static_assert(offsetof(DfBBox, min) == 0, "DfBBox.min ABI offset changed");
@@ -497,6 +505,7 @@ extern DfStatus bg_go_player_xuid(uint64_t context, DfInvocationId invocation, D
 extern DfStatus bg_go_server_world(uint64_t context, uint32_t dimension, DfWorldId *world);
 extern DfStatus bg_go_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds);
 extern DfStatus bg_go_world_tx_defer(uint64_t context, DfInvocationId invocation, uint64_t plugin, uint64_t callback, uint32_t kind);
+extern DfStatus bg_go_world_custom_sound_play(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, uintptr_t callback, uintptr_t callback_context);
 extern DfStatus bg_go_world_task_cancel(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled);
 extern DfStatus bg_go_world_new(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world);
 extern DfStatus bg_go_packet_field_get(uint64_t context, uint64_t packet, uint32_t field, DfPacketFieldValue *value);
@@ -737,6 +746,7 @@ static DfStatus host_player_xuid(uint64_t context, DfInvocationId invocation, Df
 static DfStatus host_server_world(uint64_t context, uint32_t dimension, DfWorldId *world) { return bg_go_server_world(context, dimension, world); }
 static DfStatus host_world_schedule(uint64_t context, DfWorldId world, uint64_t plugin, uint64_t callback, int64_t delay_nanoseconds) { return bg_go_world_schedule(context, world, plugin, callback, delay_nanoseconds); }
 static DfStatus host_world_tx_defer(uint64_t context, DfInvocationId invocation, uint64_t plugin, uint64_t callback, uint32_t kind) { return bg_go_world_tx_defer(context, invocation, plugin, callback, kind); }
+static DfStatus host_world_custom_sound_play(uint64_t context, DfInvocationId invocation, DfWorldId world, DfVec3 position, uintptr_t callback, uintptr_t callback_context) { return bg_go_world_custom_sound_play(context, invocation, world, position, callback, callback_context); }
 static DfStatus host_world_task_cancel(uint64_t context, uint64_t plugin, uint64_t callback, uint8_t *cancelled) { return bg_go_world_task_cancel(context, plugin, callback, cancelled); }
 static DfStatus host_world_new(uint64_t context, const DfWorldConfigV1 *config, DfWorldId *world) { return bg_go_world_new(context, config, world); }
 
@@ -1010,6 +1020,7 @@ DfStatus bg_runtime_open(
         .player_entity_action = host_player_entity_action,
         .player_item_action = host_player_item_action,
         .world_tx_defer = host_world_tx_defer,
+        .world_custom_sound_play = host_world_custom_sound_play,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {

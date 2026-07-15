@@ -782,6 +782,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	soundMethod, err := inspectSoundInterface(filepath.Join(directory, "server", "world", "sound.go"))
+	if err != nil {
+		fatal(err)
+	}
 	playerPlaySound, err := inspectPlayerPlaySound(filepath.Join(directory, "server", "player", "player.go"))
 	if err != nil {
 		fatal(err)
@@ -1073,7 +1077,7 @@ func main() {
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Sound.Types.g.cs"),
-			Content: generateSounds(sounds),
+			Content: generateSounds(soundMethod, sounds),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Sound.g.cs"),

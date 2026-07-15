@@ -119,7 +119,8 @@ func (h *WorldHandler) HandleSound(ctx *world.Context, sound world.Sound, positi
 	}
 	value, ok := SoundToNative(ctx.Tx, sound)
 	if !ok {
-		h.log.Error("encode native world sound event", "sound", sound)
+		// Dragonfly permits custom world.Sound implementations. Concrete native
+		// sound events are reflected; custom implementations still run normally.
 		return
 	}
 	h.cancellable(ctx, "sound", func(invocation native.InvocationID, cancelled bool) (bool, error) {
