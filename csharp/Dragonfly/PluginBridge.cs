@@ -2062,6 +2062,81 @@ internal static unsafe class PluginBridge
             }
         }
 
+        internal static void PlayWorldSound(ulong invocation, Vector3 position, World.Sound sound) =>
+            PlaySound(invocation, default, default, position, sound, world: true);
+
+        internal static void PlayPlayerSound(ulong invocation, PlayerId player, World.Sound sound) =>
+            PlaySound(invocation, default, player, default, sound, world: false);
+
+        private static void PlaySound(
+            ulong invocation,
+            WorldId worldId,
+            PlayerId player,
+            Vector3 position,
+            World.Sound sound,
+            bool world)
+        {
+            ArgumentNullException.ThrowIfNull(sound);
+            var api = Api;
+            if (api is null || world && api->WorldSoundPlay == null || !world && api->PlayerSoundPlay == null)
+                throw new InvalidOperationException(world ? "world transaction is unavailable" : "player is unavailable");
+            if (!SoundCodec.TryEncode(sound, out var encoded))
+                throw new ArgumentException("sound type is not registered", nameof(sound));
+
+            var identifierBytes = Array.Empty<byte>();
+            var propertyBytes = Array.Empty<byte>();
+            if (encoded.Block is not null)
+            {
+                if (!BlockCodec.TryEncode(encoded.Block, out var identifier, out propertyBytes))
+                    throw new ArgumentException("sound block type is not registered", nameof(sound));
+                identifierBytes = Encoding.UTF8.GetBytes(identifier);
+            }
+
+            using var itemLease = encoded.Item is null
+                ? null
+                : new ItemViewLease(Item.NewStack(encoded.Item, 1));
+            var item = itemLease?.View ?? default;
+            fixed (byte* identifierData = identifierBytes)
+            fixed (byte* propertyData = propertyBytes)
+            {
+                var block = new BlockView
+                {
+                    Identifier = new StringView
+                    {
+                        Data = identifierData,
+                        Length = (ulong)identifierBytes.Length,
+                    },
+                    PropertiesNbt = new StringView
+                    {
+                        Data = propertyData,
+                        Length = (ulong)propertyBytes.Length,
+                    },
+                };
+                var view = new SoundViewV1
+                {
+                    Kind = encoded.Kind,
+                    Data = encoded.Data,
+                    Integer = encoded.Integer,
+                    Flags = encoded.Flags,
+                    Scalar = encoded.Scalar,
+                    Block = encoded.Block is null ? null : &block,
+                    Item = encoded.Item is null ? null : &item,
+                };
+                var status = world
+                    ? api->WorldSoundPlay(
+                        api->Context,
+                        invocation,
+                        worldId,
+                        new Vec3 { X = position.X, Y = position.Y, Z = position.Z },
+                        &view)
+                    : api->PlayerSoundPlay(api->Context, invocation, player, &view);
+                if (status != Abi.Ok)
+                    throw new InvalidOperationException(world
+                        ? "world transaction is no longer valid"
+                        : "player is no longer available");
+            }
+        }
+
         private static bool WorldWeatherAt(
             HostApi* api,
             ulong invocation,

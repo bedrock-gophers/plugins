@@ -438,6 +438,7 @@ func (tx *Tx) Raining() bool { return false }
 func (tx *Tx) Thundering() bool { return false }
 func (tx *Tx) CurrentTick() int64 { return 0 }
 func (tx *Tx) AddParticle(pos mgl64.Vec3, p Particle) {}
+func (tx *Tx) PlaySound(pos mgl64.Vec3, s Sound) {}
 func (tx *Tx) AddEntity(e *EntityHandle) Entity { return nil }
 func (tx *Tx) AddEntityAt(e *EntityHandle, pos mgl64.Vec3) Entity { return nil }
 func (tx *Tx) RemoveEntity(e Entity) *EntityHandle { return nil }
@@ -488,6 +489,8 @@ func (tx *Tx) Players() iter.Seq[Entity] { return nil }`
 		"public interface Particle { }",
 		"public void AddParticle(Vector3 pos, Particle p)",
 		"PluginBridge.Host.AddWorldParticle(Invocation, pos, p)",
+		"public void PlaySound(Vector3 pos, Sound s)",
+		"PluginBridge.Host.PlayWorldSound(Invocation, pos, s)",
 		"public Entity AddEntity(EntityHandle e)",
 		"PluginBridge.Host.TransactionAddEntity(Invocation, e)",
 		"public Entity AddEntityAt(EntityHandle e, Vector3 pos)",
@@ -985,6 +988,26 @@ func TestInspectWorldTxRejectsAddParticleDrift(t *testing.T) {
 			_, err := inspectWorldTx(path)
 			if err == nil || !strings.Contains(err.Error(), "world.Tx.AddParticle: signature changed") {
 				t.Fatalf("expected AddParticle signature drift error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestInspectWorldTxRejectsPlaySoundDrift(t *testing.T) {
+	for name, declaration := range map[string]string{
+		"position name": "func (tx *Tx) PlaySound(position mgl64.Vec3, s Sound) {}",
+		"position type": "func (tx *Tx) PlaySound(pos cube.Pos, s Sound) {}",
+		"sound name":    "func (tx *Tx) PlaySound(pos mgl64.Vec3, sound Sound) {}",
+		"sound type":    "func (tx *Tx) PlaySound(pos mgl64.Vec3, s Particle) {}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "tx.go")
+			if err := os.WriteFile(path, []byte("package world\n"+declaration), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := inspectWorldTx(path)
+			if err == nil || !strings.Contains(err.Error(), "world.Tx.PlaySound: signature changed") {
+				t.Fatalf("expected PlaySound signature drift error, got %v", err)
 			}
 		})
 	}

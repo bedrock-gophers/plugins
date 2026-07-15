@@ -62,9 +62,47 @@ func TestPinnedDragonflySoundsUseGoAST(t *testing.T) {
 		"record struct GoatHorn(Horn Horn) : World.Sound",
 		"86 => new GoatHorn(new Horn(checked((int)data)))",
 		"83 => new BucketFill(block is World.Liquid liquid ? liquid",
+		"internal static class SoundCodec",
+		"case Sound.Attack value:",
+		"encoded = new(68u, 0u, 0, value.Damage ? 1u : 0u, 0d, null, null); return true;",
+		"case Sound.Note value:",
+		"encoded = new(78u, value.Instrument.Id, value.Pitch, 0u, 0d, null, null); return true;",
+		"case Sound.EquipItem value:",
+		"encoded = new(82u, 0u, 0, 0u, 0d, null, value.Item); return true;",
+		"case Sound.BucketFill value when value.Liquid is Block.Water or Block.Lava:",
+		"value.Liquid is Block.Water ? 0u : 1u",
 	} {
 		if !strings.Contains(generated, expected) {
 			t.Fatalf("generated sound output missing %q:\n%s", expected, generated)
 		}
+	}
+	playerMethod, err := inspectPlayerPlaySound(filepath.Join(
+		string(bytes.TrimSpace(module)), "server", "player", "player.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	playerGenerated := string(generatePlayerPlaySound(playerMethod))
+	if !strings.Contains(playerGenerated, "void PlaySound(World.Sound sound)") ||
+		!strings.Contains(playerGenerated, "PluginBridge.Host.PlayPlayerSound(_invocation, Id, sound)") {
+		t.Fatalf("generated Player.PlaySound is incomplete:\n%s", playerGenerated)
+	}
+}
+
+func TestInspectPlayerPlaySoundRejectsDrift(t *testing.T) {
+	for name, source := range map[string]string{
+		"parameter type": "package player\nfunc (p *Player) PlaySound(sound world.Particle) {}",
+		"result":         "package player\nfunc (p *Player) PlaySound(sound world.Sound) bool { return false }",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "player.go")
+			if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := inspectPlayerPlaySound(path)
+			if err == nil || !strings.Contains(err.Error(), "signature changed") &&
+				!strings.Contains(err.Error(), "parameter shape changed") {
+				t.Fatalf("expected Player.PlaySound drift error, got %v", err)
+			}
+		})
 	}
 }

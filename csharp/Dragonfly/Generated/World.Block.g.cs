@@ -96,6 +96,9 @@ public sealed partial class World
         public void AddParticle(Vector3 pos, Particle p) =>
             PluginBridge.Host.AddWorldParticle(Invocation, pos, p);
 
+        public void PlaySound(Vector3 pos, Sound s) =>
+            PluginBridge.Host.PlayWorldSound(Invocation, pos, s);
+
         public Entity AddEntity(EntityHandle e) =>
             PluginBridge.Host.TransactionAddEntity(Invocation, e);
 

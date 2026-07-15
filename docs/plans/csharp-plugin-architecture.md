@@ -241,9 +241,15 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    The transaction defers release of each open C# view until Dragonfly finishes the transaction.
    There is one exact proxy path; the abandoned family/callback/physics entity DSL is removed.
    The sound slice AST-generates all 87 concrete `server/world/sound` structs as `Sound.*` values
-   implementing `World.Sound`. `HandleSound` materialises their exported bool, scalar, block, item,
+   implementing `World.Sound`. Exact AST-generated `World.Tx.PlaySound` and `Player.PlaySound` use the
+   same generated reverse codec and existing private sound descriptor as `HandleSound`; world playback
+   broadcasts at a position while player playback targets only that player. `HandleSound` materialises
+   their exported bool, scalar, block, item,
    liquid, instrument, disc, horn, pitch, and stage fields. Bucket sounds preserve the exact typed
    liquid block state rather than reducing it to a Minecraft identifier or liquid-kind enum.
+   Playback currently accepts the 87 generated concrete sounds. Exact custom `World.Sound.Play`
+   callback dispatch remains part of the next entity/world callback slice; the public interface must
+   gain that AST-generated method before custom sounds can claim raw-Dragonfly parity.
    Later entity slices add the remaining concrete `entity.Ent` capabilities and transaction methods.
 9. Convert practice-core and expand parity tests against Dragonfly.
 
@@ -306,6 +312,8 @@ messages them inside their borrowed loop bodies, retains only a stable handle, a
 and exact-name lookup resolve to the same handle.
 `/kitchen particle` emits all 20 particle types and exercises every one of Dragonfly's 16 note
 instruments through the transaction-owned `AddParticle` call.
+`/kitchen sound` exercises both exact playback methods and every sound payload family: flags,
+scalars, blocks, instruments, discs, items, liquids, stages, and horns.
 `/kitchen game-mode` exercises registered lookup, player reads, and a custom capability-backed
 game mode.
 `/kitchen state` exercises all 17 generated food, health, experience-level/progress, scale,

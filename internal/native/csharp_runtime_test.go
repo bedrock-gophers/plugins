@@ -739,6 +739,11 @@ func (h *csharpWorldHost) AddWorldParticle(invocation InvocationID, world WorldI
 	return true
 }
 
+func (h *csharpWorldHost) PlayWorldSound(invocation InvocationID, world WorldID, position Vec3, sound WorldSound) bool {
+	_ = h.recordingHost.PlayWorldSound(invocation, world, position, sound)
+	return true
+}
+
 func TestCSharpReflectedCommands(t *testing.T) {
 	host := &csharpWorldHost{
 		recordingHost: &recordingHost{entityState: EntityState{
@@ -780,7 +785,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 26 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 27 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -1240,6 +1245,49 @@ func TestCSharpReflectedCommands(t *testing.T) {
 			t.Fatalf("particle call %d=%+v, want invocation=42 world=0 position=%+v particle=%+v",
 				index, call, base.SourcePosition, wantParticles[index])
 		}
+	}
+
+	var soundOverload uint64
+	soundFound := false
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "sound" {
+			soundOverload, soundFound = uint64(index), true
+			break
+		}
+	}
+	if !soundFound {
+		t.Fatalf("sound overload missing: %#v", kitchen.Overloads)
+	}
+	input = base
+	input.Overload = soundOverload
+	input.Arguments = []string{"sound"}
+	output, err = pluginRuntime.HandleCommand(kitchen.Index, input)
+	if err != nil || output.Failed || output.Message != "world_sounds=11, player_sounds=1" {
+		t.Fatalf("sound output=%#v error=%v", output, err)
+	}
+	if len(host.worldSounds) != 11 || len(host.playerSounds) != 1 ||
+		host.worldSoundID != 0 || host.playerSounds[0].Kind != SoundLevelUp || host.player != *base.SourcePlayer {
+		t.Fatalf("sound host calls: world=%+v player=%+v target=%+v", host.worldSounds, host.playerSounds, host.player)
+	}
+	wantSoundKinds := []SoundKind{
+		SoundExplosion, SoundAttack, SoundFall, SoundBlockPlace, SoundNote, SoundMusicDiscPlay,
+		SoundDecoratedPotInserted, SoundEquipItem, SoundBucketFill, SoundCrossbowLoad, SoundGoatHorn,
+	}
+	for index, sound := range host.worldSounds {
+		if sound.Kind != wantSoundKinds[index] || host.worldSoundPos[index] != base.SourcePosition {
+			t.Fatalf("world sound %d=%+v position=%+v", index, sound, host.worldSoundPos[index])
+		}
+	}
+	if host.worldSounds[1].Flags != 1 || host.worldSounds[2].Scalar != 2.5 ||
+		host.worldSounds[3].Block == nil || host.worldSounds[3].Block.Identifier != "minecraft:sand" ||
+		host.worldSounds[4].Data != 0 || host.worldSounds[4].Integer != 12 ||
+		host.worldSounds[5].Data != 0 || host.worldSounds[6].Scalar != 0.5 ||
+		host.worldSounds[7].Item == nil || host.worldSounds[7].Item.Identifier != "minecraft:diamond_sword" ||
+		host.worldSounds[8].Data != 0 || host.worldSounds[8].Block == nil ||
+		host.worldSounds[8].Block.Identifier != "minecraft:water" ||
+		host.worldSounds[9].Integer != 1 || host.worldSounds[9].Flags != 1 ||
+		host.worldSounds[10].Data != 0 {
+		t.Fatalf("sound payloads=%+v", host.worldSounds)
 	}
 
 	host.state = PlayerStateValue{Integer: csharpBuiltinGameModeDescriptor | 2}

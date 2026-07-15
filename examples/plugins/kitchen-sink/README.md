@@ -31,6 +31,7 @@ Runnable parity showcase. Its single plugin class demonstrates:
   `/kitchen biome`;
 - transaction-owned `CurrentTick` in `/kitchen tick`;
 - all 20 generated particle types and all 16 typed note instruments in `/kitchen particle`;
+- exact world-broadcast and player-only sound playback across every payload family in `/kitchen sound`;
 - registered lookup, player reads, and custom `World.GameMode` in `/kitchen game-mode`;
 - food, health, experience, scale, visibility, and mobility state round-trips in `/kitchen state`;
 - direct typed healing in `/kitchen heal`;

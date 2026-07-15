@@ -32,6 +32,31 @@ type soundTypeSpec struct {
 	Fields []parameter
 }
 
+func inspectPlayerPlaySound(path string) (commandMethod, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return commandMethod{}, err
+	}
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Name.Name != "PlaySound" || !pointerReceiver(function, "Player") {
+			continue
+		}
+		if signature := goFunctionSignature(function); signature != (goSignature{Parameters: "world.Sound"}) {
+			return commandMethod{}, fmt.Errorf("Dragonfly player.Player.PlaySound signature changed: %+v", signature)
+		}
+		if function.Type.Params == nil || len(function.Type.Params.List) != 1 ||
+			len(function.Type.Params.List[0].Names) != 1 {
+			return commandMethod{}, fmt.Errorf("Dragonfly player.Player.PlaySound parameter shape changed")
+		}
+		return commandMethod{
+			Name: "PlaySound", ReturnType: "void",
+			Parameters: []parameter{{Name: function.Type.Params.List[0].Names[0].Name, Type: "World.Sound"}},
+		}, nil
+	}
+	return commandMethod{}, fmt.Errorf("Dragonfly player.Player has no PlaySound method")
+}
+
 func inspectSounds(directory string) ([]soundTypeSpec, error) {
 	packages, err := parser.ParseDir(token.NewFileSet(), directory, nil, 0)
 	if err != nil {
@@ -171,8 +196,81 @@ func generateSounds(types []soundTypeSpec) []byte {
 	}
 	output.WriteString("            _ => throw new InvalidOperationException(\"Invalid sound kind.\"),\n")
 	output.WriteString("        };\n")
+	output.WriteString("}\n\n")
+	output.WriteString("internal readonly record struct EncodedSound(\n")
+	output.WriteString("    uint Kind, uint Data, int Integer, uint Flags, double Scalar, World.Block? Block, World.Item? Item);\n\n")
+	output.WriteString("internal static class SoundCodec\n{\n")
+	output.WriteString("    internal static bool TryEncode(World.Sound sound, out EncodedSound encoded)\n    {\n")
+	output.WriteString("        switch (sound)\n        {\n")
+	for index, definition := range types {
+		binding := "_"
+		if len(definition.Fields) != 0 {
+			binding = "value"
+		}
+		guard := soundEncodeGuard(definition)
+		fmt.Fprintf(&output, "            case Sound.%s %s%s:\n", definition.Name, binding, guard)
+		fmt.Fprintf(&output, "                encoded = new(%du, %s); return true;\n", index, soundEncodeArguments(definition))
+	}
+	output.WriteString("            default:\n                encoded = default; return false;\n")
+	output.WriteString("        }\n    }\n")
 	output.WriteString("}\n")
 	return output.Bytes()
+}
+
+func generatePlayerPlaySound(method commandMethod) []byte {
+	if method.Name != "PlaySound" || method.ReturnType != "void" || len(method.Parameters) != 1 ||
+		method.Parameters[0].Type != "World.Sound" {
+		panic("unsupported Player.PlaySound method")
+	}
+	var output bytes.Buffer
+	output.WriteString("// Code generated from Dragonfly server/player/player.go Go AST. DO NOT EDIT.\n")
+	output.WriteString("namespace Dragonfly;\n\npublic sealed partial class Player\n{\n")
+	fmt.Fprintf(&output, "    public void PlaySound(World.Sound %s) =>\n", method.Parameters[0].Name)
+	fmt.Fprintf(&output, "        PluginBridge.Host.PlayPlayerSound(_invocation, Id, %s);\n", method.Parameters[0].Name)
+	output.WriteString("}\n")
+	return output.Bytes()
+}
+
+func soundEncodeGuard(definition soundTypeSpec) string {
+	for _, field := range definition.Fields {
+		if field.Type == "World.Liquid" {
+			return " when value." + field.Name + " is Block.Water or Block.Lava"
+		}
+	}
+	return ""
+}
+
+func soundEncodeArguments(definition soundTypeSpec) string {
+	values := map[string]string{
+		"data": "0u", "integer": "0", "flags": "0u", "scalar": "0d", "block": "null", "item": "null",
+	}
+	for _, field := range definition.Fields {
+		expression := "value." + field.Name
+		switch field.Type {
+		case "bool":
+			values["flags"] = expression + " ? 1u : 0u"
+		case "double":
+			values["scalar"] = expression
+		case "int":
+			values["integer"] = expression
+		case "World.Block":
+			values["block"] = expression
+		case "World.Item":
+			values["item"] = expression
+		case "World.Liquid":
+			values["block"] = expression
+			values["data"] = expression + " is Block.Water ? 0u : 1u"
+		case "Instrument":
+			values["data"] = expression + ".Id"
+		case "DiscType", "Horn":
+			values["data"] = expression + ".Uint8()"
+		default:
+			panic("unsupported sound encode field " + definition.Name + "." + field.Name)
+		}
+	}
+	return strings.Join([]string{
+		values["data"], values["integer"], values["flags"], values["scalar"], values["block"], values["item"],
+	}, ", ")
 }
 
 func soundDecodeArguments(definition soundTypeSpec) string {

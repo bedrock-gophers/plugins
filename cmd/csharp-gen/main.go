@@ -497,6 +497,7 @@ var selectedWorldTxMethods = []string{
 	"Thundering",
 	"CurrentTick",
 	"AddParticle",
+	"PlaySound",
 	"AddEntity",
 	"AddEntityAt",
 	"RemoveEntity",
@@ -699,6 +700,10 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	playerPlaySound, err := inspectPlayerPlaySound(filepath.Join(directory, "server", "player", "player.go"))
+	if err != nil {
+		fatal(err)
+	}
 	gameModes, err := inspectGameModes(filepath.Join(directory, "server", "world", "game_mode.go"))
 	if err != nil {
 		fatal(err)
@@ -831,6 +836,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Sound.Types.g.cs"),
 			Content: generateSounds(sounds),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Player.Sound.g.cs"),
+			Content: generatePlayerPlaySound(playerPlaySound),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "GameMode.Types.g.cs"),
@@ -1530,6 +1539,9 @@ func validateWorldTxMethod(method commandMethod) error {
 		"AddParticle": {Name: "AddParticle", ReturnType: "void", Parameters: []parameter{
 			{Name: "pos", Type: "Vector3"}, {Name: "p", Type: "Particle"},
 		}},
+		"PlaySound": {Name: "PlaySound", ReturnType: "void", Parameters: []parameter{
+			{Name: "pos", Type: "Vector3"}, {Name: "s", Type: "Sound"},
+		}},
 		"AddEntity": {Name: "AddEntity", ReturnType: "Entity", Parameters: []parameter{
 			{Name: "e", Type: "EntityHandle"},
 		}},
@@ -1658,6 +1670,7 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 			"EntityHandle": "EntityHandle",
 			"Liquid":       "Liquid",
 			"Particle":     "Particle",
+			"Sound":        "Sound",
 			"SetOpts":      "SetOpts",
 			"World":        "World",
 			"bool":         "bool",
@@ -5131,6 +5144,9 @@ func generateWorldBlock(setOpts []string, methods []commandMethod) []byte {
 			output.WriteString("            PluginBridge.Host.WorldCurrentTick(Invocation);\n")
 		case "AddParticle":
 			fmt.Fprintf(&output, "            PluginBridge.Host.AddWorldParticle(Invocation, %s, %s);\n",
+				method.Parameters[0].Name, method.Parameters[1].Name)
+		case "PlaySound":
+			fmt.Fprintf(&output, "            PluginBridge.Host.PlayWorldSound(Invocation, %s, %s);\n",
 				method.Parameters[0].Name, method.Parameters[1].Name)
 		case "AddEntity":
 			fmt.Fprintf(&output, "            PluginBridge.Host.TransactionAddEntity(Invocation, %s);\n", method.Parameters[0].Name)

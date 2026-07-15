@@ -56,7 +56,8 @@ public sealed class KitchenSink : Plugin
             new KitchenEntities(),
             new KitchenServer(this),
             new KitchenHandle(),
-            new KitchenCustomEntity()));
+            new KitchenCustomEntity(),
+            new KitchenSound()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -1030,6 +1031,37 @@ public sealed class KitchenSink : Plugin
             foreach (var particle in particles)
                 tx.AddParticle(source.Position(), particle);
             output.Printf("particles={0}", particles.Length);
+        }
+    }
+
+    internal sealed class KitchenSound : Cmd.Runnable
+    {
+        public Cmd.SubCommand Sound;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player || tx is null)
+            {
+                output.Error("A player and world transaction are required.");
+                return;
+            }
+            World.Sound[] sounds =
+            [
+                new Sound.Explosion(),
+                new Sound.Attack(true),
+                new Sound.Fall(2.5),
+                new Sound.BlockPlace(new Block.Sand()),
+                new Sound.Note(Dragonfly.Sound.Piano(), 12),
+                new Sound.MusicDiscPlay(Dragonfly.Sound.Disc13()),
+                new Sound.DecoratedPotInserted(0.5),
+                new Sound.EquipItem(new Dragonfly.Item.Sword(Dragonfly.Item.ToolTierDiamond)),
+                new Sound.BucketFill(new Block.Water(true, 8, false)),
+                new Sound.CrossbowLoad(1, true),
+                new Sound.GoatHorn(Dragonfly.Sound.Ponder()),
+            ];
+            foreach (var sound in sounds) tx.PlaySound(source.Position(), sound);
+            player.PlaySound(new Sound.LevelUp());
+            output.Printf("world_sounds={0}, player_sounds=1", sounds.Length);
         }
     }
 

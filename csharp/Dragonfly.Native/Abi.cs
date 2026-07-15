@@ -433,8 +433,8 @@ public unsafe struct HostApi
     public void* EntityNameTagSet;
     public delegate* unmanaged[Cdecl]<ulong, ulong, EntityId, int> EntityDespawn;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, Vec3, ParticleView*, int> WorldParticleAdd;
-    public void* WorldSoundPlay;
-    public void* PlayerSoundPlay;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, Vec3, SoundViewV1*, int> WorldSoundPlay;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, SoundViewV1*, int> PlayerSoundPlay;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, double, HealingSourceView*, PlayerHealResult*, int> PlayerHeal;
     public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, double, DamageSourceView*, PlayerHurtResult*, int> PlayerHurt;
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, SkinInfo*, int> SkinSnapshotInfo;

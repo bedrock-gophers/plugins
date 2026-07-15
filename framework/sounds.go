@@ -7,7 +7,7 @@ import (
 )
 
 func (m *WorldManager) PlayWorldSound(invocation native.InvocationID, id native.WorldID, position native.Vec3, value native.WorldSound) bool {
-	entry, ok := m.entryByHandle(id)
+	entry, ok := m.entryForInvocation(invocation, id)
 	if !ok || !finiteVec3(position) || !host.ValidSound(value) {
 		return false
 	}

@@ -59,3 +59,22 @@ func TestWorldSoundReportsSameTransactionDecodeFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestWorldSoundUsesInvocationWorld(t *testing.T) {
+	players := host.NewPlayers()
+	manager := newWorldManager("", nil, players)
+	w, err := manager.Create("example:sound-invocation", world.Config{Synchronous: true, Entities: entity.DefaultRegistry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.CloseCustom() })
+	if err := w.Do(func(tx *world.Tx) {
+		invocation, end := players.BeginInvocation(tx)
+		defer end()
+		if !manager.PlayWorldSound(invocation, 0, native.Vec3{Y: 64}, native.WorldSound{Kind: native.SoundExplosion}) {
+			t.Fatal("current transaction world sound rejected")
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}

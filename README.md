@@ -190,7 +190,7 @@ World callbacks now carry Dragonfly-shaped transactions. `Player.Context` inheri
 `World.Block`, `World.Liquid`, `World.Biome`, `World.SetOpts`, and the current `World.Tx` block and
 biome surface are generated from Dragonfly source. This includes `Range`, `Block`, `BlockLoaded`,
 `Liquid`, `SetLiquid`, `ScheduleBlockUpdate`, `HighestLightBlocker`, `HighestBlock`, `Light`, and
-`SkyLight`, `CurrentTick`, `AddParticle`, plus 118 concrete non-liquid block types covering 314
+`SkyLight`, `CurrentTick`, `AddParticle`, `PlaySound`, plus 118 concrete non-liquid block types covering 314
 canonical primitive-state registry entries, `Block.Water`, `Block.Lava`, all 88 registered vanilla
 biome types, and all 20 Dragonfly particle types with typed colours, blocks, faces, positions, and
 note instruments. Promoted Dragonfly fields remain visible, so crops use typed growth stages:
@@ -224,6 +224,8 @@ var handle = tx.RemoveEntity(entity);
 var moved = tx.AddEntityAt(handle, source.Position());
 tx.AddParticle(source.Position(), new Particle.Flame(new Color.RGBA(255, 96, 32, 255)));
 tx.AddParticle(source.Position(), new Particle.Note(Sound.Piano(), 12));
+tx.PlaySound(source.Position(), new Sound.Explosion());
+player.PlaySound(new Sound.LevelUp());
 ```
 
 `BlocksWithin`, `Entities`, `EntitiesWithin`, and `Players` stay lazy across the private ABI: each C# enumerator owns
@@ -325,9 +327,12 @@ callback-scoped player snapshots for form responses. Structurally valid form con
 exactly one response or drop callback, including synchronous send failures. World handles,
 capability descriptors, and ABI errors also remain private transport details.
 
-All 87 concrete `sound` package types are AST-generated under `Sound.*`. `HandleSound` receives
+All 87 concrete `sound` package types are AST-generated under `Sound.*`. `World.Tx.PlaySound` broadcasts
+at a position and `Player.PlaySound` targets one player for those concrete sounds. `HandleSound` receives
 their exact exported fields, including stateful blocks and bucket liquids, typed items,
 instruments, music discs, goat horns, crossbow stages, and scalar values.
+Custom implementations of Dragonfly's `Sound.Play` callback remain unsupported; `World.Sound` is
+currently limited to generated concrete values.
 
 The generated effect slice exposes all 28 registered Dragonfly effects, `Effect.Value`, the five
 constructors, value methods, colour mixing, registry lookup, and `Player.AddEffect`, `RemoveEffect`,
