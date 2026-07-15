@@ -1155,6 +1155,9 @@ public sealed class KitchenSink : Plugin
             var onFireDuration = player.OnFireDuration();
             var airSupply = player.AirSupply();
             var maxAirSupply = player.MaxAirSupply();
+            var experience = player.Experience();
+            var enchantmentSeed = player.EnchantmentSeed();
+            var canCollectExperience = player.CanCollectExperience();
 
             player.SetFood(food);
             player.SetMaxHealth(maxHealth);
@@ -1179,9 +1182,16 @@ public sealed class KitchenSink : Plugin
             if (onFireDuration > TimeSpan.Zero) player.SetOnFire(onFireDuration); else player.Extinguish();
             player.SetAirSupply(airSupply);
             player.SetMaxAirSupply(maxAirSupply);
+            player.AddFood(0);
+            player.Saturate(0, 0);
+            player.Exhaust(0);
+            player.ResetEnchantmentSeed();
+            var addedExperience = player.AddExperience(0);
+            player.RemoveExperience(0);
+            var collectedExperience = player.CollectExperience(0);
 
             output.Printf(
-                "food={0}, health={1}/{2}, experience={3}:{4}, scale={5}, invisible={6}, immobile={7}, speed={8}/{9}/{10}, physical={11}/{12}/{13}/{14}/{15}/{16}/{17}, activity={18}/{19}/{20}/{21}/{22}/{23}, fire={24}/{25}, air={26}/{27}",
+                "food={0}, health={1}/{2}, experience={3}:{4}, scale={5}, invisible={6}, immobile={7}, speed={8}/{9}/{10}, physical={11}/{12}/{13}/{14}/{15}/{16}/{17}, activity={18}/{19}/{20}/{21}/{22}/{23}, fire={24}/{25}, air={26}/{27}, xp={28}/{29}/{30}/{31}/{32}",
                 food,
                 health,
                 maxHealth,
@@ -1209,7 +1219,12 @@ public sealed class KitchenSink : Plugin
                 fireProof ? "true" : "false",
                 onFireDuration.TotalSeconds,
                 airSupply.TotalSeconds,
-                maxAirSupply.TotalSeconds);
+                maxAirSupply.TotalSeconds,
+                experience,
+                enchantmentSeed,
+                canCollectExperience ? "true" : "false",
+                addedExperience,
+                collectedExperience ? "true" : "false");
         }
     }
 
