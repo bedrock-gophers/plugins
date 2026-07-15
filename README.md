@@ -42,6 +42,7 @@ durations.
 `/kitchen item-actions` exercises exact `Player.Collect` and `Drop` with complete typed stacks.
 `/kitchen text chat ...` and `/kitchen text executecommand ...` exercise exact player chat and
 command execution.
+`/kitchen defer` exercises exact FIFO `World.Tx.Defer` and `DeferErr` callbacks.
 `/kitchen world` creates a custom-dimension in-memory world and a writable MCDB arena. It is safe
 to run repeatedly after entering the arena and only performs chunk-backed height reads while the
 command owns that arena's transaction.
