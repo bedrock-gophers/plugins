@@ -157,26 +157,35 @@ public sealed class PluginEntryGenerator : IIncrementalGenerator
         var declaration = (ClassDeclarationSyntax)context.Node;
         if (context.SemanticModel.GetDeclaredSymbol(declaration) is not INamedTypeSymbol type || type.IsAbstract)
             return null;
+        var derivesFromPlugin = false;
         for (var current = type.BaseType; current is not null; current = current.BaseType)
+        {
             if (current.ToDisplayString() == "Dragonfly.Plugin")
             {
-                ulong subscriptions = 0;
-                foreach (var method in type.GetMembers().OfType<IMethodSymbol>())
-                {
-                    if (!method.IsOverride) continue;
-                    foreach (var attribute in method.OverriddenMethod?.GetAttributes() ?? [])
-                    {
-                        if (attribute.AttributeClass?.ToDisplayString() != "Dragonfly.HandlerSubscriptionAttribute" ||
-                            attribute.ConstructorArguments.Length != 1 ||
-                            attribute.ConstructorArguments[0].Value is not ulong value) continue;
-                        subscriptions |= value;
-                    }
-                }
-                return new PluginInfo(
-                    type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                    subscriptions);
+                derivesFromPlugin = true;
+                break;
             }
-        return null;
+        }
+        if (!derivesFromPlugin) return null;
+
+        ulong subscriptions = 0;
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var method in current.GetMembers().OfType<IMethodSymbol>())
+            {
+                if (!method.IsOverride) continue;
+                foreach (var attribute in method.OverriddenMethod?.GetAttributes() ?? [])
+                {
+                    if (attribute.AttributeClass?.ToDisplayString() != "Dragonfly.HandlerSubscriptionAttribute" ||
+                        attribute.ConstructorArguments.Length != 1 ||
+                        attribute.ConstructorArguments[0].Value is not ulong value) continue;
+                    subscriptions |= value;
+                }
+            }
+        }
+        return new PluginInfo(
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            subscriptions);
     }
 
     private readonly struct PluginInfo(string type, ulong subscriptions)
