@@ -136,9 +136,9 @@ func TestCSharpKitchenWorldCommandCanRunInsideCreatedWorld(t *testing.T) {
 	}
 
 	var arena *world.World
-	for attempt := 1; attempt <= 2; attempt++ {
+	for attempt := 1; attempt <= 3; attempt++ {
 		expected := openedWorld
-		if attempt == 2 {
+		if attempt > 1 {
 			worlds.mu.RLock()
 			for _, entry := range worlds.worlds {
 				if entry.spec != nil && entry.spec.providerPath == "kitchen/arena" {
