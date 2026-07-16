@@ -69,7 +69,8 @@ public sealed class KitchenSink : Plugin
             new KitchenVisibility(),
             new KitchenEntityActions(),
             new KitchenItemActions(),
-            new KitchenDefer(this)));
+            new KitchenDefer(this),
+            new KitchenAnimation()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -1274,6 +1275,27 @@ public sealed class KitchenSink : Plugin
             foreach (var particle in particles)
                 tx.AddParticle(source.Position(), particle);
             output.Printf("particles={0}", particles.Length);
+        }
+    }
+
+    internal sealed class KitchenAnimation : Cmd.Runnable
+    {
+        public Cmd.SubCommand Animation;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player || tx is null)
+            {
+                output.Error("This command can only be used by a player in a world transaction.");
+                return;
+            }
+            var animation = World.NewEntityAnimation("animation.kitchen.wave")
+                .WithController("controller.animation.kitchen")
+                .WithNextState("default")
+                .WithStopCondition("query.is_on_ground");
+            tx.PlayEntityAnimation(player, animation);
+            output.Printf("animation={0}/{1}/{2}/{3}", animation.Name(), animation.Controller(),
+                animation.NextState(), animation.StopCondition());
         }
     }
 

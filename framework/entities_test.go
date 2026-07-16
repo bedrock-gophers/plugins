@@ -50,11 +50,25 @@ func TestWorldManagerEntityLifecycleUsesExactTransaction(t *testing.T) {
 		if !ok || state.Position != (native.Vec3{X: 4, Y: 70, Z: 5}) || state.Velocity.Y != 0.5 || state.NameTag != "renamed" {
 			t.Fatalf("mutated state = %#v, %v", state, ok)
 		}
+		animation := native.WorldEntityAnimation{
+			Name: "animation.kitchen.wave", NextState: "default", Controller: "controller.animation.kitchen", StopCondition: "query.is_on_ground",
+		}
+		if !manager.PlayEntityAnimation(invocation, id, animation) {
+			t.Fatal("entity animation failed")
+		}
+		mapped := entityAnimation(animation)
+		if mapped.Name() != animation.Name || mapped.NextState() != animation.NextState ||
+			mapped.Controller() != animation.Controller || mapped.StopCondition() != animation.StopCondition {
+			t.Fatalf("mapped entity animation = %#v", mapped)
+		}
 	}).Wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if manager.SetEntityNameTag(staleInvocation, spawned, "late") {
 		t.Fatal("expired invocation mutated an entity")
+	}
+	if manager.PlayEntityAnimation(staleInvocation, spawned, native.WorldEntityAnimation{Name: "late"}) {
+		t.Fatal("expired invocation played an entity animation")
 	}
 	if !manager.DespawnEntity(0, spawned) {
 		t.Fatal("off-callback despawn failed")

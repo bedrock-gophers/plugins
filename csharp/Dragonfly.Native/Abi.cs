@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static partial class Abi
 {
     public const uint PluginVersion = 12;
-    public const uint HostVersion = 67;
+    public const uint HostVersion = 68;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerCooldownHas = 0;
@@ -544,6 +544,16 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, ulong, ulong, uint, int> WorldTxDefer;
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, int, uint, int*, int> WorldRedstonePower;
     public delegate* unmanaged[Cdecl]<ulong, ulong, BlockPos, uint, byte*, byte*, int> WorldRedstoneTransaction;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, EntityId, EntityAnimationView*, int> WorldEntityAnimation;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct EntityAnimationView
+{
+    public StringView Name;
+    public StringView NextState;
+    public StringView Controller;
+    public StringView StopCondition;
 }
 
 [StructLayout(LayoutKind.Sequential)]

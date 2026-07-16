@@ -241,10 +241,12 @@ World callbacks now carry Dragonfly-shaped transactions. `Player.Context` inheri
 biome surface are generated from Dragonfly source. This includes `Range`, `Block`, `BlockLoaded`,
 `Liquid`, `SetLiquid`, `ScheduleBlockUpdate`, `HighestLightBlocker`, `HighestBlock`, `Light`, and
 `SkyLight`, all seven redstone power queries, transaction-scoped `RedstoneTransaction` and
-`RedstoneTorchTransaction`, `Event`, `CurrentTick`, `AddParticle`, `PlaySound`, plus 118 concrete non-liquid block types covering 314
+`RedstoneTorchTransaction`, `Event`, `CurrentTick`, `AddParticle`, `PlayEntityAnimation`, `PlaySound`, plus 118 concrete non-liquid block types covering 314
 canonical primitive-state registry entries, `Block.Water`, `Block.Lava`, all 88 registered vanilla
 biome types, and all 20 Dragonfly particle types with typed colours, blocks, faces, positions, and
-note instruments. Promoted Dragonfly fields remain visible, so crops use typed growth stages:
+note instruments. `World.NewEntityAnimation` and `World.EntityAnimation` are AST-generated too;
+controller, next-state, and stop-condition modifiers preserve Go's immutable value semantics before
+transaction-scoped playback. Promoted Dragonfly fields remain visible, so crops use typed growth stages:
 
 ```csharp
 var pos = Cube.PosFromVec3(source.Position()).Side(Cube.Face.Down);

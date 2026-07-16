@@ -510,6 +510,7 @@ var selectedWorldTxMethods = []string{
 	"Thundering",
 	"CurrentTick",
 	"AddParticle",
+	"PlayEntityAnimation",
 	"PlaySound",
 	"AddEntity",
 	"AddEntityAt",
@@ -765,6 +766,10 @@ func main() {
 		fatal(err)
 	}
 	redstoneTransactions, err := inspectRedstoneTransactions(filepath.Join(directory, "server", "world", "tx_redstone.go"))
+	if err != nil {
+		fatal(err)
+	}
+	entityAnimation, err := inspectEntityAnimation(filepath.Join(directory, "server", "world", "entity_animation.go"))
 	if err != nil {
 		fatal(err)
 	}
@@ -1068,6 +1073,10 @@ func main() {
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.Block.g.cs"),
 			Content: generateWorldBlock(setOpts, worldTx, redstoneTransactions),
+		},
+		{
+			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "World.EntityAnimation.g.cs"),
+			Content: generateEntityAnimation(entityAnimation),
 		},
 		{
 			Path:    filepath.Join(*root, "csharp", "Dragonfly", "Generated", "Block.Types.g.cs"),
@@ -1965,6 +1974,9 @@ func validateWorldTxMethod(method commandMethod) error {
 		"PlaySound": {Name: "PlaySound", ReturnType: "void", Parameters: []parameter{
 			{Name: "pos", Type: "Vector3"}, {Name: "s", Type: "Sound"},
 		}},
+		"PlayEntityAnimation": {Name: "PlayEntityAnimation", ReturnType: "void", Parameters: []parameter{
+			{Name: "e", Type: "Entity"}, {Name: "a", Type: "EntityAnimation"},
+		}},
 		"AddEntity": {Name: "AddEntity", ReturnType: "Entity", Parameters: []parameter{
 			{Name: "e", Type: "EntityHandle"},
 		}},
@@ -2097,6 +2109,7 @@ func worldTxCSharpType(expression ast.Expr, parameter bool) (string, bool) {
 			"Biome":                    "Biome",
 			"Context":                  "Context",
 			"Entity":                   "Entity",
+			"EntityAnimation":          "EntityAnimation",
 			"EntityHandle":             "EntityHandle",
 			"Liquid":                   "Liquid",
 			"Particle":                 "Particle",
@@ -5595,6 +5608,9 @@ func generateWorldBlock(setOpts []string, methods []commandMethod, redstone reds
 				method.Parameters[0].Name, method.Parameters[1].Name)
 		case "PlaySound":
 			fmt.Fprintf(&output, "            PluginBridge.Host.PlayWorldSound(Invocation, %s, %s);\n",
+				method.Parameters[0].Name, method.Parameters[1].Name)
+		case "PlayEntityAnimation":
+			fmt.Fprintf(&output, "            PluginBridge.Host.PlayEntityAnimation(Invocation, %s, %s);\n",
 				method.Parameters[0].Name, method.Parameters[1].Name)
 		case "AddEntity":
 			fmt.Fprintf(&output, "            PluginBridge.Host.TransactionAddEntity(Invocation, %s);\n", method.Parameters[0].Name)

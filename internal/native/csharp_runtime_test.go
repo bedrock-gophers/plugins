@@ -413,6 +413,47 @@ func TestCSharpPlayerPresentationMethods(t *testing.T) {
 	}
 }
 
+func TestCSharpEntityAnimation(t *testing.T) {
+	host := &csharpWorldHost{recordingHost: &recordingHost{}}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	var overload uint64
+	found := false
+	for index, candidate := range kitchen.Overloads {
+		if len(candidate.Parameters) == 1 && candidate.Parameters[0].Name == "animation" {
+			overload, found = uint64(index), true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("animation overload missing: %#v", kitchen.Overloads)
+	}
+	player := PlayerID{UUID: [16]byte{7, 8, 9}, Generation: 6}
+	output, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: 42, Source: "Danick", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		Overload: overload, Arguments: []string{"animation"},
+		OnlinePlayers: []CommandPlayer{{Player: player, Name: "Danick"}},
+	})
+	if err != nil || output.Failed || output.Message != "animation=animation.kitchen.wave/controller.animation.kitchen/default/query.is_on_ground" {
+		t.Fatalf("animation output=%#v error=%v", output, err)
+	}
+	want := csharpWorldEntityAnimationCall{
+		invocation: 42,
+		entity:     EntityID{UUID: player.UUID, Generation: player.Generation},
+		animation: WorldEntityAnimation{
+			Name: "animation.kitchen.wave", NextState: "default",
+			Controller: "controller.animation.kitchen", StopCondition: "query.is_on_ground",
+		},
+	}
+	if len(host.entityAnimationCalls) != 1 || host.entityAnimationCalls[0] != want {
+		t.Fatalf("entity animation calls=%+v, want %+v", host.entityAnimationCalls, want)
+	}
+}
+
 func TestCSharpPlayerCooldownMethods(t *testing.T) {
 	host := &recordingHost{cooldownActive: true}
 	pluginRuntime := openCSharpRuntimeWithHost(t, host)
@@ -838,6 +879,7 @@ type csharpWorldHost struct {
 	redstonePower              [7]int32
 	redstonePowerCalls         []csharpWorldRedstoneCall
 	redstoneTransactionCalls   []csharpWorldRedstoneTransactionCall
+	entityAnimationCalls       []csharpWorldEntityAnimationCall
 	worldQueryOperations       []string
 	worldLiquid                WorldBlock
 	worldLiquidOK              bool
@@ -919,6 +961,12 @@ type csharpWorldRedstoneTransactionCall struct {
 	invocation InvocationID
 	position   BlockPos
 	kind       WorldRedstoneTransactionKind
+}
+
+type csharpWorldEntityAnimationCall struct {
+	invocation InvocationID
+	entity     EntityID
+	animation  WorldEntityAnimation
 }
 
 type csharpWorldLiquidSetCall struct {
@@ -1289,6 +1337,13 @@ func (h *csharpWorldHost) AddWorldParticle(invocation InvocationID, world WorldI
 	return true
 }
 
+func (h *csharpWorldHost) PlayEntityAnimation(invocation InvocationID, entity EntityID, animation WorldEntityAnimation) bool {
+	h.entityAnimationCalls = append(h.entityAnimationCalls, csharpWorldEntityAnimationCall{
+		invocation: invocation, entity: entity, animation: animation,
+	})
+	return true
+}
+
 func (h *csharpWorldHost) PlayWorldSound(invocation InvocationID, world WorldID, position Vec3, sound WorldSound) bool {
 	if sound.Callback != nil {
 		h.customSounds++
@@ -1344,7 +1399,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 38 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 39 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||

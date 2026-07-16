@@ -463,6 +463,26 @@ func (m *WorldManager) DespawnEntity(invocation native.InvocationID, id native.E
 	return m.mutateEntity(invocation, id, func(current world.Entity) { _ = current.Close() })
 }
 
+func (m *WorldManager) PlayEntityAnimation(invocation native.InvocationID, id native.EntityID, value native.WorldEntityAnimation) bool {
+	tx, ok := m.invocationTx(invocation)
+	if !ok {
+		return false
+	}
+	entity, ok := m.entityHandles.Resolve(id, tx)
+	if !ok {
+		return false
+	}
+	tx.PlayEntityAnimation(entity, entityAnimation(value))
+	return true
+}
+
+func entityAnimation(value native.WorldEntityAnimation) world.EntityAnimation {
+	return world.NewEntityAnimation(value.Name).
+		WithController(value.Controller).
+		WithNextState(value.NextState).
+		WithStopCondition(value.StopCondition)
+}
+
 func (m *WorldManager) mutateEntity(invocation native.InvocationID, id native.EntityID, mutate func(world.Entity)) bool {
 	handle, ok := m.entityHandles.Handle(id)
 	if !ok {

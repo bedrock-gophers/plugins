@@ -907,6 +907,35 @@ internal static unsafe class PluginBridge
             return CurrentState?.Entities.CanonicalHandle(detached) ?? detached;
         }
 
+        internal static void PlayEntityAnimation(
+            ulong invocation,
+            World.Entity entity,
+            World.EntityAnimation animation)
+        {
+            ArgumentNullException.ThrowIfNull(entity);
+            var api = Api;
+            if (api is null || api->WorldEntityAnimation == null ||
+                !TryEntityId(invocation, entity, out var entityId)) return;
+            var name = Encoding.UTF8.GetBytes(animation.Name());
+            var nextState = Encoding.UTF8.GetBytes(animation.NextState());
+            var controller = Encoding.UTF8.GetBytes(animation.Controller());
+            var stopCondition = Encoding.UTF8.GetBytes(animation.StopCondition());
+            fixed (byte* nameData = name)
+            fixed (byte* nextStateData = nextState)
+            fixed (byte* controllerData = controller)
+            fixed (byte* stopConditionData = stopCondition)
+            {
+                var view = new EntityAnimationView
+                {
+                    Name = new StringView { Data = nameData, Length = (ulong)name.Length },
+                    NextState = new StringView { Data = nextStateData, Length = (ulong)nextState.Length },
+                    Controller = new StringView { Data = controllerData, Length = (ulong)controller.Length },
+                    StopCondition = new StringView { Data = stopConditionData, Length = (ulong)stopCondition.Length },
+                };
+                _ = api->WorldEntityAnimation(api->Context, invocation, entityId, &view);
+            }
+        }
+
         internal static World NewWorld(World.Config config)
         {
             ArgumentNullException.ThrowIfNull(config);

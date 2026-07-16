@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 12u
-// Host version 67 adds exact transaction-scoped redstone engine operations.
-#define DF_HOST_ABI_VERSION 67u
+// Host version 68 adds exact transaction-scoped entity animation playback.
+#define DF_HOST_ABI_VERSION 68u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -518,6 +518,13 @@ typedef DfStatus (*DfHostEntityHandleClosedFn)(uint64_t context, DfEntityHandleI
 typedef DfStatus (*DfHostEntityHandleCloseFn)(uint64_t context, DfEntityHandleId handle);
 typedef DfStatus (*DfHostWorldEntityRemoveFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, DfEntityHandleId *handle);
 typedef DfStatus (*DfHostWorldEntityAddFn)(uint64_t context, DfInvocationId invocation, DfEntityHandleId handle, const DfVec3 *position, DfEntityId *entity);
+typedef struct {
+    DfStringView name;
+    DfStringView next_state;
+    DfStringView controller;
+    DfStringView stop_condition;
+} DfEntityAnimationView;
+typedef DfStatus (*DfHostWorldEntityAnimationFn)(uint64_t context, DfInvocationId invocation, DfEntityId entity, const DfEntityAnimationView *animation);
 typedef DfStatus (*DfHostEntityNewFn)(uint64_t context, const DfEntityNewView *entity, DfEntityHandleId *handle);
 typedef DfStatus (*DfHostEntityHandleTypeFn)(uint64_t context, DfEntityHandleId handle, DfStringBuffer *entity_type);
 typedef struct {
@@ -683,6 +690,7 @@ typedef struct {
     DfHostWorldTxDeferFn world_tx_defer;
     DfHostWorldRedstonePowerFn world_redstone_power;
     DfHostWorldRedstoneTransactionFn world_redstone_transaction;
+    DfHostWorldEntityAnimationFn world_entity_animation;
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u

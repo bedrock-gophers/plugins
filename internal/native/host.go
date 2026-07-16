@@ -193,6 +193,13 @@ type WorldBlock struct {
 	PropertiesNBT []byte
 }
 
+type WorldEntityAnimation struct {
+	Name          string
+	NextState     string
+	Controller    string
+	StopCondition string
+}
+
 type BlockRange struct {
 	Min int32
 	Max int32
@@ -577,6 +584,7 @@ type Host interface {
 	SetEntityVelocity(InvocationID, EntityID, Vec3) bool
 	SetEntityNameTag(InvocationID, EntityID, string) bool
 	DespawnEntity(InvocationID, EntityID) bool
+	PlayEntityAnimation(InvocationID, EntityID, WorldEntityAnimation) bool
 	AddWorldParticle(InvocationID, WorldID, Vec3, WorldParticle) bool
 	PlayWorldSound(InvocationID, WorldID, Vec3, WorldSound) bool
 	PlayPlayerSound(InvocationID, PlayerID, WorldSound) bool
@@ -820,6 +828,9 @@ func (noopHost) TeleportEntity(InvocationID, EntityID, Vec3) bool     { return f
 func (noopHost) SetEntityVelocity(InvocationID, EntityID, Vec3) bool  { return false }
 func (noopHost) SetEntityNameTag(InvocationID, EntityID, string) bool { return false }
 func (noopHost) DespawnEntity(InvocationID, EntityID) bool            { return false }
+func (noopHost) PlayEntityAnimation(InvocationID, EntityID, WorldEntityAnimation) bool {
+	return false
+}
 func (noopHost) AddWorldParticle(InvocationID, WorldID, Vec3, WorldParticle) bool {
 	return false
 }

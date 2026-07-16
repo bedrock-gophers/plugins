@@ -291,6 +291,9 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    Host ABI 67 appends one private operation for the exact AST-generated `RedstoneTransaction` and
    `RedstoneTorchTransaction` surface: scheduled updates, burnout state, turn-off recording, and
    self-trigger tracking. Both public wrappers remain transaction-scoped and expose no transport IDs.
+   Host ABI 68 appends exact AST-generated `World.EntityAnimation` construction, accessors, immutable
+   modifiers, and `World.Tx.PlayEntityAnimation`. Playback resolves the existing transaction entity;
+   animation strings cross one private view and no public handle or transport status leaks.
    The AST-generated `Scoreboard` class mirrors Dragonfly's mutable name, write, set/remove,
    padding, line-copy, and descending-order behavior. `Player.SendScoreboard` activates the
    existing private transport with raw lines so the Go host applies padding and ordering once.
@@ -369,6 +372,8 @@ temperature and weather query in this slice.
 `/kitchen tick` reads Dragonfly's transaction-owned current tick; it does not alias world day-time.
 `/kitchen entities` exercises `Entities`, `Players`, and a strict-position `EntitiesWithin` query
 using an AST-generated `Cube.BBox` around the command source.
+`/kitchen animation` constructs every `EntityAnimation` field through the exact immutable API and
+plays it on the command source through the current transaction.
 `/kitchen handle` resolves a live non-player handle, checks its UUID and transaction lookup,
 removes it, proves the worldless lookup fails, then re-adds it at the command source while preserving
 handle identity.
