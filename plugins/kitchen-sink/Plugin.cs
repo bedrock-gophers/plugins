@@ -742,10 +742,6 @@ public sealed class KitchenSink : Plugin
             var inArena = arena.Equals(current);
             var spawn = arena.Spawn();
             var range = arena.Range();
-            // Height reads require the world's live transaction. A command may
-            // inspect an arena before moving its source there, so only perform
-            // this transaction-bound read when the source is already inside.
-            var highestLightBlocker = inArena ? arena.HighestLightBlocker(spawn.X(), spawn.Z()) : -1;
             var time = arena.Time();
             var dimension = arena.Dimension();
             var timeCycle = arena.TimeCycle();
@@ -768,9 +764,9 @@ public sealed class KitchenSink : Plugin
             if (!inArena) player.ChangeWorld(arena, spawn.Vec3Middle());
             output.Printf(
                 "memory={0}, persistent={1}, spawn={2},{3},{4}, range={5}..{6}, " +
-                "highest_light_blocker={7}, time={8}, overworld={9}, cycle={10}, difficulty={11}, player_spawn={12}, custom={13}",
+                "time={7}, overworld={8}, cycle={9}, difficulty={10}, player_spawn={11}, custom={12}",
                 memory.Name(), arena.Name(), spawn.X(), spawn.Y(), spawn.Z(),
-                range.Min(), range.Max(), highestLightBlocker, time,
+                range.Min(), range.Max(), time,
                 dimension.Equals(Dragonfly.World.Overworld) ? "true" : "false",
                 arena.TimeCycle() == timeCycle ? "true" : "false",
                 customDifficulty.FoodRegenerates() && customDifficulty.StarvationHealthLimit() == 7.5 &&
