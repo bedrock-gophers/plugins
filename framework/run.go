@@ -50,6 +50,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	}
 	players := host.NewPlayers()
 	packets := host.NewPackets(players)
+	menus := host.NewInventoryMenus(players)
 	serverHost := host.NewServer(players)
 	worlds, err := NewPersistentWorldManager(config.Worlds.Directory, log, players)
 	if err != nil {
@@ -59,8 +60,9 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		*host.Players
 		*host.Server
 		*host.Packets
+		*host.InventoryMenus
 		*WorldManager
-	}{players, serverHost, packets, worlds})
+	}{players, serverHost, packets, menus, worlds})
 	if err != nil {
 		return err
 	}
@@ -147,7 +149,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if err := host.RegisterCommands(pluginRuntime, players); err != nil {
 		return err
 	}
-	packetLease, err = activatePacketIntercept(srv, nativePacketEndpoint{runtime: pluginRuntime, packets: packets, log: log})
+	packetLease, err = activatePacketIntercept(srv, nativePacketEndpoint{runtime: pluginRuntime, packets: packets, menus: menus, log: log})
 	if err != nil {
 		return err
 	}
@@ -172,7 +174,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	var generation atomic.Uint64
 	for p := range srv.Accept() {
 		players.Register(p, generation.Add(1))
-		handler := host.NewPlayerHandler(pluginRuntime, log, players, worlds)
+		handler := host.NewPlayerHandler(pluginRuntime, log, players, worlds, menus)
 		p.Handle(handler)
 		if handler.Join(p) {
 			p.Disconnect("Connection rejected by a plugin.")

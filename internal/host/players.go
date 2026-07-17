@@ -131,6 +131,7 @@ func (p *Players) UnregisterHandle(handle *world.EntityHandle) {
 	if registered {
 		p.entities.unregisterHandle(handle)
 		native.CancelPlayerForms(id)
+		native.CancelPlayerInventoryMenus(id)
 	}
 }
 

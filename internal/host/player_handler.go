@@ -175,15 +175,20 @@ type PlayerHandler struct {
 	log     *slog.Logger
 	players *Players
 	worlds  playerWorldResolver
+	menus   *InventoryMenus
 }
 
 var _ player.Handler = (*PlayerHandler)(nil)
 
-func NewPlayerHandler(runtime playerRuntime, log *slog.Logger, players *Players, worlds playerWorldResolver) *PlayerHandler {
+func NewPlayerHandler(runtime playerRuntime, log *slog.Logger, players *Players, worlds playerWorldResolver, inventoryMenus ...*InventoryMenus) *PlayerHandler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &PlayerHandler{runtime: runtime, log: log, players: players, worlds: worlds}
+	var menus *InventoryMenus
+	if len(inventoryMenus) != 0 {
+		menus = inventoryMenus[0]
+	}
+	return &PlayerHandler{runtime: runtime, log: log, players: players, worlds: worlds, menus: menus}
 }
 
 func (h *PlayerHandler) HandleChangeWorld(p *player.Player, before, after *world.World) {
@@ -1143,6 +1148,9 @@ func (h *PlayerHandler) Join(p *player.Player) bool {
 }
 
 func (h *PlayerHandler) HandleQuit(p *player.Player) {
+	if h.menus != nil {
+		h.menus.Disconnect(p.Tx(), p)
+	}
 	if h.runtime.Subscriptions()&native.PlayerQuitSubscription != 0 {
 		invocation, leave := h.players.BeginInvocation(p.Tx())
 		defer leave()
