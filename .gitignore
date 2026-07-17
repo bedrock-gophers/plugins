@@ -7,3 +7,7 @@
 /plugins/*.so
 /plugins/*.dylib
 /plugins/*.dll
+
+# Local NativeAOT build and staging outputs.
+/build/
+/examples/
