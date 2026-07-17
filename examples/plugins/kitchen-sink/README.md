@@ -56,6 +56,8 @@ Runnable parity showcase. Its single plugin class demonstrates:
   main/ender-chest inventories, armour slots, and held items in `/kitchen item`;
 - the full reflected form API in `/kitchen form`: menu, custom, and modal callbacks; every
   element type; URL and resource-pack button images; tooltips; closers; and submitted values;
+- real client-side inventory menus in `/kitchen inv`, including typed item selection and close
+  callbacks through chest-style fake block containers;
 - open `Form.Value`, `Element.MarshalJSON`, and `MenuElement.MarshalJSON` implementations in
   `/kitchen raw-form`;
 - all 28 registered effect types, constructors, value methods, potion/stew effect lists, and a

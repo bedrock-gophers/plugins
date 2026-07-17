@@ -2121,6 +2121,138 @@ internal static unsafe class PluginBridge
             internal Form.Value Form { get; } = form;
         }
 
+        internal static void SendPlayerInventoryMenu(ulong invocation, PlayerId player, Inv.Menu menu, bool update)
+        {
+            var api = Api;
+            if (api is null || api->PlayerInventoryMenuSend == null) return;
+            var stacks = menu.Stacks;
+            var leases = new ItemViewLease[stacks.Length];
+            try
+            {
+                for (var index = 0; index < stacks.Length; index++) leases[index] = new ItemViewLease(stacks[index]);
+                var name = Encoding.UTF8.GetBytes(menu.Name);
+                if (name.Length > 4096) throw new ArgumentException("inventory menu name exceeds server limits", nameof(menu));
+                var handle = GCHandle.Alloc(new PendingInventoryMenu(menu));
+                var transferred = false;
+                try
+                {
+                    ItemStackViewV3* itemViews = stackalloc ItemStackViewV3[stacks.Length];
+                    for (var index = 0; index < stacks.Length; index++) itemViews[index] = leases[index].View;
+                    fixed (byte* nameData = name)
+                    {
+                        var view = new InventoryMenuView
+                        {
+                            Name = new StringView { Data = nameData, Length = (ulong)name.Length },
+                            Container = (uint)menu.Container,
+                            Items = itemViews,
+                            ItemCount = (ulong)stacks.Length,
+                            CallbackContext = (void*)GCHandle.ToIntPtr(handle),
+                            Submit = &InventoryMenuSubmit,
+                            Close = &InventoryMenuClose,
+                            Drop = &InventoryMenuDrop,
+                        };
+                        // A structurally valid view transfers callback-context ownership even on error.
+                        transferred = true;
+                        _ = api->PlayerInventoryMenuSend(api->Context, invocation, player, update ? (byte)1 : (byte)0, &view);
+                    }
+                }
+                finally
+                {
+                    if (!transferred) handle.Free();
+                }
+            }
+            finally
+            {
+                foreach (var lease in leases) lease?.Dispose();
+            }
+        }
+
+        internal static void ClosePlayerInventoryMenu(ulong invocation, PlayerId player)
+        {
+            var api = Api;
+            if (api is null || api->PlayerInventoryMenuClose == null) return;
+            _ = api->PlayerInventoryMenuClose(api->Context, invocation, player);
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static int InventoryMenuSubmit(
+            void* callbackContext,
+            ulong invocation,
+            PlayerSnapshot* snapshot,
+            ItemStackViewV3* item)
+        {
+            try
+            {
+                var pending = PeekPendingInventoryMenu(callbackContext);
+                if (pending is null || snapshot is null || item is null) return Abi.Error;
+                using var invocationScope = InvocationContext.Enter(invocation);
+                var submitter = InventoryMenuPlayer(invocation, snapshot);
+                pending.Menu.Submittable.Submit(submitter, EventItem(*item), new World.Tx(invocation));
+                return Abi.Ok;
+            }
+            catch
+            {
+                return Abi.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static int InventoryMenuClose(void* callbackContext, ulong invocation, PlayerSnapshot* snapshot)
+        {
+            try
+            {
+                var pending = TakePendingInventoryMenu(callbackContext);
+                if (pending is null || snapshot is null) return Abi.Error;
+                using var invocationScope = InvocationContext.Enter(invocation);
+                var connected = InventoryMenuPlayer(invocation, snapshot);
+                if (pending.Menu.Submittable is Inv.Closer closer)
+                    closer.Close(connected, new World.Tx(invocation));
+                return Abi.Ok;
+            }
+            catch
+            {
+                return Abi.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static void InventoryMenuDrop(void* callbackContext)
+        {
+            try { _ = TakePendingInventoryMenu(callbackContext); }
+            catch { }
+        }
+
+        private static Player InventoryMenuPlayer(ulong invocation, PlayerSnapshot* snapshot)
+        {
+            var latency = Math.Min((double)snapshot->LatencyMilliseconds, TimeSpan.MaxValue.TotalMilliseconds);
+            return new Player(
+                snapshot->Player,
+                Utf8(snapshot->Name),
+                TimeSpan.FromMilliseconds(latency),
+                new Vector3(snapshot->Position.X, snapshot->Position.Y, snapshot->Position.Z),
+                invocation: invocation);
+        }
+
+        private static PendingInventoryMenu? PeekPendingInventoryMenu(void* callbackContext)
+        {
+            if (callbackContext is null) return null;
+            return GCHandle.FromIntPtr((nint)callbackContext).Target as PendingInventoryMenu;
+        }
+
+        private static PendingInventoryMenu? TakePendingInventoryMenu(void* callbackContext)
+        {
+            if (callbackContext is null) return null;
+            var handle = GCHandle.FromIntPtr((nint)callbackContext);
+            var pending = handle.Target as PendingInventoryMenu;
+            handle.Free();
+            return pending;
+        }
+
+        private sealed class PendingInventoryMenu(Inv.Menu menu)
+        {
+            internal Inv.Menu Menu { get; } = menu;
+        }
+
         internal static World.Block WorldBlock(ulong invocation, Cube.Pos position)
         {
             var api = Api;

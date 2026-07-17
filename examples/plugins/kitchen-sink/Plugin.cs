@@ -70,7 +70,8 @@ public sealed class KitchenSink : Plugin
             new KitchenEntityActions(),
             new KitchenItemActions(),
             new KitchenDefer(this),
-            new KitchenAnimation()));
+            new KitchenAnimation(),
+            new KitchenInv()));
         Console.WriteLine("kitchen-sink enabled");
     }
 
@@ -2048,6 +2049,47 @@ public sealed class KitchenSink : Plugin
             }
             player.SendForm(KitchenMenu.Create());
         }
+    }
+
+    internal sealed class KitchenInv : Cmd.Runnable
+    {
+        public Cmd.SubCommand Inv;
+
+        public void Run(Cmd.Source source, Cmd.Output output, World.Tx? tx)
+        {
+            if (source is not Player player)
+            {
+                output.Error("This command can only be used by a player.");
+                return;
+            }
+            var handler = new KitchenInventoryMenu();
+            var menu = Dragonfly.Inv.NewMenu(handler, "Kitchen inventory", Dragonfly.Inv.Container.Chest)
+                .WithStacks(
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Apple(), 1).WithCustomName("Choose apple"),
+                    Dragonfly.Item.NewStack(new Dragonfly.Item.Diamond(), 1).WithCustomName("Choose diamond"));
+            Dragonfly.Inv.SendMenu(player, menu);
+        }
+    }
+
+    private sealed class KitchenInventoryMenu : Dragonfly.Inv.Submittable, Dragonfly.Inv.Closer
+    {
+        private bool _selected;
+
+        public void Submit(Player player, Item.Stack item, World.Tx tx)
+        {
+            if (!_selected)
+            {
+                _selected = true;
+                player.Message($"Inventory menu selected {item.CustomName()} ({item.Count()}).");
+                var updated = Dragonfly.Inv.NewMenu(this, "Kitchen selection", Dragonfly.Inv.Container.Chest)
+                    .WithStack(0, item.WithCustomName("Select again to close"));
+                Dragonfly.Inv.UpdateMenu(player, updated);
+                return;
+            }
+            Dragonfly.Inv.CloseContainer(player);
+        }
+
+        public void Close(Player player, World.Tx tx) => player.Message("Kitchen inventory menu closed.");
     }
 
     internal sealed class KitchenRawFormCommand : Cmd.Runnable

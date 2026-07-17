@@ -33,6 +33,7 @@ type Players struct {
 	invocations    map[native.InvocationID]*world.Tx
 	invocationEnds map[native.InvocationID][]func()
 	nextInvocation native.InvocationID
+	inventoryMenus *InventoryMenus
 }
 
 type playerEntry struct {
@@ -118,6 +119,12 @@ func (p *Players) UnregisterHandle(handle *world.EntityHandle) {
 	if handle == nil {
 		return
 	}
+	p.mu.RLock()
+	menus := p.inventoryMenus
+	p.mu.RUnlock()
+	if menus != nil {
+		menus.disconnectHandle(handle)
+	}
 	p.mu.Lock()
 	var id native.PlayerID
 	var registered bool
@@ -132,6 +139,12 @@ func (p *Players) UnregisterHandle(handle *world.EntityHandle) {
 		p.entities.unregisterHandle(handle)
 		native.CancelPlayerForms(id)
 	}
+}
+
+func (p *Players) attachInventoryMenus(menus *InventoryMenus) {
+	p.mu.Lock()
+	p.inventoryMenus = menus
+	p.mu.Unlock()
 }
 
 // recordWorldDeparture retains the source world handle until Dragonfly emits
@@ -188,6 +201,38 @@ func (p *Players) SendPlayerForm(invocation native.InvocationID, id native.Playe
 
 func (p *Players) ClosePlayerForm(invocation native.InvocationID, id native.PlayerID) bool {
 	return p.mutatePlayer(invocation, id, func(connected *player.Player) { connected.CloseForm() })
+}
+
+func (p *Players) SendPlayerInventoryMenu(invocation native.InvocationID, id native.PlayerID, value native.PlayerInventoryMenu) bool {
+	p.mu.RLock()
+	menus := p.inventoryMenus
+	p.mu.RUnlock()
+	return menus != nil && menus.SendPlayerInventoryMenu(invocation, id, value)
+}
+
+func (p *Players) ClosePlayerInventoryMenu(invocation native.InvocationID, id native.PlayerID) bool {
+	p.mu.RLock()
+	menus := p.inventoryMenus
+	p.mu.RUnlock()
+	return menus != nil && menus.ClosePlayerInventoryMenu(invocation, id)
+}
+
+func (p *Players) DiscardPlayerInventoryMenu(id native.PlayerID, menuID uint64) bool {
+	p.mu.RLock()
+	menus := p.inventoryMenus
+	p.mu.RUnlock()
+	return menus != nil && menus.DiscardPlayerInventoryMenu(id, menuID)
+}
+
+// DiscardPlayerInventoryMenus removes host-owned menu state during native
+// runtime draining without dispatching close callbacks into disabling plugins.
+func (p *Players) DiscardPlayerInventoryMenus() {
+	p.mu.RLock()
+	menus := p.inventoryMenus
+	p.mu.RUnlock()
+	if menus != nil {
+		menus.discardAll()
+	}
 }
 
 func (p *Players) ID(player *player.Player) (native.PlayerID, bool) {

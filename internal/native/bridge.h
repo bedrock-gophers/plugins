@@ -6,6 +6,9 @@
 typedef struct BgRuntimeLibrary BgRuntimeLibrary;
 DfStatus bg_call_form_response(DfFormResponseFn callback, void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *submitter, uint32_t outcome, DfStringView response_json);
 void bg_call_form_drop(DfFormDropFn callback, void *callback_context);
+DfStatus bg_call_inventory_menu_submit(DfInventoryMenuSubmitFn callback, void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *submitter, const DfItemStackViewV3 *item);
+DfStatus bg_call_inventory_menu_close(DfInventoryMenuCloseFn callback, void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *player);
+void bg_call_inventory_menu_drop(DfInventoryMenuDropFn callback, void *callback_context);
 void bg_call_item_stack_views_drop(DfItemStackViewsDropFn callback, void *context);
 DfStatus bg_call_world_sound(uintptr_t callback, uintptr_t context, DfWorldId world, DfVec3 position);
 

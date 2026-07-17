@@ -294,6 +294,10 @@ The ABI is transport, not the API. C# names, interfaces, constructors, and behav
    Host ABI 68 appends exact AST-generated `World.EntityAnimation` construction, accessors, immutable
    modifiers, and `World.Tx.PlayEntityAnimation`. Playback resolves the existing transaction entity;
    animation strings cross one private view and no public handle or transport status leaks.
+   Host ABI 69 appends run-owned client-side inventory menus. Full typed item stacks cross one owned
+   menu view; submit is repeatable, while close/drop is exactly-once and drains before NativeAOT
+   teardown. The Go host owns fake blocks, session windows, packet normalisation, and disconnect
+   cleanup, so C# exposes no session, packet, container, or transport IDs.
    The AST-generated `Scoreboard` class mirrors Dragonfly's mutable name, write, set/remove,
    padding, line-copy, and descending-order behavior. `Player.SendScoreboard` activates the
    existing private transport with raw lines so the Go host applies padding and ordering once.

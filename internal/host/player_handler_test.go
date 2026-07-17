@@ -71,6 +71,7 @@ type runtimeStub struct {
 	diagnosticsErr      error
 	diagnosticsTx       *world.World
 	players             *Players
+	cancelledMenuPlayer native.PlayerID
 }
 
 type testDamageSource struct{}
@@ -267,6 +268,10 @@ func (r *runtimeStub) HandlePlayerDiagnostics(invocation native.InvocationID, in
 		}
 	}
 	return r.diagnosticsErr
+}
+
+func (r *runtimeStub) CancelPlayerInventoryMenus(player native.PlayerID) {
+	r.cancelledMenuPlayer = player
 }
 
 func TestPlayerHandlerChangeWorldFiresOnFirstDestinationTick(t *testing.T) {
@@ -784,6 +789,9 @@ func TestPlayerHandlerJoinAndQuit(t *testing.T) {
 		}
 		if _, ok := players.ID(p); ok {
 			t.Fatal("player remained registered after quit")
+		}
+		if runtime.cancelledMenuPlayer.Generation != 11 {
+			t.Fatalf("cancelled menu player = %+v, want generation 11", runtime.cancelledMenuPlayer)
 		}
 	})
 }

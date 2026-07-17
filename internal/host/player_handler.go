@@ -69,6 +69,10 @@ type playerWorldResolver interface {
 	WorldByHandle(native.WorldID) (*world.World, bool)
 }
 
+type playerInventoryMenuCanceller interface {
+	CancelPlayerInventoryMenus(native.PlayerID)
+}
+
 func (h *PlayerHandler) HandleJump(p *player.Player) {
 	if h.runtime.Subscriptions()&native.PlayerJumpSubscription == 0 {
 		return
@@ -1153,5 +1157,9 @@ func (h *PlayerHandler) HandleQuit(p *player.Player) {
 			h.log.Error("native plugin quit handler failed", "player", p.Name(), "error", err)
 		}
 	}
+	id, registered := h.players.ID(p)
 	h.players.Unregister(p)
+	if canceller, ok := h.runtime.(playerInventoryMenuCanceller); ok && registered {
+		canceller.CancelPlayerInventoryMenus(id)
+	}
 }

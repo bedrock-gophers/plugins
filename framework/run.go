@@ -49,6 +49,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 		return err
 	}
 	players := host.NewPlayers()
+	menus := host.NewInventoryMenus(players)
 	packets := host.NewPackets(players)
 	serverHost := host.NewServer(players)
 	worlds, err := NewPersistentWorldManager(config.Worlds.Directory, log, players)
@@ -147,7 +148,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if err := host.RegisterCommands(pluginRuntime, players); err != nil {
 		return err
 	}
-	packetLease, err = activatePacketIntercept(srv, nativePacketEndpoint{runtime: pluginRuntime, packets: packets, log: log})
+	packetLease, err = activatePacketIntercept(srv, nativePacketEndpoint{runtime: pluginRuntime, packets: packets, menus: menus, log: log})
 	if err != nil {
 		return err
 	}

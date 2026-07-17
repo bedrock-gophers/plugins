@@ -5,7 +5,7 @@ namespace Dragonfly.Native;
 public static partial class Abi
 {
     public const uint PluginVersion = 12;
-    public const uint HostVersion = 68;
+    public const uint HostVersion = 69;
     public const int Ok = 0;
     public const int Error = 1;
     public const uint PlayerCooldownHas = 0;
@@ -384,6 +384,20 @@ public unsafe struct FormView
 }
 
 [StructLayout(LayoutKind.Sequential)]
+public unsafe struct InventoryMenuView
+{
+    public StringView Name;
+    public uint Container;
+    public uint Reserved;
+    public ItemStackViewV3* Items;
+    public ulong ItemCount;
+    public void* CallbackContext;
+    public delegate* unmanaged[Cdecl]<void*, ulong, PlayerSnapshot*, ItemStackViewV3*, int> Submit;
+    public delegate* unmanaged[Cdecl]<void*, ulong, PlayerSnapshot*, int> Close;
+    public delegate* unmanaged[Cdecl]<void*, void> Drop;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 public unsafe struct TitleView
 {
     public StringView Text;
@@ -545,6 +559,8 @@ public unsafe struct HostApi
     public delegate* unmanaged[Cdecl]<ulong, ulong, WorldId, BlockPos, int, uint, int*, int> WorldRedstonePower;
     public delegate* unmanaged[Cdecl]<ulong, ulong, BlockPos, uint, byte*, byte*, int> WorldRedstoneTransaction;
     public delegate* unmanaged[Cdecl]<ulong, ulong, EntityId, EntityAnimationView*, int> WorldEntityAnimation;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, byte, InventoryMenuView*, int> PlayerInventoryMenuSend;
+    public delegate* unmanaged[Cdecl]<ulong, ulong, PlayerId, int> PlayerInventoryMenuClose;
 }
 
 [StructLayout(LayoutKind.Sequential)]
