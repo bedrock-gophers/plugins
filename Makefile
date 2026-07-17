@@ -1,14 +1,38 @@
 BEDROCK_GOPHERS_REV := 6ebac709f3faa369a3ffbbdb5e9b0c78a234cb73
-BEDROCK_GOPHERS_SHORT_REV := $(shell printf '%.12s' $(BEDROCK_GOPHERS_REV))
-GO_FRAMEWORK_REV := $(shell go list -m -f '{{.Version}}' github.com/bedrock-gophers/plugins | sed 's/.*-//')
 CACHE := .cache/bedrock-gophers
 BUILD := .build
 PLUGIN_PROJECTS := $(sort $(wildcard plugins/*/*.csproj))
-DOTNET_RID ?= linux-x64
 DOCKER_IMAGE ?= bedrock-gophers-minimal
 DOCKER_VOLUME ?= bedrock-gophers-minimal-data
 
 .PHONY: check-revision prepare build run docker-build docker-run clean
+
+ifeq ($(OS),Windows_NT)
+
+DOTNET_RID ?= win-x64
+POWERSHELL ?= powershell.exe
+WINDOWS_BUILD_SCRIPT := scripts/windows-build.ps1
+
+check-revision:
+	@$(POWERSHELL) -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(WINDOWS_BUILD_SCRIPT)" -Action CheckRevision -FrameworkRevision "$(BEDROCK_GOPHERS_REV)"
+
+prepare: check-revision
+	@$(POWERSHELL) -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(WINDOWS_BUILD_SCRIPT)" -Action Prepare -FrameworkRevision "$(BEDROCK_GOPHERS_REV)" -CachePath "$(CACHE)"
+
+build: prepare
+	@$(POWERSHELL) -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(WINDOWS_BUILD_SCRIPT)" -Action Build -FrameworkRevision "$(BEDROCK_GOPHERS_REV)" -CachePath "$(CACHE)" -BuildPath "$(BUILD)" -DotnetRid "$(DOTNET_RID)"
+
+run: build
+	"$(BUILD)/bin/server.exe"
+
+clean:
+	@$(POWERSHELL) -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$(WINDOWS_BUILD_SCRIPT)" -Action Clean -FrameworkRevision "$(BEDROCK_GOPHERS_REV)" -CachePath "$(CACHE)" -BuildPath "$(BUILD)"
+
+else
+
+BEDROCK_GOPHERS_SHORT_REV := $(shell printf '%.12s' $(BEDROCK_GOPHERS_REV))
+GO_FRAMEWORK_REV := $(shell go list -m -f '{{.Version}}' github.com/bedrock-gophers/plugins | sed 's/.*-//')
+DOTNET_RID ?= linux-x64
 
 check-revision:
 	@test "$(GO_FRAMEWORK_REV)" = "$(BEDROCK_GOPHERS_SHORT_REV)" || (printf 'Go framework is pinned to %s, expected %s\n' "$(GO_FRAMEWORK_REV)" "$(BEDROCK_GOPHERS_SHORT_REV)"; exit 1)
@@ -38,16 +62,15 @@ build: check-revision prepare
 run: build
 	$(BUILD)/bin/server
 
-docker-build:
-	docker build --tag $(DOCKER_IMAGE) .
-
-docker-run: docker-build
-	docker run --rm --init \
-		--publish 19132:19132/udp \
-		--volume $(DOCKER_VOLUME):/app/.data \
-		$(DOCKER_IMAGE)
-
 clean:
 	rm -rf .cache .data .build lib
 	rm -f plugins/*.so
 	find plugins -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
+
+endif
+
+docker-build:
+	docker build --tag $(DOCKER_IMAGE) .
+
+docker-run: docker-build
+	docker run --rm --init --publish 19132:19132/udp --volume $(DOCKER_VOLUME):/app/.data $(DOCKER_IMAGE)

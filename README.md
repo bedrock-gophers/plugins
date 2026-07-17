@@ -7,8 +7,13 @@ make run
 ```
 
 Every `make run` fetches the exact framework revision pinned in `go.mod`, rebuilds the C#
-NativeAOT runtime, rebuilds every local plugin to `.so`, replaces staged plugin binaries, then
-starts the Go server. It does not reuse an older plugin build.
+NativeAOT runtime, rebuilds every local plugin, replaces staged plugin binaries, then starts the
+Go server. It produces `.so` plugins and `.build/bin/server` on Linux, or `.dll` plugins and
+`.build/bin/server.exe` on Windows. It does not reuse an older plugin build.
+
+On Windows, `make build`, `make run`, and `make clean` automatically use the bundled PowerShell
+build helper; Unix tools such as `sed`, `test`, and `printf` are not required. The default .NET
+runtime identifier is `win-x64` and can still be overridden with `DOTNET_RID`.
 
 Every C# project under `plugins/*/` is discovered automatically. Adding another plugin only
 requires a `.csproj` and its C# source.
@@ -50,9 +55,9 @@ command owns that arena's transaction.
 then restores every changed slot.
 `/kitchen form` covers reflected menu, custom, and modal forms with every typed element;
 `/kitchen raw-form` demonstrates the open plugin-defined form interface.
-Compatible precompiled `.so` plugins remain supported by the loader; because the source build
-clears `plugins/*.so`, stage binary-only plugins after `make build` and start `.build/bin/server`
-directly.
+Compatible precompiled plugins remain supported by the loader; because the source build clears
+top-level `plugins/*.so` on Linux or `plugins/*.dll` on Windows, stage binary-only plugins after
+`make build` and start `.build/bin/server` or `.build/bin/server.exe` directly.
 
 ## Docker
 
