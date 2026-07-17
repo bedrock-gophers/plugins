@@ -525,6 +525,7 @@ func (r *Runtime) Close() {
 	r.BeginDisable()
 	r.FinishDisable()
 	drainHostForms(r.hostContext, true)
+	drainHostInventoryMenus(r.hostContext)
 	C.bg_runtime_close(r.ptr)
 	unregisterHost(r.hostContext)
 	r.ptr = nil
@@ -560,6 +561,7 @@ func (r *Runtime) Enable() error {
 func (r *Runtime) BeginDisable() {
 	if r != nil && r.ptr != nil {
 		drainHostForms(r.hostContext, true)
+		drainHostInventoryMenus(r.hostContext)
 		C.bg_runtime_begin_disable(r.ptr)
 	}
 }

@@ -2063,6 +2063,155 @@ internal static unsafe class PluginBridge
             _ = api->PlayerFormClose(api->Context, invocation, player);
         }
 
+        internal static void SendPlayerInventoryMenu(ulong invocation, PlayerId player, ContainerMenu.Value menu, bool update)
+        {
+            ArgumentNullException.ThrowIfNull(menu);
+            var api = Api;
+            if (api is null || api->PlayerInventoryMenuSend == null) return;
+            var title = menu.Title();
+            ArgumentException.ThrowIfNullOrWhiteSpace(title);
+            var container = menu.ContainerType();
+            var sourceItems = menu.Items() ?? throw new ArgumentException("inventory menu items cannot be null", nameof(menu));
+            var size = ContainerMenu.Size(container);
+            if (sourceItems.Count != size)
+                throw new ArgumentException($"inventory menu requires exactly {size} items", nameof(menu));
+            var items = sourceItems.ToArray();
+            using var lease = new InventoryMenuViewLease(title, items);
+            var handle = GCHandle.Alloc(new PendingInventoryMenu(menu, items));
+            var transferred = false;
+            try
+            {
+                fixed (byte* titleData = lease.Title)
+                fixed (ItemStackViewV3* itemData = lease.Views)
+                {
+                    var view = new InventoryMenuView
+                    {
+                        Title = new StringView { Data = titleData, Length = (ulong)lease.Title.Length },
+                        Items = itemData,
+                        ItemCount = (ulong)items.Length,
+                        Container = (uint)container,
+                        Update = update ? (byte)1 : (byte)0,
+                        CallbackContext = (void*)GCHandle.ToIntPtr(handle),
+                        Click = &InventoryMenuClick,
+                        Close = &InventoryMenuClose,
+                        Drop = &InventoryMenuDrop,
+                    };
+                    transferred = true;
+                    _ = api->PlayerInventoryMenuSend(api->Context, invocation, player, &view);
+                }
+            }
+            finally
+            {
+                if (!transferred && handle.IsAllocated) handle.Free();
+            }
+        }
+
+        internal static void ClosePlayerInventoryMenu(ulong invocation, PlayerId player)
+        {
+            var api = Api;
+            if (api is null || api->PlayerInventoryMenuClose == null) return;
+            _ = api->PlayerInventoryMenuClose(api->Context, invocation, player);
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static int InventoryMenuClick(void* callbackContext, ulong invocation, PlayerSnapshot* snapshot, uint slot)
+        {
+            try
+            {
+                var pending = PendingInventoryMenuFrom(callbackContext);
+                if (pending is null || snapshot is null || slot >= pending.Items.Length) return Abi.Error;
+                using var invocationScope = InvocationContext.Enter(invocation);
+                var current = SnapshotPlayer(*snapshot, invocation);
+                pending.Menu.Submit(current, checked((int)slot), pending.Items[slot], new World.Tx(invocation));
+                return Abi.Ok;
+            }
+            catch
+            {
+                return Abi.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static int InventoryMenuClose(void* callbackContext, ulong invocation, PlayerSnapshot* snapshot)
+        {
+            try
+            {
+                var pending = TakePendingInventoryMenu(callbackContext);
+                if (pending is null || snapshot is null) return Abi.Error;
+                using var invocationScope = InvocationContext.Enter(invocation);
+                pending.Menu.Close(SnapshotPlayer(*snapshot, invocation), new World.Tx(invocation));
+                return Abi.Ok;
+            }
+            catch
+            {
+                return Abi.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static void InventoryMenuDrop(void* callbackContext)
+        {
+            try { _ = TakePendingInventoryMenu(callbackContext); }
+            catch { }
+        }
+
+        private static PendingInventoryMenu? PendingInventoryMenuFrom(void* callbackContext)
+        {
+            if (callbackContext is null) return null;
+            return GCHandle.FromIntPtr((nint)callbackContext).Target as PendingInventoryMenu;
+        }
+
+        private static PendingInventoryMenu? TakePendingInventoryMenu(void* callbackContext)
+        {
+            if (callbackContext is null) return null;
+            var handle = GCHandle.FromIntPtr((nint)callbackContext);
+            var pending = handle.Target as PendingInventoryMenu;
+            handle.Free();
+            return pending;
+        }
+
+        private sealed class PendingInventoryMenu(ContainerMenu.Value menu, Item.Stack[] items)
+        {
+            internal ContainerMenu.Value Menu { get; } = menu;
+            internal Item.Stack[] Items { get; } = items;
+        }
+
+        private sealed class InventoryMenuViewLease : IDisposable
+        {
+            private readonly ItemViewLease[] _leases;
+
+            internal InventoryMenuViewLease(string title, Item.Stack[] items)
+            {
+                Title = Encoding.UTF8.GetBytes(title);
+                if (Title.Length == 0 || Title.Length > 4096)
+                    throw new ArgumentException("inventory menu title exceeds server limits", nameof(title));
+                _leases = new ItemViewLease[items.Length];
+                Views = new ItemStackViewV3[items.Length];
+                try
+                {
+                    for (var index = 0; index < items.Length; index++)
+                    {
+                        var lease = new ItemViewLease(items[index]);
+                        _leases[index] = lease;
+                        Views[index] = lease.View;
+                    }
+                }
+                catch
+                {
+                    Dispose();
+                    throw;
+                }
+            }
+
+            internal byte[] Title { get; }
+            internal ItemStackViewV3[] Views { get; }
+
+            public void Dispose()
+            {
+                foreach (var lease in _leases) lease?.Dispose();
+            }
+        }
+
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
         private static int FormResponse(
             void* callbackContext,

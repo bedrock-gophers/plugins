@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 #define DF_ABI_VERSION 12u
-// Host version 68 adds exact transaction-scoped entity animation playback.
-#define DF_HOST_ABI_VERSION 68u
+// Host version 69 adds interactive client-side inventory menus.
+#define DF_HOST_ABI_VERSION 69u
 #define DF_STATUS_OK 0
 #define DF_STATUS_ERROR 1
 
@@ -357,6 +357,33 @@ typedef void (*DfFormDropFn)(void *callback_context);
 typedef struct { DfStringView request_json; void *callback_context; DfFormResponseFn response; DfFormDropFn drop; } DfFormView;
 #define DF_FORM_RESPONSE_SUBMITTED 0u
 #define DF_FORM_RESPONSE_CLOSED 1u
+/* The snapshot is borrowed only for the duration of the callback. */
+typedef DfStatus (*DfInventoryMenuClickFn)(void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *player, uint32_t slot);
+typedef DfStatus (*DfInventoryMenuCloseFn)(void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *player);
+typedef void (*DfInventoryMenuDropFn)(void *callback_context);
+#define DF_INVENTORY_MENU_CHEST 0u
+#define DF_INVENTORY_MENU_DOUBLE_CHEST 1u
+#define DF_INVENTORY_MENU_HOPPER 2u
+#define DF_INVENTORY_MENU_DROPPER 3u
+#define DF_INVENTORY_MENU_BARREL 4u
+#define DF_INVENTORY_MENU_ENDER_CHEST 5u
+/*
+ * A structurally valid menu transfers callback_context ownership to the host,
+ * even when player_inventory_menu_send returns an error. Click may be invoked
+ * repeatedly. Exactly one of close or drop is invoked terminally.
+ */
+typedef struct {
+    DfStringView title;
+    const DfItemStackViewV3 *items;
+    uint64_t item_count;
+    uint32_t container;
+    uint8_t update;
+    uint8_t reserved[3];
+    void *callback_context;
+    DfInventoryMenuClickFn click;
+    DfInventoryMenuCloseFn close;
+    DfInventoryMenuDropFn drop;
+} DfInventoryMenuView;
 typedef struct { double number; int64_t integer; } DfPlayerStateValue;
 typedef struct { double healed; } DfPlayerHealResult;
 typedef struct { double damage; uint8_t vulnerable; } DfPlayerHurtResult;
@@ -375,6 +402,8 @@ typedef DfStatus (*DfHostPlayerScoreboardFn)(uint64_t context, DfInvocationId in
 typedef DfStatus (*DfHostPlayerScoreboardRemoveFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player);
 typedef DfStatus (*DfHostPlayerFormSendFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfFormView *form);
 typedef DfStatus (*DfHostPlayerFormCloseFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player);
+typedef DfStatus (*DfHostPlayerInventoryMenuSendFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfInventoryMenuView *menu);
+typedef DfStatus (*DfHostPlayerInventoryMenuCloseFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player);
 typedef DfStatus (*DfHostPlayerTransformFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch);
 typedef DfStatus (*DfHostPlayerKinematicsFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfPlayerKinematics *kinematics);
 typedef DfStatus (*DfHostPlayerKnockBackFn)(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfVec3 source, double force, double height);
@@ -691,6 +720,8 @@ typedef struct {
     DfHostWorldRedstonePowerFn world_redstone_power;
     DfHostWorldRedstoneTransactionFn world_redstone_transaction;
     DfHostWorldEntityAnimationFn world_entity_animation;
+    DfHostPlayerInventoryMenuSendFn player_inventory_menu_send;
+    DfHostPlayerInventoryMenuCloseFn player_inventory_menu_close;
 } DfHostApiV27;
 #define DF_COMMAND_PARAMETER_SUBCOMMAND 1u
 #define DF_COMMAND_PARAMETER_ENUM 2u

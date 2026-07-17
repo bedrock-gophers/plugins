@@ -11,6 +11,25 @@ type PlayerForm struct {
 	RequestJSON []byte
 }
 
+type InventoryMenuContainer uint32
+
+const (
+	InventoryMenuChest InventoryMenuContainer = iota
+	InventoryMenuDoubleChest
+	InventoryMenuHopper
+	InventoryMenuDropper
+	InventoryMenuBarrel
+	InventoryMenuEnderChest
+)
+
+type PlayerInventoryMenu struct {
+	ID        uint64
+	Title     string
+	Container InventoryMenuContainer
+	Items     []ItemStack
+	Update    bool
+}
+
 // PlayerSnapshot is a callback-scoped view of a connected player. The ID may
 // be retained, but values that require an invocation are only usable while the
 // callback that supplied the snapshot is running.
@@ -1074,6 +1093,7 @@ func setHostActive(id uint64, active bool) bool {
 func unregisterHost(id uint64) {
 	if id != 0 {
 		drainHostForms(id, true)
+		drainHostInventoryMenus(id)
 		formMu.Lock()
 		delete(formHostState, id)
 		formMu.Unlock()

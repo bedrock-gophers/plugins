@@ -187,6 +187,8 @@ _Static_assert(offsetof(DfPlayerSnapshotBuffer, name) == 24, "DfPlayerSnapshotBu
 _Static_assert(offsetof(DfPlayerSnapshotBuffer, latency_milliseconds) == 48, "DfPlayerSnapshotBuffer.latency_milliseconds ABI offset changed");
 _Static_assert(offsetof(DfPlayerSnapshotBuffer, position) == 56, "DfPlayerSnapshotBuffer.position ABI offset changed");
 _Static_assert(sizeof(DfFormView) == 40, "DfFormView ABI layout changed");
+_Static_assert(sizeof(DfInventoryMenuView) == 72, "DfInventoryMenuView ABI layout changed");
+_Static_assert(offsetof(DfInventoryMenuView, callback_context) == 40, "DfInventoryMenuView.callback_context ABI offset changed");
 _Static_assert(sizeof(DfWorldId) == 8, "DfWorldId ABI layout changed");
 _Static_assert(sizeof(DfBlockData) == 48, "DfBlockData ABI layout changed");
 _Static_assert(sizeof(DfBlockView) == 32, "DfBlockView ABI layout changed");
@@ -280,8 +282,8 @@ _Static_assert(DF_WORLD_REDSTONE_SCHEDULE_UPDATE == 0u, "redstone schedule-updat
 _Static_assert(DF_WORLD_REDSTONE_CLEAR_BURNOUT == 5u, "redstone clear-burnout operation changed");
 _Static_assert(sizeof(DfDifficultyView) == 24, "DfDifficultyView ABI layout changed");
 _Static_assert(offsetof(DfDifficultyView, starvation_health_limit) == 8, "DfDifficultyView.starvation_health_limit ABI offset changed");
-_Static_assert(sizeof(DfHostApiV27) == 1096, "DfHostApiV27 ABI layout changed");
-_Static_assert(DF_HOST_ABI_VERSION == 68u, "host ABI version changed without bridge review");
+_Static_assert(sizeof(DfHostApiV27) == 1112, "DfHostApiV27 ABI layout changed");
+_Static_assert(DF_HOST_ABI_VERSION == 69u, "host ABI version changed without bridge review");
 _Static_assert(offsetof(DfHostApiV27, player_skin_open) == 80, "DfHostApiV27.player_skin_open ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, player_skin_set) == 112, "DfHostApiV27.player_skin_set ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, inventory_size) == 120, "DfHostApiV27.inventory_size ABI offset changed");
@@ -330,6 +332,8 @@ _Static_assert(offsetof(DfHostApiV27, world_tx_defer) == 1064, "DfHostApiV27.wor
 _Static_assert(offsetof(DfHostApiV27, world_redstone_power) == 1072, "DfHostApiV27.world_redstone_power ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_redstone_transaction) == 1080, "DfHostApiV27.world_redstone_transaction ABI offset changed");
 _Static_assert(offsetof(DfHostApiV27, world_entity_animation) == 1088, "DfHostApiV27.world_entity_animation ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, player_inventory_menu_send) == 1096, "DfHostApiV27.player_inventory_menu_send ABI offset changed");
+_Static_assert(offsetof(DfHostApiV27, player_inventory_menu_close) == 1104, "DfHostApiV27.player_inventory_menu_close ABI offset changed");
 _Static_assert(sizeof(DfEntityAnimationView) == 64, "DfEntityAnimationView ABI layout changed");
 _Static_assert(offsetof(DfEntityAnimationView, stop_condition) == 48, "DfEntityAnimationView.stop_condition ABI offset changed");
 _Static_assert(sizeof(DfEntityNewView) == 152, "DfEntityNewView ABI layout changed");
@@ -389,9 +393,14 @@ extern DfStatus bg_go_player_scoreboard(uint64_t context, DfInvocationId invocat
 extern DfStatus bg_go_player_scoreboard_remove(uint64_t context, DfInvocationId invocation, DfPlayerId player);
 extern DfStatus bg_go_player_form_send(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfFormView *form);
 extern DfStatus bg_go_player_form_close(uint64_t context, DfInvocationId invocation, DfPlayerId player);
+extern DfStatus bg_go_player_inventory_menu_send(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfInventoryMenuView *menu);
+extern DfStatus bg_go_player_inventory_menu_close(uint64_t context, DfInvocationId invocation, DfPlayerId player);
 
 DfStatus bg_call_form_response(DfFormResponseFn callback, void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *submitter, uint32_t outcome, DfStringView response_json) { return callback(callback_context, invocation, submitter, outcome, response_json); }
 void bg_call_form_drop(DfFormDropFn callback, void *callback_context) { callback(callback_context); }
+DfStatus bg_call_inventory_menu_click(DfInventoryMenuClickFn callback, void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *player, uint32_t slot) { return callback(callback_context, invocation, player, slot); }
+DfStatus bg_call_inventory_menu_close(DfInventoryMenuCloseFn callback, void *callback_context, DfInvocationId invocation, const DfPlayerSnapshot *player) { return callback(callback_context, invocation, player); }
+void bg_call_inventory_menu_drop(DfInventoryMenuDropFn callback, void *callback_context) { callback(callback_context); }
 void bg_call_item_stack_views_drop(DfItemStackViewsDropFn callback, void *context) { callback(context); }
 extern DfStatus bg_go_player_transform(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch);
 extern DfStatus bg_go_player_transfer(uint64_t context, DfInvocationId invocation, DfPlayerId player, DfWorldId world, DfVec3 position);
@@ -540,6 +549,8 @@ static DfStatus host_player_scoreboard_remove(uint64_t context, DfInvocationId i
 }
 static DfStatus host_player_form_send(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfFormView *form) { return bg_go_player_form_send(context, invocation, player, form); }
 static DfStatus host_player_form_close(uint64_t context, DfInvocationId invocation, DfPlayerId player) { return bg_go_player_form_close(context, invocation, player); }
+static DfStatus host_player_inventory_menu_send(uint64_t context, DfInvocationId invocation, DfPlayerId player, const DfInventoryMenuView *menu) { return bg_go_player_inventory_menu_send(context, invocation, player, menu); }
+static DfStatus host_player_inventory_menu_close(uint64_t context, DfInvocationId invocation, DfPlayerId player) { return bg_go_player_inventory_menu_close(context, invocation, player); }
 
 static DfStatus host_player_transform(uint64_t context, DfInvocationId invocation, DfPlayerId player, uint32_t kind, DfVec3 vector, double yaw, double pitch) {
     return bg_go_player_transform(context, invocation, player, kind, vector, yaw, pitch);
@@ -1037,6 +1048,8 @@ DfStatus bg_runtime_open(
         .world_redstone_power = host_world_redstone_power,
         .world_redstone_transaction = host_world_redstone_transaction,
         .world_entity_animation = host_world_entity_animation,
+        .player_inventory_menu_send = host_player_inventory_menu_send,
+        .player_inventory_menu_close = host_player_inventory_menu_close,
     };
     DfRuntimeConfig config = {
         .plugin_directory = {
