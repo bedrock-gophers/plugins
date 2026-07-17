@@ -32,7 +32,8 @@ func TestGeneratePlayerTransportMatchesCurrentFiles(t *testing.T) {
 			}
 			// PlayerTextKick was stale private transport with no C# API. New
 			// generation deliberately removes it while preserving every live ID.
-			current = removeLegacyPlayerTextKick(current)
+			current = normalizeLineEndings(removeLegacyPlayerTextKick(current))
+			generated = normalizeLineEndings(generated)
 			if !bytes.Equal(generated, current) {
 				generatedLines, currentLines := strings.Split(string(generated), "\n"), strings.Split(string(current), "\n")
 				for index := 0; index < len(generatedLines) && index < len(currentLines); index++ {

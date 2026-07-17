@@ -1,4 +1,6 @@
 /build/
+/bedrock-gophers.exe
+/plugins/
 /target/
 **/target/
 **/bin/

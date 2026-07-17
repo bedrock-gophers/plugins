@@ -1,13 +1,14 @@
 # Plugins
 
 Each source plugin owns its `.csproj`. `make run` regenerates the C# API, publishes every source
-project as NativeAOT, replaces staged example `.so` files, then starts the server.
+project as NativeAOT for the host platform, replaces staged example native libraries, then starts
+the server. Windows, Linux, and macOS use `.dll`, `.so`, and `.dylib` files respectively.
 It does not hot-reload an existing server process; stop that process and reconnect after rerunning
 `make run` so Bedrock receives the new command metadata.
 
-The loader accepts compatible precompiled `.so` files, but `make run` is source-owned and cleans
-its staged binaries. Stage a precompiled file after the build and start the server directly when
-testing binary-only delivery.
+The loader accepts compatible precompiled native libraries, but `make run` is source-owned and
+cleans its staged binaries. Stage a precompiled file after the build and start the server directly
+when testing binary-only delivery. Set `DOTNET_RID` to override the inferred host RID.
 
 `kitchen-sink` uses every exposed C# API and grows with each parity slice. Its `block` overload
 demonstrates `World.Tx`, `Cube.Pos`, typed `Block.Sand`, and `World.SetOpts` without exposing block

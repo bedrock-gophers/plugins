@@ -4722,7 +4722,7 @@ func syncGeneratedFiles(files []generatedFile, check bool) error {
 	for _, file := range files {
 		if check {
 			current, err := os.ReadFile(file.Path)
-			if err != nil || !bytes.Equal(current, file.Content) {
+			if err != nil || !bytes.Equal(normalizeLineEndings(current), normalizeLineEndings(file.Content)) {
 				return fmt.Errorf("%s is stale; run make generate", file.Path)
 			}
 			continue
@@ -4730,11 +4730,23 @@ func syncGeneratedFiles(files []generatedFile, check bool) error {
 		if err := os.MkdirAll(filepath.Dir(file.Path), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(file.Path, file.Content, 0o644); err != nil {
+		if err := os.WriteFile(file.Path, platformLineEndings(file.Content), 0o644); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func normalizeLineEndings(content []byte) []byte {
+	return bytes.ReplaceAll(content, []byte("\r\n"), []byte("\n"))
+}
+
+func platformLineEndings(content []byte) []byte {
+	content = normalizeLineEndings(content)
+	if runtime.GOOS == "windows" {
+		return bytes.ReplaceAll(content, []byte("\n"), []byte("\r\n"))
+	}
+	return content
 }
 
 func playerHandlerMethods(path string) ([]method, error) {

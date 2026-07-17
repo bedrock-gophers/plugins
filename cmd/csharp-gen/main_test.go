@@ -416,6 +416,17 @@ func TestSyncGeneratedFilesChecksEveryOutput(t *testing.T) {
 	}
 }
 
+func TestSyncGeneratedFilesAcceptsPlatformLineEndings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "generated.g.cs")
+	if err := os.WriteFile(path, []byte("first\r\nsecond\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	files := []generatedFile{{Path: path, Content: []byte("first\nsecond\n")}}
+	if err := syncGeneratedFiles(files, true); err != nil {
+		t.Fatalf("equivalent line endings reported stale: %v", err)
+	}
+}
+
 func TestGeneratedWorldBlockSurfaceKeepsTransportPrivate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tx.go")
 	source := `package world
