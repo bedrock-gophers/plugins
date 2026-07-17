@@ -108,6 +108,25 @@ type ItemStack struct {
 	Enchantments   []ItemEnchantment
 }
 
+type InventoryMenuContainer uint32
+
+const (
+	InventoryMenuChest InventoryMenuContainer = iota
+	InventoryMenuDoubleChest
+	InventoryMenuHopper
+	InventoryMenuDropper
+	InventoryMenuBarrel
+	InventoryMenuEnderChest
+)
+
+type PlayerInventoryMenu struct {
+	ID        uint64
+	Name      string
+	Container InventoryMenuContainer
+	Items     []ItemStack
+	Update    bool
+}
+
 // WorldID is an opaque, process-local handle. Handles are never reused.
 type WorldID uint64
 
@@ -472,6 +491,9 @@ type Host interface {
 	RemovePlayerScoreboard(InvocationID, PlayerID) bool
 	SendPlayerForm(InvocationID, PlayerID, PlayerForm) bool
 	ClosePlayerForm(InvocationID, PlayerID) bool
+	SendPlayerInventoryMenu(InvocationID, PlayerID, PlayerInventoryMenu) bool
+	ClosePlayerInventoryMenu(InvocationID, PlayerID) bool
+	DiscardPlayerInventoryMenu(PlayerID, uint64) bool
 	TransformPlayer(InvocationID, PlayerID, PlayerTransformKind, Vec3, float64, float64) bool
 	TransferPlayer(InvocationID, PlayerID, WorldID, Vec3) bool
 	PlayerKinematics(InvocationID, PlayerID) (PlayerKinematics, bool)
@@ -598,6 +620,11 @@ func (noopHost) SendPlayerScoreboard(InvocationID, PlayerID, PlayerScoreboard) b
 func (noopHost) RemovePlayerScoreboard(InvocationID, PlayerID) bool                 { return false }
 func (noopHost) SendPlayerForm(InvocationID, PlayerID, PlayerForm) bool             { return false }
 func (noopHost) ClosePlayerForm(InvocationID, PlayerID) bool                        { return false }
+func (noopHost) SendPlayerInventoryMenu(InvocationID, PlayerID, PlayerInventoryMenu) bool {
+	return false
+}
+func (noopHost) ClosePlayerInventoryMenu(InvocationID, PlayerID) bool { return false }
+func (noopHost) DiscardPlayerInventoryMenu(PlayerID, uint64) bool     { return false }
 func (noopHost) TransformPlayer(InvocationID, PlayerID, PlayerTransformKind, Vec3, float64, float64) bool {
 	return false
 }
@@ -1074,9 +1101,13 @@ func setHostActive(id uint64, active bool) bool {
 func unregisterHost(id uint64) {
 	if id != 0 {
 		drainHostForms(id, true)
+		drainHostInventoryMenus(id, true)
 		formMu.Lock()
 		delete(formHostState, id)
 		formMu.Unlock()
+		inventoryMenuMu.Lock()
+		delete(inventoryMenuHostState, id)
+		inventoryMenuMu.Unlock()
 		hosts.Delete(id)
 		skinSnapshotMu.Lock()
 		for snapshotID, snapshot := range skinSnapshots {

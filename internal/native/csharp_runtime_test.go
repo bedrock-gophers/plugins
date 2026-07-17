@@ -1013,6 +1013,27 @@ type csharpFormCloseCall struct {
 	player     PlayerID
 }
 
+type csharpInventoryMenuHost struct {
+	*recordingHost
+	snapshot   PlayerSnapshot
+	menuCalls  []PlayerInventoryMenu
+	closeCalls []csharpFormCloseCall
+}
+
+func (h *csharpInventoryMenuHost) SendPlayerInventoryMenu(_ InvocationID, _ PlayerID, menu PlayerInventoryMenu) bool {
+	menu.Items = append([]ItemStack(nil), menu.Items...)
+	h.menuCalls = append(h.menuCalls, menu)
+	return true
+}
+
+func (h *csharpInventoryMenuHost) ClosePlayerInventoryMenu(invocation InvocationID, player PlayerID) bool {
+	h.closeCalls = append(h.closeCalls, csharpFormCloseCall{invocation: invocation, player: player})
+	if len(h.menuCalls) == 0 {
+		return false
+	}
+	return ClosePlayerInventoryMenu(h.menuCalls[len(h.menuCalls)-1].ID, invocation, h.snapshot)
+}
+
 func (h *csharpFormHost) SendPlayerForm(invocation InvocationID, player PlayerID, form PlayerForm) bool {
 	form.RequestJSON = append([]byte(nil), form.RequestJSON...)
 	h.formCalls = append(h.formCalls, csharpFormSendCall{invocation: invocation, player: player, form: form})
@@ -1399,7 +1420,7 @@ func TestCSharpReflectedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	kitchen := commandNamed(t, commands, "kitchen")
-	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 39 {
+	if !slices.Contains(kitchen.Aliases, "ks") || len(kitchen.Overloads) != 40 {
 		t.Fatalf("kitchen descriptor = %#v", kitchen)
 	}
 	if kitchen.Overloads[1].Parameters[0].Name != "echo" ||
@@ -2373,6 +2394,81 @@ func TestCSharpTypedFormFlow(t *testing.T) {
 			t.Fatalf("raw form dismissal texts=%q", host.texts)
 		}
 	})
+}
+
+func TestCSharpInventoryMenuFlow(t *testing.T) {
+	player := PlayerID{UUID: [16]byte{0x31}, Generation: 23}
+	snapshot := PlayerSnapshot{
+		Player: player, Name: "InventoryPlayer", LatencyMilliseconds: 19,
+		Position: Vec3{X: 4.5, Y: 70, Z: -8.25},
+	}
+	host := &csharpInventoryMenuHost{recordingHost: &recordingHost{}, snapshot: snapshot}
+	pluginRuntime := openCSharpRuntimeWithHost(t, host)
+	commands, err := pluginRuntime.Commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kitchen := commandNamed(t, commands, "kitchen")
+	invOverload := -1
+	for index, overload := range kitchen.Overloads {
+		if len(overload.Parameters) == 1 && overload.Parameters[0].Kind == CommandParameterSubcommand && overload.Parameters[0].Name == "inv" {
+			invOverload = index
+			break
+		}
+	}
+	if invOverload < 0 {
+		t.Fatalf("kitchen inventory-menu overload missing: %#v", kitchen.Overloads)
+	}
+
+	invocation := InvocationID(300)
+	output, err := pluginRuntime.HandleCommand(kitchen.Index, CommandInput{
+		Invocation: invocation, Overload: uint64(invOverload),
+		Source: "InventoryPlayer", SourceKind: CommandSourcePlayer, SourcePlayer: &player,
+		SourcePosition: snapshot.Position, Arguments: []string{"inv"},
+		OnlinePlayers: []CommandPlayer{{
+			Player: player, Name: snapshot.Name, LatencyMilliseconds: snapshot.LatencyMilliseconds,
+			Position: snapshot.Position,
+		}},
+	})
+	if err != nil || output.Failed || output.Message != "" || len(host.menuCalls) != 1 {
+		t.Fatalf("inventory menu command: output=%#v calls=%d error=%v", output, len(host.menuCalls), err)
+	}
+	menu := host.menuCalls[0]
+	if menu.Name != "Kitchen inventory" || menu.Container != InventoryMenuChest || menu.Update || len(menu.Items) != 27 {
+		t.Fatalf("inventory menu = %+v", menu)
+	}
+	if menu.Items[0].Identifier != "minecraft:apple" || menu.Items[0].CustomName != "Choose apple" ||
+		menu.Items[1].Identifier != "minecraft:diamond" || menu.Items[1].CustomName != "Choose diamond" {
+		t.Fatalf("inventory menu items = %#v, %#v", menu.Items[0], menu.Items[1])
+	}
+
+	if !SubmitPlayerInventoryMenu(menu.ID, invocation+1, snapshot, menu.Items[0]) {
+		t.Fatal("inventory menu submission rejected")
+	}
+	if len(host.menuCalls) != 2 {
+		t.Fatalf("inventory menu updates = %d, want 2 sends", len(host.menuCalls))
+	}
+	updated := host.menuCalls[1]
+	if !updated.Update || updated.Name != "Kitchen selection" || updated.Container != InventoryMenuChest ||
+		updated.Items[0].Identifier != "minecraft:apple" || updated.Items[0].CustomName != "Select again to close" {
+		t.Fatalf("updated inventory menu = %+v", updated)
+	}
+	if len(host.closeCalls) != 0 || len(host.texts) == 0 || host.texts[len(host.texts)-1] != "Inventory menu selected Choose apple (1)." {
+		t.Fatalf("inventory menu first submit: closes=%+v texts=%q", host.closeCalls, host.texts)
+	}
+	if !SubmitPlayerInventoryMenu(updated.ID, invocation+2, snapshot, updated.Items[0]) {
+		t.Fatal("updated inventory menu submission rejected")
+	}
+	if len(host.closeCalls) != 1 || host.closeCalls[0] != (csharpFormCloseCall{invocation: invocation + 2, player: player}) {
+		t.Fatalf("inventory menu close calls = %+v", host.closeCalls)
+	}
+	if len(host.texts) < 2 || host.texts[len(host.texts)-1] != "Kitchen inventory menu closed." {
+		t.Fatalf("inventory menu messages = %q", host.texts)
+	}
+	before := len(host.texts)
+	if !SubmitPlayerInventoryMenu(updated.ID, invocation+3, snapshot, updated.Items[0]) || len(host.texts) != before {
+		t.Fatal("terminal inventory menu accepted a second callback")
+	}
 }
 
 func requireJSONEqual(t *testing.T, got []byte, want string) {

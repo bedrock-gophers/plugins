@@ -525,6 +525,7 @@ func (r *Runtime) Close() {
 	r.BeginDisable()
 	r.FinishDisable()
 	drainHostForms(r.hostContext, true)
+	drainHostInventoryMenus(r.hostContext, true)
 	C.bg_runtime_close(r.ptr)
 	unregisterHost(r.hostContext)
 	r.ptr = nil
@@ -540,6 +541,7 @@ func (r *Runtime) Enable() error {
 		return errors.New("native runtime host is closed")
 	}
 	activateHostForms(r.hostContext)
+	activateHostInventoryMenus(r.hostContext)
 	var errorBuffer [4096]C.uint8_t
 	if status := C.bg_runtime_enable(
 		r.ptr,
@@ -560,6 +562,7 @@ func (r *Runtime) Enable() error {
 func (r *Runtime) BeginDisable() {
 	if r != nil && r.ptr != nil {
 		drainHostForms(r.hostContext, true)
+		drainHostInventoryMenus(r.hostContext, true)
 		C.bg_runtime_begin_disable(r.ptr)
 	}
 }

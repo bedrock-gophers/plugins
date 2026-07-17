@@ -145,6 +145,20 @@ call Dragonfly's live cooldown map directly.
 Forms use Dragonfly's reflected public-field model through `Form.New`, `NewMenu`, and `NewModal`,
 with typed elements, submitted values, `Closer`, and callback-owned `World.Tx`. `Form.Value`
 remains open for custom implementations, matching Dragonfly's public `form.Form` interface.
+`Inv` provides real client-side inventory menus rather than forms. `Chest`, `DoubleChest`,
+`Hopper`, `Dropper`, `Barrel`, and `EnderChest` render through run-owned fake block containers;
+selection and close callbacks receive the selected typed `Item.Stack` and a callback-owned
+`World.Tx`:
+
+```csharp
+var menu = Inv.NewMenu(handler, "Choose an item", Inv.Container.Chest)
+    .WithStacks(Item.NewStack(new Item.Apple(), 1));
+Inv.SendMenu(player, menu);
+```
+
+`Inv.UpdateMenu` replaces the visible contents and `Inv.CloseContainer` closes it. Menu values are
+immutable: `WithStacks` and `WithStack` return a new value. The host owns callback lifetime across
+replacement, disconnect, plugin shutdown, and synchronous send failure.
 `examples/plugins/kitchen-sink` compiles against every exposed C# API and grows with each parity
 slice.
 

@@ -25,14 +25,21 @@ type packetInterceptEndpoint interface {
 type nativePacketEndpoint struct {
 	runtime *native.Runtime
 	packets *host.Packets
+	menus   *host.InventoryMenus
 	log     *slog.Logger
 }
 
 func (endpoint nativePacketEndpoint) HandleIncomingPacket(ctx *intercept.Context, value packet.Packet) {
+	if endpoint.menus != nil {
+		endpoint.menus.HandleIncomingPacket(ctx, value)
+	}
 	endpoint.handle(ctx, value, native.PacketClientEvent, native.PacketClientSubscription)
 }
 
 func (endpoint nativePacketEndpoint) HandleOutgoingPacket(ctx *intercept.Context, value packet.Packet) {
+	if endpoint.menus != nil {
+		endpoint.menus.HandleOutgoingPacket(ctx, value)
+	}
 	endpoint.handle(ctx, value, native.PacketServerEvent, native.PacketServerSubscription)
 }
 
