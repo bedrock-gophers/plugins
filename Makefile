@@ -1,4 +1,4 @@
-BEDROCK_GOPHERS_REV := 6ebac709f3faa369a3ffbbdb5e9b0c78a234cb73
+BEDROCK_GOPHERS_REV := 9b100ebf11605e3eba5929d68b947917c98a23c1
 CACHE := .cache/bedrock-gophers
 BUILD := .build
 PLUGIN_PROJECTS := $(sort $(wildcard plugins/*/*.csproj))
