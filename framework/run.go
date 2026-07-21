@@ -120,7 +120,9 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	cleanup := runCleanup{
 		log: log,
 		closeStarted: func() error {
-			return srv.Close()
+			err := srv.Close()
+			worlds.DrainClosedEntities()
+			return err
 		},
 		stopScheduling: worlds.StopScheduling,
 		beginPlugins:   pluginRuntime.BeginDisable,

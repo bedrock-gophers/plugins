@@ -419,6 +419,25 @@ func (e *Entities) unregisterHandle(handle *world.EntityHandle) {
 	}
 }
 
+// DrainClosed expires identities whose Dragonfly handles have completed their
+// lifecycle. Cleanup callbacks run outside the registry lock.
+func (e *Entities) DrainClosed() {
+	e.mu.Lock()
+	cleanups := make([]func(), 0)
+	for handle, entry := range e.byHandle {
+		if handle == nil || !handle.Closed() {
+			continue
+		}
+		if cleanup := e.expireHandleLocked(handle, entry); cleanup != nil {
+			cleanups = append(cleanups, cleanup)
+		}
+	}
+	e.mu.Unlock()
+	for _, cleanup := range cleanups {
+		cleanup()
+	}
+}
+
 func (e *Entities) expireHandleLocked(handle *world.EntityHandle, entry entityEntry) func() {
 	delete(e.byHandle, handle)
 	if entry.id.Generation != 0 {

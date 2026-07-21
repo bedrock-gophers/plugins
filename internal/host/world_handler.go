@@ -271,21 +271,8 @@ func (h *WorldHandler) HandleClose(tx *world.Tx) {
 	if h.subscribed(native.WorldCloseSubscription) {
 		h.invoke(tx, "close", h.runtime.HandleWorldClose)
 	}
-	// Dragonfly replaces the handler immediately after this callback, so chunk
-	// entity closure will not emit despawn callbacks. Expire every remaining
-	// handle after the plugin has had its final transaction-scoped view.
-	if h.entities != nil {
-		for entity := range tx.Entities() {
-			if connected, ok := entity.(*player.Player); ok && h.players != nil {
-				if _, accepted := h.players.ID(connected); accepted {
-					// HandleQuit owns accepted-player cleanup and still needs a
-					// valid snapshot after the world begins closing.
-					continue
-				}
-			}
-			h.entities.unregisterHandle(entity.H())
-		}
-	}
+	// Dragonfly saves and closes chunk entities after this callback. Their
+	// native identities must remain alive until both operations have finished.
 }
 
 func (h *WorldHandler) subscribed(subscription uint64) bool {

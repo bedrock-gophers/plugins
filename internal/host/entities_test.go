@@ -209,6 +209,36 @@ func TestEntitiesKeepClosedHandleInspectable(t *testing.T) {
 	}
 }
 
+func TestEntitiesDrainClosedRunsCleanupAfterHandleCloses(t *testing.T) {
+	entities := NewEntities()
+	id := uuid.MustParse("29afce6e-b4dc-4d42-bd02-245cf0d3dff4")
+	handle := world.EntitySpawnOpts{ID: id}.New(
+		player.Type,
+		player.Config{UUID: id, Name: "Closed"},
+	)
+	cleanups := 0
+	handleID, ok := entities.RegisterDetached(handle, func() { cleanups++ })
+	if !ok {
+		t.Fatal("register detached handle")
+	}
+	entities.DrainClosed()
+	if cleanups != 0 {
+		t.Fatalf("live handle cleanup calls = %d", cleanups)
+	}
+	_ = handle.Close()
+	entities.DrainClosed()
+	if cleanups != 1 {
+		t.Fatalf("closed handle cleanup calls = %d", cleanups)
+	}
+	if resolved, ok := entities.HandleByID(handleID); ok || resolved != nil {
+		t.Fatalf("drained handle = %p, ok=%v", resolved, ok)
+	}
+	entities.DrainClosed()
+	if cleanups != 1 {
+		t.Fatalf("repeated drain cleanup calls = %d", cleanups)
+	}
+}
+
 func TestEntitiesDoNotAllocateHandlesUntilExposed(t *testing.T) {
 	withPlayerTx(t, func(_ *world.Tx, connected *player.Player) {
 		entities := NewEntities()

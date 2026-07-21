@@ -686,6 +686,7 @@ func (m *WorldManager) CloseCustom() error {
 
 func (m *WorldManager) finishWorldClose(entry *managedWorld, closeWorld func() error) error {
 	err := closeWorld()
+	m.DrainClosedEntities()
 	if err == nil && entry.provider != nil {
 		err = entry.provider.Err()
 	}
@@ -700,6 +701,12 @@ func (m *WorldManager) finishWorldClose(entry *managedWorld, closeWorld func() e
 	}
 	m.forgetWorld(entry)
 	return nil
+}
+
+// DrainClosedEntities releases native state after Dragonfly has finished
+// saving and closing entity handles.
+func (m *WorldManager) DrainClosedEntities() {
+	m.entityHandles.DrainClosed()
 }
 
 func (m *WorldManager) retryProviderClose(entry *managedWorld) error {
