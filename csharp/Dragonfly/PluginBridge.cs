@@ -3721,6 +3721,10 @@ internal static unsafe class PluginBridge
             HandleEvent = &HandleEvent,
             HandleScheduled = &HandleScheduled,
             Allow = &Allow,
+            CustomItemCount = (void*)(delegate* unmanaged[Cdecl]<void*, ulong>)&CustomItemCount,
+            CustomItemAt = (void*)(delegate* unmanaged[Cdecl]<void*, ulong, CustomItemDescriptor*, int>)&CustomItemAt,
+            CustomBlockCount = (void*)(delegate* unmanaged[Cdecl]<void*, ulong>)&CustomBlockCount,
+            CustomBlockAt = (void*)(delegate* unmanaged[Cdecl]<void*, ulong, CustomBlockDescriptor*, int>)&CustomBlockAt,
         };
         return Descriptor;
     }
@@ -3731,6 +3735,8 @@ internal static unsafe class PluginBridge
         try
         {
             CommandRegistry.Clear();
+            CustomItemRegistry.Clear();
+            CustomBlockRegistry.Clear();
             var state = new PluginState(Factory!, EntityTypes!);
             CurrentState = state;
             return (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
@@ -3786,6 +3792,8 @@ internal static unsafe class PluginBridge
         EntityTypeStrings.Clear();
         Host.Api = null;
         CommandRegistry.Clear();
+        CustomItemRegistry.Clear();
+        CustomBlockRegistry.Clear();
         foreach (var task in Scheduled.Values) task.Task.Complete(Abi.WorldTaskFailed);
         Scheduled.Clear();
     }
@@ -3803,6 +3811,28 @@ internal static unsafe class PluginBridge
             if (count is not null) *count = 0;
             return null;
         }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static ulong CustomItemCount(void* instance) => instance is null ? 0 : CustomItemRegistry.Count;
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int CustomItemAt(void* instance, ulong index, CustomItemDescriptor* output)
+    {
+        if (instance is null || output is null || !CustomItemRegistry.TryGet(index, out var descriptor)) return Abi.Error;
+        *output = descriptor;
+        return Abi.Ok;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static ulong CustomBlockCount(void* instance) => instance is null ? 0 : CustomBlockRegistry.Count;
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int CustomBlockAt(void* instance, ulong index, CustomBlockDescriptor* output)
+    {
+        if (instance is null || output is null || !CustomBlockRegistry.TryGet(index, out var descriptor)) return Abi.Error;
+        *output = descriptor;
+        return Abi.Ok;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

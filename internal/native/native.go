@@ -366,6 +366,27 @@ type CommandInfo struct {
 	Aliases     []string
 }
 
+type CustomItemDefinition struct {
+	Identifier        string
+	Name              string
+	TexturePNG        []byte
+	Group             string
+	Category          uint32
+	MaxCount          int32
+	ComponentDataJSON string
+}
+
+type CustomBlockDefinition struct {
+	Identifier        string
+	Name              string
+	TexturePNG        []byte
+	GeometryJSON      []byte
+	Group             string
+	Category          uint32
+	MaxCount          int32
+	ComponentDataJSON string
+}
+
 type PlayerCommandExecutionInput struct {
 	Player    PlayerSnapshot
 	Command   CommandInfo
@@ -1079,6 +1100,67 @@ func (r *Runtime) Commands() ([]Command, error) {
 		commands = append(commands, command)
 	}
 	return commands, nil
+}
+
+func (r *Runtime) CustomItems() ([]CustomItemDefinition, error) {
+	if r == nil || r.ptr == nil {
+		return nil, errors.New("native runtime is closed")
+	}
+	count := uint64(C.bg_runtime_custom_item_count(r.ptr))
+	if count > 1<<16 {
+		return nil, errors.New("native runtime returned too many custom items")
+	}
+	items := make([]CustomItemDefinition, 0, count)
+	for index := uint64(0); index < count; index++ {
+		var descriptor C.DfCustomItemDescriptor
+		if status := C.bg_runtime_custom_item_at(r.ptr, C.uint64_t(index), &descriptor); status != C.DF_STATUS_OK {
+			return nil, fmt.Errorf("read native custom item %d: status %d", index, int32(status))
+		}
+		if descriptor.texture_png.len > 16<<20 || descriptor.texture_png.len != 0 && descriptor.texture_png.data == nil {
+			return nil, fmt.Errorf("read native custom item %d: invalid texture", index)
+		}
+		if descriptor.component_data_json.len > 1<<20 || descriptor.component_data_json.len != 0 && descriptor.component_data_json.data == nil {
+			return nil, fmt.Errorf("read native custom item %d: invalid component data", index)
+		}
+		items = append(items, CustomItemDefinition{
+			Identifier:        stringView(descriptor.identifier),
+			Name:              stringView(descriptor.name),
+			TexturePNG:        C.GoBytes(unsafe.Pointer(descriptor.texture_png.data), C.int(descriptor.texture_png.len)),
+			Group:             stringView(descriptor.group),
+			Category:          uint32(descriptor.category),
+			MaxCount:          int32(descriptor.max_count),
+			ComponentDataJSON: stringView(descriptor.component_data_json),
+		})
+	}
+	return items, nil
+}
+
+func (r *Runtime) CustomBlocks() ([]CustomBlockDefinition, error) {
+	if r == nil || r.ptr == nil {
+		return nil, errors.New("native runtime is closed")
+	}
+	count := uint64(C.bg_runtime_custom_block_count(r.ptr))
+	if count > 1<<16 {
+		return nil, errors.New("native runtime returned too many custom blocks")
+	}
+	blocks := make([]CustomBlockDefinition, 0, count)
+	for index := uint64(0); index < count; index++ {
+		var descriptor C.DfCustomBlockDescriptor
+		if status := C.bg_runtime_custom_block_at(r.ptr, C.uint64_t(index), &descriptor); status != C.DF_STATUS_OK {
+			return nil, fmt.Errorf("read native custom block %d: status %d", index, int32(status))
+		}
+		if descriptor.texture_png.len > 16<<20 || descriptor.geometry_json.len > 4<<20 || descriptor.component_data_json.len > 1<<20 {
+			return nil, fmt.Errorf("read native custom block %d: payload too large", index)
+		}
+		blocks = append(blocks, CustomBlockDefinition{
+			Identifier: stringView(descriptor.identifier), Name: stringView(descriptor.name),
+			TexturePNG:   C.GoBytes(unsafe.Pointer(descriptor.texture_png.data), C.int(descriptor.texture_png.len)),
+			GeometryJSON: C.GoBytes(unsafe.Pointer(descriptor.geometry_json.data), C.int(descriptor.geometry_json.len)),
+			Group:        stringView(descriptor.group), Category: uint32(descriptor.category), MaxCount: int32(descriptor.max_count),
+			ComponentDataJSON: stringView(descriptor.component_data_json),
+		})
+	}
+	return blocks, nil
 }
 
 func (r *Runtime) HandleCommand(index uint64, input CommandInput) (CommandOutput, error) {

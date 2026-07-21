@@ -793,6 +793,8 @@ typedef DfStatus (*RuntimeEntityDestroyFn)(DfRuntime *, DfEntityInstanceId);
 typedef DfStatus (*RuntimeEntityDecodeNbtFn)(DfRuntime *, uint64_t, const DfEntityExactInput *, DfEntityExactState *);
 typedef DfStatus (*RuntimeEntityCallFn)(DfRuntime *, DfEntityInstanceId, uint32_t, const DfEntityExactInput *, DfEntityExactState *);
 typedef DfStatus (*RuntimeCommandAtFn)(const DfRuntime *, uint64_t, DfCommandDescriptor *);
+typedef DfStatus (*RuntimeCustomItemAtFn)(const DfRuntime *, uint64_t, DfCustomItemDescriptor *);
+typedef DfStatus (*RuntimeCustomBlockAtFn)(const DfRuntime *, uint64_t, DfCustomBlockDescriptor *);
 typedef DfStatus (*RuntimeCommandFn)(DfRuntime *, uint64_t, const DfCommandInput *, DfCommandState *);
 typedef DfStatus (*RuntimeCommandEnumFn)(DfRuntime *, uint64_t, uint64_t, uint64_t, const DfCommandEnumContext *, DfStringBuffer *);
 typedef DfStatus (*RuntimeEventFn)(DfRuntime *, DfEventId, const void *, void *);
@@ -809,6 +811,10 @@ struct BgRuntimeLibrary {
     RuntimeDisableFn disable;
     RuntimeCountFn plugin_count;
     RuntimeCountFn subscriptions;
+    RuntimeCountFn custom_item_count;
+    RuntimeCustomItemAtFn custom_item_at;
+    RuntimeCountFn custom_block_count;
+    RuntimeCustomBlockAtFn custom_block_at;
     RuntimeCountFn entity_type_count;
     RuntimeEntityTypeAtFn entity_type_at;
     RuntimeEntityAdoptFn entity_adopt;
@@ -879,6 +885,10 @@ DfStatus bg_runtime_open(
     RuntimeDisableFn disable = (RuntimeDisableFn) load_symbol(handle, "df_runtime_disable", error, error_capacity);
     RuntimeCountFn plugin_count = (RuntimeCountFn) load_symbol(handle, "df_runtime_plugin_count", error, error_capacity);
     RuntimeCountFn subscriptions = (RuntimeCountFn) load_symbol(handle, "df_runtime_subscriptions", error, error_capacity);
+    RuntimeCountFn custom_item_count = (RuntimeCountFn) load_symbol(handle, "df_runtime_custom_item_count", error, error_capacity);
+    RuntimeCustomItemAtFn custom_item_at = (RuntimeCustomItemAtFn) load_symbol(handle, "df_runtime_custom_item_at", error, error_capacity);
+    RuntimeCountFn custom_block_count = (RuntimeCountFn) load_symbol(handle, "df_runtime_custom_block_count", error, error_capacity);
+    RuntimeCustomBlockAtFn custom_block_at = (RuntimeCustomBlockAtFn) load_symbol(handle, "df_runtime_custom_block_at", error, error_capacity);
     RuntimeCountFn entity_type_count = (RuntimeCountFn) load_symbol(handle, "df_runtime_entity_type_count", error, error_capacity);
     RuntimeEntityTypeAtFn entity_type_at = (RuntimeEntityTypeAtFn) load_symbol(handle, "df_runtime_entity_type_at", error, error_capacity);
     RuntimeEntityAdoptFn entity_adopt = (RuntimeEntityAdoptFn) load_symbol(handle, "df_runtime_entity_adopt", error, error_capacity);
@@ -899,7 +909,7 @@ DfStatus bg_runtime_open(
     RuntimeEventFn handle_event = (RuntimeEventFn) load_symbol(handle, "df_runtime_handle_event", error, error_capacity);
     RuntimeScheduledFn handle_scheduled = (RuntimeScheduledFn) load_symbol(handle, "df_runtime_handle_scheduled", error, error_capacity);
     RuntimeAllowFn allow = (RuntimeAllowFn) load_symbol(handle, "df_runtime_allow", error, error_capacity);
-    if (create == NULL || destroy == NULL || enable == NULL || begin_disable == NULL || finish_disable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || entity_type_count == NULL || entity_type_at == NULL || entity_adopt == NULL || entity_adopt_local == NULL || entity_load == NULL || entity_save == NULL || entity_tick == NULL || entity_hurt == NULL || entity_heal == NULL || entity_death == NULL || entity_destroy == NULL || entity_decode_nbt == NULL || entity_call == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_event == NULL || handle_scheduled == NULL || allow == NULL) {
+    if (create == NULL || destroy == NULL || enable == NULL || begin_disable == NULL || finish_disable == NULL || disable == NULL || plugin_count == NULL || subscriptions == NULL || custom_item_count == NULL || custom_item_at == NULL || custom_block_count == NULL || custom_block_at == NULL || entity_type_count == NULL || entity_type_at == NULL || entity_adopt == NULL || entity_adopt_local == NULL || entity_load == NULL || entity_save == NULL || entity_tick == NULL || entity_hurt == NULL || entity_heal == NULL || entity_death == NULL || entity_destroy == NULL || entity_decode_nbt == NULL || entity_call == NULL || command_count == NULL || command_at == NULL || handle_command == NULL || command_enum_options == NULL || handle_event == NULL || handle_scheduled == NULL || allow == NULL) {
         return DF_STATUS_ERROR;
     }
 
@@ -1070,6 +1080,10 @@ DfStatus bg_runtime_open(
     library->disable = disable;
     library->plugin_count = plugin_count;
     library->subscriptions = subscriptions;
+    library->custom_item_count = custom_item_count;
+    library->custom_item_at = custom_item_at;
+    library->custom_block_count = custom_block_count;
+    library->custom_block_at = custom_block_at;
     library->entity_type_count = entity_type_count;
     library->entity_type_at = entity_type_at;
     library->entity_adopt = entity_adopt;
@@ -1134,6 +1148,22 @@ uint64_t bg_runtime_plugin_count(const BgRuntimeLibrary *library) {
 
 uint64_t bg_runtime_subscriptions(const BgRuntimeLibrary *library) {
     return library == NULL ? 0 : library->subscriptions(library->runtime);
+}
+
+uint64_t bg_runtime_custom_item_count(const BgRuntimeLibrary *library) {
+    return library == NULL ? 0 : library->custom_item_count(library->runtime);
+}
+
+DfStatus bg_runtime_custom_item_at(const BgRuntimeLibrary *library, uint64_t index, DfCustomItemDescriptor *out) {
+    return library == NULL || out == NULL ? DF_STATUS_ERROR : library->custom_item_at(library->runtime, index, out);
+}
+
+uint64_t bg_runtime_custom_block_count(const BgRuntimeLibrary *library) {
+    return library == NULL ? 0 : library->custom_block_count(library->runtime);
+}
+
+DfStatus bg_runtime_custom_block_at(const BgRuntimeLibrary *library, uint64_t index, DfCustomBlockDescriptor *out) {
+    return library == NULL || out == NULL ? DF_STATUS_ERROR : library->custom_block_at(library->runtime, index, out);
 }
 
 uint64_t bg_runtime_entity_type_count(const BgRuntimeLibrary *library) {

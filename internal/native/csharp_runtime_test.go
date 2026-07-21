@@ -161,6 +161,27 @@ func TestCSharpPacketHandlersMutateIncomingAndCancel(t *testing.T) {
 	}
 }
 
+func TestCSharpCustomItems(t *testing.T) {
+	pluginRuntime := openCSharpRuntime(t)
+	items, err := pluginRuntime.CustomItems()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("custom item count = %d, want 1", len(items))
+	}
+	item := items[0]
+	if item.Identifier != "kitchen:test_gem" || item.Name != "Kitchen Test Gem" || item.Category != 4 || item.MaxCount != 16 {
+		t.Fatalf("custom item = %#v", item)
+	}
+	if len(item.TexturePNG) < 8 || string(item.TexturePNG[1:4]) != "PNG" {
+		t.Fatalf("custom item texture is not PNG: %x", item.TexturePNG)
+	}
+	if !strings.Contains(item.ComponentDataJSON, `"foil":true`) || !strings.Contains(item.ComponentDataJSON, `"minecraft:cooldown"`) {
+		t.Fatalf("custom item component data = %q", item.ComponentDataJSON)
+	}
+}
+
 func TestCSharpVanillaGameModeCommand(t *testing.T) {
 	host := &recordingHost{}
 	pluginRuntime := openCSharpRuntimeWithHost(t, host)

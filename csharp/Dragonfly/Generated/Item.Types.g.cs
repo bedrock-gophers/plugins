@@ -1712,6 +1712,14 @@ namespace Dragonfly
     {
         internal static bool TryEncode(World.Item item, out string identifier, out int metadata)
         {
+            if (item is Block.Custom block)
+            {
+                identifier = block.Identifier; metadata = 0; return true;
+            }
+            if (item is Item.Custom custom)
+            {
+                identifier = custom.Identifier; metadata = 0; return true;
+            }
             switch (item)
             {
                 case Item.AmethystShard _:
@@ -2691,6 +2699,8 @@ namespace Dragonfly
 
         internal static World.Item Decode(string identifier, int metadata)
         {
+            if (metadata == 0 && CustomBlockRegistry.Contains(identifier)) return new Block.Custom(identifier);
+            if (metadata == 0 && CustomItemRegistry.Contains(identifier)) return new Item.Custom(identifier);
             if (identifier == "minecraft:amethyst_shard" && metadata == 0) return new Item.AmethystShard();
             if (identifier == "minecraft:apple" && metadata == 0) return new Item.Apple();
             if (identifier == "minecraft:arrow" && metadata == 0) return new Item.Arrow(Potion.Water());

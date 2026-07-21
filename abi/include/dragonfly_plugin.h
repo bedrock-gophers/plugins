@@ -1476,6 +1476,40 @@ typedef struct {
     DfPluginAllowFn allow;
 } DfPluginApiV12;
 
+typedef struct {
+    DfStringView identifier;
+    DfStringView name;
+    DfStringView texture_png;
+    DfStringView group;
+    uint32_t category;
+    int32_t max_count;
+    DfStringView component_data_json;
+} DfCustomItemDescriptor;
+
+typedef uint64_t (*DfPluginCustomItemCountFn)(void *instance);
+typedef DfStatus (*DfPluginCustomItemAtFn)(void *instance, uint64_t index, DfCustomItemDescriptor *out);
+
+typedef struct DfCustomBlockDescriptor DfCustomBlockDescriptor;
+
+typedef struct {
+    DfPluginApiV12 base;
+    DfPluginCustomItemCountFn custom_item_count;
+    DfPluginCustomItemAtFn custom_item_at;
+    uint64_t (*custom_block_count)(void *instance);
+    DfStatus (*custom_block_at)(void *instance, uint64_t index, DfCustomBlockDescriptor *out);
+} DfPluginApiV12Items;
+
+struct DfCustomBlockDescriptor {
+    DfStringView identifier;
+    DfStringView name;
+    DfStringView texture_png;
+    DfStringView geometry_json;
+    DfStringView group;
+    uint32_t category;
+    int32_t max_count;
+    DfStringView component_data_json;
+};
+
 typedef const DfPluginApiV12 *(*DfPluginEntryV12Fn)(void);
 
 typedef struct DfRuntime DfRuntime;
@@ -1489,6 +1523,10 @@ void df_runtime_disable(DfRuntime *runtime);
 void df_runtime_destroy(DfRuntime *runtime);
 uint64_t df_runtime_plugin_count(const DfRuntime *runtime);
 uint64_t df_runtime_subscriptions(const DfRuntime *runtime);
+uint64_t df_runtime_custom_item_count(const DfRuntime *runtime);
+DfStatus df_runtime_custom_item_at(const DfRuntime *runtime, uint64_t index, DfCustomItemDescriptor *out);
+uint64_t df_runtime_custom_block_count(const DfRuntime *runtime);
+DfStatus df_runtime_custom_block_at(const DfRuntime *runtime, uint64_t index, DfCustomBlockDescriptor *out);
 uint64_t df_runtime_entity_type_count(const DfRuntime *runtime);
 DfStatus df_runtime_entity_type_at(const DfRuntime *runtime, uint64_t index, DfEntityTypeDescriptorV2 *out);
 DfStatus df_runtime_entity_adopt(DfRuntime *runtime, uint64_t type_key, uint64_t opaque, DfEntityInstanceId *out);

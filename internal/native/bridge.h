@@ -28,6 +28,10 @@ void bg_runtime_finish_disable(BgRuntimeLibrary *library);
 void bg_runtime_disable(BgRuntimeLibrary *library);
 uint64_t bg_runtime_plugin_count(const BgRuntimeLibrary *library);
 uint64_t bg_runtime_subscriptions(const BgRuntimeLibrary *library);
+uint64_t bg_runtime_custom_item_count(const BgRuntimeLibrary *library);
+DfStatus bg_runtime_custom_item_at(const BgRuntimeLibrary *library, uint64_t index, DfCustomItemDescriptor *out);
+uint64_t bg_runtime_custom_block_count(const BgRuntimeLibrary *library);
+DfStatus bg_runtime_custom_block_at(const BgRuntimeLibrary *library, uint64_t index, DfCustomBlockDescriptor *out);
 uint64_t bg_runtime_entity_type_count(const BgRuntimeLibrary *library);
 DfStatus bg_runtime_entity_type_at(
     const BgRuntimeLibrary *library,

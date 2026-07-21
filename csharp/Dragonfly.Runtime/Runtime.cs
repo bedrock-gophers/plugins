@@ -48,6 +48,18 @@ internal readonly unsafe struct RuntimeEntityType(
     internal EntityTypeDescriptorV2 Descriptor { get; } = descriptor;
 }
 
+internal readonly unsafe struct RuntimeCustomItem(PluginLibrary plugin, CustomItemDescriptor descriptor)
+{
+    internal PluginLibrary Plugin { get; } = plugin;
+    internal CustomItemDescriptor Descriptor { get; } = descriptor;
+}
+
+internal readonly unsafe struct RuntimeCustomBlock(PluginLibrary plugin, CustomBlockDescriptor descriptor)
+{
+    internal PluginLibrary Plugin { get; } = plugin;
+    internal CustomBlockDescriptor Descriptor { get; } = descriptor;
+}
+
 internal readonly unsafe struct RuntimeEntityInstance(
     PluginLibrary plugin,
     ulong localType,
@@ -74,6 +86,8 @@ internal unsafe sealed class RuntimeState : IDisposable
     internal readonly List<PluginLibrary> Plugins = [];
     internal readonly List<RuntimeCommand> Commands = [];
     internal readonly List<RuntimeEntityType> EntityTypes = [];
+    internal readonly List<RuntimeCustomItem> CustomItems = [];
+    internal readonly List<RuntimeCustomBlock> CustomBlocks = [];
     internal readonly Dictionary<ulong, RuntimeEntityInstance> EntityInstances = [];
     internal readonly Dictionary<ulong, RuntimeEntityOpen> EntityOpens = [];
     internal ulong Subscriptions;
@@ -95,6 +109,8 @@ internal unsafe sealed class RuntimeState : IDisposable
         {
             foreach (var path in Directory.EnumerateFiles(directory, NativeExtension()).Order(StringComparer.Ordinal))
                 runtime.Add(path, host);
+            runtime.PublishCustomItems();
+            runtime.PublishCustomBlocks();
             runtime.PublishEntityTypes();
             return runtime;
         }
@@ -113,7 +129,7 @@ internal unsafe sealed class RuntimeState : IDisposable
         var library = NativeLibrary.Load(path);
         var entry = (delegate* unmanaged[Cdecl]<PluginApi*>)NativeLibrary.GetExport(library, "df_plugin_entry_v12");
         var api = entry();
-        if (api is null || api->Header.Version != Abi.PluginVersion || api->Header.Size < sizeof(PluginApi))
+        if (api is null || api->Header.Version != Abi.PluginVersion || api->Header.Size < Abi.PluginV12BaseSize)
             throw new InvalidOperationException($"{path} has an incompatible plugin API");
         if (api->Id.Length == 0 || api->Id.Data is null)
             throw new InvalidOperationException($"{path} has an empty plugin ID");
@@ -132,6 +148,60 @@ internal unsafe sealed class RuntimeState : IDisposable
         }
         Plugins.Add(new PluginLibrary { Api = api, Instance = instance });
         Subscriptions |= api->Header.Subscriptions;
+    }
+
+    private void PublishCustomItems()
+    {
+        var identifiers = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var plugin in Plugins)
+        {
+            if (plugin.Api->Header.Size < (uint)sizeof(PluginApi) || plugin.Api->CustomItemCount is null) continue;
+            var count = ((delegate* unmanaged[Cdecl]<void*, ulong>)plugin.Api->CustomItemCount)(plugin.Instance);
+            if (count > 1 << 16 || count != 0 && plugin.Api->CustomItemAt is null)
+                throw new InvalidOperationException($"plugin {Utf8(plugin.Api->Id)} returned invalid custom item callbacks");
+            for (var index = 0UL; index < count; index++)
+            {
+                CustomItemDescriptor descriptor;
+                var read = (delegate* unmanaged[Cdecl]<void*, ulong, CustomItemDescriptor*, int>)plugin.Api->CustomItemAt;
+                if (read(plugin.Instance, index, &descriptor) != Abi.Ok || descriptor.Identifier.Data is null ||
+                    descriptor.Identifier.Length == 0 || descriptor.Name.Data is null || descriptor.Name.Length == 0 ||
+                    descriptor.TexturePng.Data is null || descriptor.TexturePng.Length == 0 ||
+                    descriptor.ComponentDataJson.Length > 1 << 20 ||
+                    descriptor.ComponentDataJson.Length != 0 && descriptor.ComponentDataJson.Data is null)
+                    throw new InvalidOperationException($"plugin {Utf8(plugin.Api->Id)} returned an invalid custom item");
+                var identifier = Utf8(descriptor.Identifier);
+                if (!identifiers.Add(identifier)) throw new InvalidOperationException($"duplicate custom item {identifier}");
+                CustomItems.Add(new RuntimeCustomItem(plugin, descriptor));
+            }
+        }
+    }
+
+    private void PublishCustomBlocks()
+    {
+        var identifiers = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var plugin in Plugins)
+        {
+            if (plugin.Api->Header.Size < (uint)sizeof(PluginApi) || plugin.Api->CustomBlockCount is null) continue;
+            var count = ((delegate* unmanaged[Cdecl]<void*, ulong>)plugin.Api->CustomBlockCount)(plugin.Instance);
+            if (count > 1 << 16 || count != 0 && plugin.Api->CustomBlockAt is null)
+                throw new InvalidOperationException($"plugin {Utf8(plugin.Api->Id)} returned invalid custom block callbacks");
+            for (var index = 0UL; index < count; index++)
+            {
+                CustomBlockDescriptor descriptor;
+                var read = (delegate* unmanaged[Cdecl]<void*, ulong, CustomBlockDescriptor*, int>)plugin.Api->CustomBlockAt;
+                if (read(plugin.Instance, index, &descriptor) != Abi.Ok || descriptor.Identifier.Data is null ||
+                    descriptor.Identifier.Length == 0 || descriptor.Name.Data is null || descriptor.Name.Length == 0 ||
+                    descriptor.TexturePng.Data is null || descriptor.TexturePng.Length == 0 ||
+                    descriptor.TexturePng.Length > 16 << 20 || descriptor.GeometryJson.Length > 4 << 20 ||
+                    descriptor.GeometryJson.Length != 0 && descriptor.GeometryJson.Data is null ||
+                    descriptor.ComponentDataJson.Length > 1 << 20 ||
+                    descriptor.ComponentDataJson.Length != 0 && descriptor.ComponentDataJson.Data is null)
+                    throw new InvalidOperationException($"plugin {Utf8(plugin.Api->Id)} returned an invalid custom block");
+                var identifier = Utf8(descriptor.Identifier);
+                if (!identifiers.Add(identifier)) throw new InvalidOperationException($"duplicate custom block {identifier}");
+                CustomBlocks.Add(new RuntimeCustomBlock(plugin, descriptor));
+            }
+        }
     }
 
     private void PublishEntityTypes()
@@ -245,6 +315,38 @@ internal unsafe sealed class RuntimeState : IDisposable
     internal ulong CommandCount()
     {
         lock (Gate) return _running ? (ulong)Commands.Count : 0;
+    }
+
+    internal ulong CustomItemCount()
+    {
+        lock (Gate) return (ulong)CustomItems.Count;
+    }
+
+    internal int CustomItemAt(ulong index, CustomItemDescriptor* output)
+    {
+        if (output is null) return Abi.Error;
+        lock (Gate)
+        {
+            if (index >= (ulong)CustomItems.Count) return Abi.Error;
+            *output = CustomItems[(int)index].Descriptor;
+            return Abi.Ok;
+        }
+    }
+
+    internal ulong CustomBlockCount()
+    {
+        lock (Gate) return (ulong)CustomBlocks.Count;
+    }
+
+    internal int CustomBlockAt(ulong index, CustomBlockDescriptor* output)
+    {
+        if (output is null) return Abi.Error;
+        lock (Gate)
+        {
+            if (index >= (ulong)CustomBlocks.Count) return Abi.Error;
+            *output = CustomBlocks[(int)index].Descriptor;
+            return Abi.Ok;
+        }
     }
 
     internal ulong EntityTypeCount()
@@ -619,6 +721,34 @@ public static unsafe class Exports
 
     [UnmanagedCallersOnly(EntryPoint = "df_runtime_subscriptions", CallConvs = [typeof(CallConvCdecl)])]
     public static ulong Subscriptions(void* runtime) => TryState(runtime)?.Subscriptions ?? 0;
+
+    [UnmanagedCallersOnly(EntryPoint = "df_runtime_custom_item_count", CallConvs = [typeof(CallConvCdecl)])]
+    public static ulong CustomItemCount(void* runtime)
+    {
+        try { return State(runtime).CustomItemCount(); }
+        catch { return 0; }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "df_runtime_custom_item_at", CallConvs = [typeof(CallConvCdecl)])]
+    public static int CustomItemAt(void* runtime, ulong index, CustomItemDescriptor* output)
+    {
+        try { return State(runtime).CustomItemAt(index, output); }
+        catch { return Abi.Error; }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "df_runtime_custom_block_count", CallConvs = [typeof(CallConvCdecl)])]
+    public static ulong CustomBlockCount(void* runtime)
+    {
+        try { return State(runtime).CustomBlockCount(); }
+        catch { return 0; }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "df_runtime_custom_block_at", CallConvs = [typeof(CallConvCdecl)])]
+    public static int CustomBlockAt(void* runtime, ulong index, CustomBlockDescriptor* output)
+    {
+        try { return State(runtime).CustomBlockAt(index, output); }
+        catch { return Abi.Error; }
+    }
 
     [UnmanagedCallersOnly(EntryPoint = "df_runtime_entity_type_count", CallConvs = [typeof(CallConvCdecl)])]
     public static ulong EntityTypeCount(void* runtime)

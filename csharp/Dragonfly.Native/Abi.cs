@@ -5,6 +5,7 @@ namespace Dragonfly.Native;
 public static partial class Abi
 {
     public const uint PluginVersion = 12;
+    public const uint PluginV12BaseSize = 144;
     public const uint HostVersion = 69;
     public const int Ok = 0;
     public const int Error = 1;
@@ -592,6 +593,35 @@ public unsafe struct PluginApi
     public delegate* unmanaged[Cdecl]<void*, uint, void*, void*, int> HandleEvent;
     public delegate* unmanaged[Cdecl]<void*, ulong, ulong, uint, uint, int> HandleScheduled;
     public delegate* unmanaged[Cdecl]<void*, AllowInput*, StringBuffer*, byte*, int> Allow;
+    public void* CustomItemCount;
+    public void* CustomItemAt;
+    public void* CustomBlockCount;
+    public void* CustomBlockAt;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct CustomItemDescriptor
+{
+    public StringView Identifier;
+    public StringView Name;
+    public StringView TexturePng;
+    public StringView Group;
+    public uint Category;
+    public int MaxCount;
+    public StringView ComponentDataJson;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct CustomBlockDescriptor
+{
+    public StringView Identifier;
+    public StringView Name;
+    public StringView TexturePng;
+    public StringView GeometryJson;
+    public StringView Group;
+    public uint Category;
+    public int MaxCount;
+    public StringView ComponentDataJson;
 }
 
 [StructLayout(LayoutKind.Sequential)]

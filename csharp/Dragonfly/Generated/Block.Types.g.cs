@@ -518,6 +518,10 @@ namespace Dragonfly
 
         internal static bool TryEncode(World.Block block, out string identifier, out byte[] properties)
         {
+            if (block is Block.Custom custom)
+            {
+                identifier = custom.Identifier; properties = BlockPropertyCodec.Encode(custom.Properties); return true;
+            }
             switch (block)
             {
                 case Block.Air _:
@@ -1287,6 +1291,7 @@ namespace Dragonfly
 
         internal static World.Block Decode(string identifier, ReadOnlySpan<byte> properties)
         {
+            if (CustomBlockRegistry.Contains(identifier)) return new Block.Custom(identifier, BlockPropertyCodec.Decode(properties));
             switch (identifier)
             {
                 case "minecraft:air":

@@ -5733,6 +5733,7 @@ func generateBlocks(spec blockSpec) []byte {
 		fmt.Fprintf(&output, "        private static readonly byte[] State%d = %s;\n", index, csharpBytes(state.PropertiesNBT))
 	}
 	output.WriteString("\n        internal static bool TryEncode(World.Block block, out string identifier, out byte[] properties)\n        {\n")
+	output.WriteString("            if (block is Block.Custom custom)\n            {\n                identifier = custom.Identifier; properties = BlockPropertyCodec.Encode(custom.Properties); return true;\n            }\n")
 	output.WriteString("            switch (block)\n            {\n")
 	stateIndex := 0
 	for _, definition := range spec.Types {
@@ -5766,6 +5767,7 @@ func generateBlocks(spec blockSpec) []byte {
 	output.WriteString("                case EncodedBlock encoded:\n                    identifier = encoded.Identifier; properties = encoded.Properties; return true;\n")
 	output.WriteString("                default:\n                    identifier = string.Empty; properties = Array.Empty<byte>(); return false;\n            }\n        }\n\n")
 	output.WriteString("        internal static World.Block Decode(string identifier, ReadOnlySpan<byte> properties)\n        {\n")
+	output.WriteString("            if (CustomBlockRegistry.Contains(identifier)) return new Block.Custom(identifier, BlockPropertyCodec.Decode(properties));\n")
 	blockCases, liquidCases := blockDecodeCases(spec)
 	writeBlockDecodeCases(&output, append(blockCases, liquidCases...))
 	output.WriteString("            return new EncodedBlock(identifier, properties.ToArray());\n        }\n\n")
@@ -5941,6 +5943,8 @@ func generateItems(spec itemSpec) []byte {
 	}
 	output.WriteString("    internal static class ItemCodec\n    {\n")
 	output.WriteString("        internal static bool TryEncode(World.Item item, out string identifier, out int metadata)\n        {\n")
+	output.WriteString("            if (item is Block.Custom block)\n            {\n                identifier = block.Identifier; metadata = 0; return true;\n            }\n")
+	output.WriteString("            if (item is Item.Custom custom)\n            {\n                identifier = custom.Identifier; metadata = 0; return true;\n            }\n")
 	output.WriteString("            switch (item)\n            {\n")
 	for _, definition := range spec.Types {
 		for _, state := range definition.States {
@@ -5981,6 +5985,8 @@ func generateItems(spec itemSpec) []byte {
 	output.WriteString("                case EncodedItem encoded:\n                    identifier = encoded.Identifier; metadata = encoded.Metadata; return true;\n")
 	output.WriteString("                default:\n                    identifier = string.Empty; metadata = 0; return false;\n            }\n        }\n\n")
 	output.WriteString("        internal static World.Item Decode(string identifier, int metadata)\n        {\n")
+	output.WriteString("            if (metadata == 0 && CustomBlockRegistry.Contains(identifier)) return new Block.Custom(identifier);\n")
+	output.WriteString("            if (metadata == 0 && CustomItemRegistry.Contains(identifier)) return new Item.Custom(identifier);\n")
 	for _, definition := range spec.Types {
 		for _, state := range definition.States {
 			fmt.Fprintf(&output, "            if (identifier == %s && metadata == %d) return new Item.%s(", strconv.Quote(state.Identifier), state.Metadata, definition.Name)
