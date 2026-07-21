@@ -3737,6 +3737,7 @@ internal static unsafe class PluginBridge
             CommandRegistry.Clear();
             CustomItemRegistry.Clear();
             CustomBlockRegistry.Clear();
+            World.ClearRegisteredEntityTypes();
             var state = new PluginState(Factory!, EntityTypes!);
             CurrentState = state;
             return (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
@@ -3794,6 +3795,7 @@ internal static unsafe class PluginBridge
         CommandRegistry.Clear();
         CustomItemRegistry.Clear();
         CustomBlockRegistry.Clear();
+        World.ClearRegisteredEntityTypes();
         foreach (var task in Scheduled.Values) task.Task.Complete(Abi.WorldTaskFailed);
         Scheduled.Clear();
     }
@@ -3850,10 +3852,12 @@ internal static unsafe class PluginBridge
             if (instance is null || output is null || index > int.MaxValue) return Abi.Error;
             var (key, type) = State(instance).Entities.TypeAt((int)index);
             var identifier = PersistentEntityTypeString(type.EncodeEntity());
+            var networkIdentifier = PersistentEntityTypeString(
+                type is World.NetworkEntityType network ? network.NetworkEncodeEntity() : type.EncodeEntity());
             *output = new EntityTypeDescriptorV2
             {
                 SaveId = identifier,
-                NetworkId = identifier,
+                NetworkId = networkIdentifier,
                 TypeKey = key,
             };
             return Abi.Ok;
@@ -4824,7 +4828,8 @@ internal static unsafe class PluginBridge
         internal PluginState(Func<Plugin> plugin, Func<World.EntityType[]> entityTypes)
         {
             Plugin = plugin();
-            Entities = new CustomEntityTable(entityTypes());
+            Entities = new CustomEntityTable(
+                entityTypes().Concat(World.SnapshotRegisteredEntityTypes()));
         }
 
         internal Plugin Plugin { get; }

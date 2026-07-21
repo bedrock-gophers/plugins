@@ -56,6 +56,22 @@ func TestCSharpCustomEntityRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var markerDefinition native.EntityTypeDefinition
+	var registeredDefinition native.EntityTypeDefinition
+	for _, definition := range definitions {
+		if definition.SaveID == "bedrock_gophers:kitchen_marker" {
+			markerDefinition = definition
+		}
+		if definition.SaveID == "bedrock_gophers:registered_kitchen_marker" {
+			registeredDefinition = definition
+		}
+	}
+	if markerDefinition.NetworkID != "minecraft:armor_stand" {
+		t.Fatalf("custom entity network ID = %q, want minecraft:armor_stand", markerDefinition.NetworkID)
+	}
+	if registeredDefinition.NetworkID != "minecraft:armor_stand" {
+		t.Fatalf("registered entity network ID = %q, want minecraft:armor_stand", registeredDefinition.NetworkID)
+	}
 	registry, err := buildEntityRegistry(entity.DefaultRegistry, definitions, foreignEntityServices{
 		runtime: pluginRuntime, players: players, entities: worlds.entityHandles,
 	})

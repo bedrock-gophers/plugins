@@ -28,6 +28,7 @@ public sealed class KitchenSink : Plugin
 
     public KitchenSink()
     {
+        World.RegisterEntityType(new RegisteredKitchenMarkerType<KitchenSink>());
         Item.RegisterCustom(
             "kitchen:test_gem",
             "Kitchen Test Gem",
@@ -2254,12 +2255,14 @@ public sealed class KitchenSink : Plugin
         public int FireSpreadIncrease() => -4;
     }
 
-    internal sealed class KitchenMarkerType : World.EntityType
+    internal sealed class KitchenMarkerType : World.NetworkEntityType
     {
         public World.Entity Open(World.Tx tx, World.EntityHandle handle, World.EntityData data) =>
             new KitchenMarker(tx, handle, data);
 
         public string EncodeEntity() => "bedrock_gophers:kitchen_marker";
+
+        public string NetworkEncodeEntity() => "minecraft:armor_stand";
 
         public Cube.BBox BBox(World.Entity entity)
         {
@@ -2283,6 +2286,23 @@ public sealed class KitchenSink : Plugin
             ["KitchenValue"] = data.Data is KitchenMarkerData state ? state.Value : 0,
             ["KitchenTicks"] = data.Data is KitchenMarkerData ticked ? ticked.Ticks : 0,
         };
+    }
+
+    // Generic entity types are deliberately registered at runtime instead of
+    // being discovered by the source generator.
+    internal sealed class RegisteredKitchenMarkerType<TMarker> : World.NetworkEntityType
+    {
+        private readonly KitchenMarkerType _inner = new();
+
+        public World.Entity Open(World.Tx tx, World.EntityHandle handle, World.EntityData data) =>
+            _inner.Open(tx, handle, data);
+
+        public string EncodeEntity() => "bedrock_gophers:registered_kitchen_marker";
+        public string NetworkEncodeEntity() => "minecraft:armor_stand";
+        public Cube.BBox BBox(World.Entity entity) => _inner.BBox(entity);
+        public void DecodeNBT(Dictionary<string, object?> values, World.EntityData data) =>
+            _inner.DecodeNBT(values, data);
+        public Dictionary<string, object?> EncodeNBT(World.EntityData data) => _inner.EncodeNBT(data);
     }
 
     internal sealed class KitchenMarkerConfig(int value) : World.EntityConfig
