@@ -9,6 +9,7 @@ import (
 	"github.com/bedrock-gophers/plugins/internal/host"
 	"github.com/bedrock-gophers/plugins/internal/native"
 	"github.com/df-mc/dragonfly/server"
+	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 )
 
@@ -26,6 +27,7 @@ type nativePacketEndpoint struct {
 	runtime *native.Runtime
 	packets *host.Packets
 	menus   *host.InventoryMenus
+	items   map[string]customItemData
 	log     *slog.Logger
 }
 
@@ -37,7 +39,48 @@ func (endpoint nativePacketEndpoint) HandleIncomingPacket(ctx *intercept.Context
 }
 
 func (endpoint nativePacketEndpoint) HandleOutgoingPacket(ctx *intercept.Context, value packet.Packet) {
+	sanitiseItemRegistry(value, endpoint.items)
 	endpoint.handle(ctx, value, native.PacketServerEvent, native.PacketServerSubscription)
+}
+
+func sanitiseItemRegistry(value packet.Packet, customItems map[string]customItemData) {
+	registry, ok := value.(*packet.ItemRegistry)
+	if !ok {
+		return
+	}
+	items := registry.Items[:0]
+	for _, entry := range registry.Items {
+		if entry.Name != "" {
+			applyCustomItemData(&entry, customItems[entry.Name])
+			items = append(items, entry)
+		}
+	}
+	registry.Items = items
+}
+
+func applyCustomItemData(entry *protocol.ItemEntry, data customItemData) {
+	if entry == nil || len(data.properties) == 0 && len(data.components) == 0 {
+		return
+	}
+	if entry.Data == nil {
+		entry.Data = make(map[string]any)
+	}
+	components, ok := entry.Data["components"].(map[string]any)
+	if !ok {
+		components = make(map[string]any)
+		entry.Data["components"] = components
+	}
+	properties, ok := components["item_properties"].(map[string]any)
+	if !ok {
+		properties = make(map[string]any)
+		components["item_properties"] = properties
+	}
+	for name, value := range data.properties {
+		properties[name] = value
+	}
+	for name, value := range data.components {
+		components[name] = value
+	}
 }
 
 func (endpoint nativePacketEndpoint) handle(ctx *intercept.Context, value packet.Packet, event uint32, subscription uint64) {

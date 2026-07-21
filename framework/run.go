@@ -66,6 +66,26 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	customItems, err := pluginRuntime.CustomItems()
+	if err != nil {
+		pluginRuntime.Close()
+		return err
+	}
+	customItemData, err := registerCustomItems(customItems)
+	if err != nil {
+		pluginRuntime.Close()
+		return fmt.Errorf("register plugin custom items: %w", err)
+	}
+	customBlocks, err := pluginRuntime.CustomBlocks()
+	if err != nil {
+		pluginRuntime.Close()
+		return err
+	}
+	customBlockClientData, err := registerCustomBlocks(customBlocks)
+	if err != nil {
+		pluginRuntime.Close()
+		return fmt.Errorf("register plugin custom blocks: %w", err)
+	}
 	worlds.attachRuntime(pluginRuntime)
 	entityTypes, err := pluginRuntime.EntityTypes()
 	if err != nil {
@@ -94,6 +114,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	dragonflyConfig.Allower = composeAllower(dragonflyConfig.Allower, pluginRuntime, log)
 	listenerGate := deferListenerCreation(&dragonflyConfig)
 	wrapPacketListeners(&dragonflyConfig)
+	wrapCustomBlockClientListeners(&dragonflyConfig, customBlockClientData)
 	var srv *server.Server
 	var packetLease *packetInterceptLease
 	cleanup := runCleanup{
@@ -149,7 +170,7 @@ func Run(ctx context.Context, config Config, log *slog.Logger) error {
 	if err := host.RegisterCommands(pluginRuntime, players); err != nil {
 		return err
 	}
-	packetLease, err = activatePacketIntercept(srv, nativePacketEndpoint{runtime: pluginRuntime, packets: packets, menus: menus, log: log})
+	packetLease, err = activatePacketIntercept(srv, nativePacketEndpoint{runtime: pluginRuntime, packets: packets, menus: menus, items: customItemData, log: log})
 	if err != nil {
 		return err
 	}

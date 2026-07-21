@@ -26,6 +26,23 @@ public sealed class KitchenSink : Plugin
     private World.DamageSource? _lastDamageSource;
     private World.HealingSource? _lastHealingSource;
 
+    public KitchenSink()
+    {
+        Item.RegisterCustom(
+            "kitchen:test_gem",
+            "Kitchen Test Gem",
+            Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="),
+            Item.CustomItemCategory.Items,
+            16,
+            data: new Item.CustomItemData()
+                .SetProperty("foil", true)
+                .AddComponent("minecraft:cooldown", new Dictionary<string, object>
+                {
+                    ["category"] = "test_gem",
+                    ["duration"] = 1.5f,
+                }));
+    }
+
     public override void OnEnable()
     {
         Cmd.Register(Cmd.New(

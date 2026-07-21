@@ -13,9 +13,52 @@ import (
 	"github.com/df-mc/dragonfly/server"
 	"github.com/df-mc/dragonfly/server/session"
 	"github.com/sandertv/gophertunnel/minecraft"
+	"github.com/sandertv/gophertunnel/minecraft/nbt"
+	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/login"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 )
+
+func TestSanitiseItemRegistryRemovesEmptyEntries(t *testing.T) {
+	registry := &packet.ItemRegistry{Items: []protocol.ItemEntry{
+		{},
+		{Name: "minecraft:apple"},
+		{},
+		{Name: "toolbox:ruby"},
+	}}
+	sanitiseItemRegistry(registry, nil)
+	if len(registry.Items) != 2 || registry.Items[0].Name != "minecraft:apple" || registry.Items[1].Name != "toolbox:ruby" {
+		t.Fatalf("sanitised items = %#v", registry.Items)
+	}
+}
+
+func TestSanitiseItemRegistryMergesCustomItemData(t *testing.T) {
+	registry := &packet.ItemRegistry{Items: []protocol.ItemEntry{{
+		Name: "toolbox:ruby",
+		Data: map[string]any{"components": map[string]any{
+			"item_properties":        map[string]any{"max_stack_size": int32(16)},
+			"minecraft:display_name": map[string]any{"value": "Ruby"},
+		}},
+	}}}
+	sanitiseItemRegistry(registry, map[string]customItemData{"toolbox:ruby": {
+		properties: map[string]any{"foil": true},
+		components: map[string]any{
+			"minecraft:cooldown": map[string]any{"duration": float32(1)},
+			"minecraft:tags":     map[string]any{"tags": []any{"toolbox:ruby", "toolbox:gem"}},
+		},
+	}})
+	components := registry.Items[0].Data["components"].(map[string]any)
+	properties := components["item_properties"].(map[string]any)
+	if properties["max_stack_size"] != int32(16) || properties["foil"] != true {
+		t.Fatalf("merged properties = %#v", properties)
+	}
+	if components["minecraft:cooldown"] == nil || components["minecraft:display_name"] == nil {
+		t.Fatalf("merged components = %#v", components)
+	}
+	if _, err := nbt.MarshalEncoding(registry.Items[0].Data, nbt.NetworkLittleEndian); err != nil {
+		t.Fatalf("encode merged component NBT: %v", err)
+	}
+}
 
 type packetEndpointFuncs struct {
 	incoming func(*intercept.Context, packet.Packet)
