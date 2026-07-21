@@ -19,12 +19,14 @@ func TestCSharpCustomEntityRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	extension := ".so"
+	libraryName := "libdragonfly_plugin_runtime"
 	if runtime.GOOS == "darwin" {
 		extension = ".dylib"
 	} else if runtime.GOOS == "windows" {
 		extension = ".dll"
+		libraryName = "dragonfly_plugin_runtime"
 	}
-	library := filepath.Join(root, "build", "lib", "libdragonfly_plugin_runtime"+extension)
+	library := filepath.Join(root, "build", "lib", libraryName+extension)
 	plugins := filepath.Join(root, "build", "plugins")
 	if _, err := os.Stat(library); err != nil {
 		t.Skipf("C# runtime not built: run make build-native (%v)", err)
