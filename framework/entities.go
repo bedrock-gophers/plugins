@@ -286,10 +286,17 @@ func (m *WorldManager) NewEntity(value native.EntitySpawnOptions) (result native
 			result, ok = native.EntityHandleID{}, false
 		}
 	}()
+	initialNBT, _, encodeErr := runtime.EntityEncodeNBT(instance, native.EntityCommonData{
+		Position: value.Position, Rotation: value.Rotation, Velocity: value.Velocity,
+		Name: value.NameTag, FireDuration: value.FireDuration, Age: value.Age,
+	})
+	if encodeErr != nil {
+		initialNBT = nil
+	}
 	handle := (world.EntitySpawnOpts{
 		Position: vec3(value.Position), Rotation: rotation(value.Rotation), Velocity: vec3(value.Velocity),
 		ID: uuid.UUID(value.ID), NameTag: value.NameTag,
-	}).New(entityType, managedEntityConfigFor(managed, instance, &value, cleanup))
+	}).New(entityType, managedEntityConfigFor(managed, instance, &value, cleanup, initialNBT))
 	result, ok = m.entityHandles.RegisterDetached(handle, cleanup)
 	if !ok {
 		_ = handle.Close()

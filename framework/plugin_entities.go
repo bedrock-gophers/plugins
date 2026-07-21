@@ -2,6 +2,7 @@ package framework
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
 
@@ -52,19 +53,31 @@ func (t *managedEntityType) DecodeNBT(values map[string]any, data *world.EntityD
 		panic(fmt.Sprintf("decode custom entity NBT: %v", err))
 	}
 	applyEntityCommon(data, common)
-	data.Data = &managedEntityState{runtime: t.services.runtime, instance: instance}
+	data.Data = &managedEntityState{runtime: t.services.runtime, instance: instance, nbt: encoded}
 }
 
 func (t *managedEntityType) EncodeNBT(data *world.EntityData) map[string]any {
 	state := managedState(data)
 	encoded, common, err := state.runtime.EntityEncodeNBT(state.instance, entityCommon(data))
 	if err != nil {
-		panic(fmt.Sprintf("encode custom entity NBT: %v", err))
+		cached := state.cachedNBT()
+		if len(cached) == 0 {
+			slog.Error("encode custom entity NBT; saving common entity data without plugin properties",
+				"entity", t.definition.SaveID, "error", err)
+			return map[string]any{}
+		}
+		slog.Warn("encode custom entity NBT; using last valid plugin properties",
+			"entity", t.definition.SaveID, "error", err)
+		encoded = cached
+	} else {
+		applyEntityCommon(data, common)
+		state.cacheNBT(encoded)
 	}
-	applyEntityCommon(data, common)
 	values, ok := host.UnmarshalNBT(encoded)
 	if !ok {
-		panic("decode custom entity NBT result")
+		slog.Error("decode custom entity NBT result; saving common entity data without plugin properties",
+			"entity", t.definition.SaveID)
+		return map[string]any{}
 	}
 	return values
 }
@@ -79,7 +92,9 @@ func (t *managedEntityType) Open(tx *world.Tx, handle *world.EntityHandle, data 
 	opened, capabilities, common, err := state.runtime.EntityOpen(state.instance, invocation, stable, entityCommon(data))
 	if err != nil || opened == 0 {
 		end()
-		panic(fmt.Sprintf("open custom entity: %v", err))
+		slog.Warn("open custom entity; using local close fallback",
+			"entity", t.definition.SaveID, "error", err)
+		return &managedFallbackEntityView{tx: tx, handle: handle, data: data, state: state}
 	}
 	applyEntityCommon(data, common)
 	tx.Defer(func(*world.Tx) {
@@ -112,13 +127,14 @@ type managedEntityConfig struct {
 	instance native.EntityInstanceID
 	common   *native.EntitySpawnOptions
 	cleanup  func()
+	nbt      []byte
 }
 
 func (c managedEntityConfig) Apply(data *world.EntityData) {
 	if c.common != nil {
 		data.FireDuration, data.Age = c.common.FireDuration, c.common.Age
 	}
-	data.Data = &managedEntityState{runtime: c.runtime, instance: c.instance, cleanup: c.cleanup}
+	data.Data = &managedEntityState{runtime: c.runtime, instance: c.instance, cleanup: c.cleanup, nbt: c.nbt}
 }
 
 type managedEntityState struct {
@@ -126,6 +142,20 @@ type managedEntityState struct {
 	instance native.EntityInstanceID
 	cleanup  func()
 	once     sync.Once
+	nbtMu    sync.RWMutex
+	nbt      []byte
+}
+
+func (s *managedEntityState) cacheNBT(encoded []byte) {
+	s.nbtMu.Lock()
+	s.nbt = append(s.nbt[:0], encoded...)
+	s.nbtMu.Unlock()
+}
+
+func (s *managedEntityState) cachedNBT() []byte {
+	s.nbtMu.RLock()
+	defer s.nbtMu.RUnlock()
+	return append([]byte(nil), s.nbt...)
 }
 
 func (s *managedEntityState) destroy() {
@@ -150,6 +180,32 @@ type managedEntityView struct {
 	invocation native.InvocationID
 	opened     native.EntityOpenID
 }
+
+// managedFallbackEntityView allows Dragonfly to finish closing a chunk after
+// plugin callbacks have stopped accepting work. It deliberately has no ticker.
+type managedFallbackEntityView struct {
+	tx     *world.Tx
+	handle *world.EntityHandle
+	data   *world.EntityData
+	state  *managedEntityState
+}
+
+func (e *managedFallbackEntityView) Close() error {
+	handle := e.tx.RemoveEntity(e)
+	e.state.destroy()
+	return handle.Close()
+}
+
+func (e *managedFallbackEntityView) H() *world.EntityHandle  { return e.handle }
+func (e *managedFallbackEntityView) Position() mgl64.Vec3    { return e.data.Pos }
+func (e *managedFallbackEntityView) Rotation() cube.Rotation { return e.data.Rot }
+func (e *managedFallbackEntityView) Velocity() mgl64.Vec3    { return e.data.Vel }
+func (e *managedFallbackEntityView) SetVelocity(value mgl64.Vec3) {
+	e.data.Vel = value
+}
+func (e *managedFallbackEntityView) Teleport(value mgl64.Vec3) { e.data.Pos = value }
+func (e *managedFallbackEntityView) NameTag() string           { return e.data.Name }
+func (e *managedFallbackEntityView) SetNameTag(value string)   { e.data.Name = value }
 
 func (e *managedEntityView) Close() error {
 	common, err := e.state.runtime.EntityClose(e.opened, e.invocation, entityCommon(e.data))
@@ -190,14 +246,48 @@ func (e *managedEntityView) Rotation() cube.Rotation {
 	return rotation(value)
 }
 
+func (e *managedEntityView) Velocity() mgl64.Vec3 {
+	return e.data.Vel
+}
+
+func (e *managedEntityView) SetVelocity(velocity mgl64.Vec3) {
+	e.data.Vel = velocity
+}
+
+func (e *managedEntityView) Teleport(position mgl64.Vec3) {
+	e.data.Pos = position
+}
+
+func (e *managedEntityView) NameTag() string {
+	return e.data.Name
+}
+
+func (e *managedEntityView) SetNameTag(nameTag string) {
+	if e.data.Name == nameTag {
+		return
+	}
+	e.data.Name = nameTag
+	e.notifyState(e.tx)
+}
+
+func (e *managedEntityView) notifyState(tx *world.Tx) {
+	for _, viewer := range tx.Viewers(e.data.Pos) {
+		viewer.ViewEntityState(e)
+	}
+}
+
 type managedTickerEntityView struct{ *managedEntityView }
 
-func (e *managedTickerEntityView) Tick(_ *world.Tx, current int64) {
+func (e *managedTickerEntityView) Tick(tx *world.Tx, current int64) {
+	previousNameTag := e.data.Name
 	common, err := e.state.runtime.EntityTickExact(e.opened, e.invocation, current, entityCommon(e.data))
 	if err != nil {
 		panic(fmt.Sprintf("tick custom entity: %v", err))
 	}
 	applyEntityCommon(e.data, common)
+	if e.data.Name != previousNameTag {
+		e.notifyState(tx)
+	}
 }
 
 func managedState(data *world.EntityData) *managedEntityState {
@@ -269,6 +359,10 @@ func managedEntityTypeInfo(entityType world.EntityType) (*managedEntityType, boo
 	return managed, ok
 }
 
-func managedEntityConfigFor(entityType *managedEntityType, instance native.EntityInstanceID, common *native.EntitySpawnOptions, cleanup func()) world.EntityConfig {
-	return managedEntityConfig{runtime: entityType.services.runtime, instance: instance, common: common, cleanup: cleanup}
+func managedEntityConfigFor(entityType *managedEntityType, instance native.EntityInstanceID, common *native.EntitySpawnOptions, cleanup func(), nbt ...[]byte) world.EntityConfig {
+	var cached []byte
+	if len(nbt) != 0 {
+		cached = nbt[0]
+	}
+	return managedEntityConfig{runtime: entityType.services.runtime, instance: instance, common: common, cleanup: cleanup, nbt: cached}
 }

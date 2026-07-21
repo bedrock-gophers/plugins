@@ -2,6 +2,7 @@ package framework
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/bedrock-gophers/plugins/internal/host"
@@ -17,6 +18,9 @@ type managedEntityRuntimeStub struct {
 	nextOpen                            native.EntityOpenID
 	handles                             map[native.EntityOpenID]native.EntityHandleID
 	openCommon                          native.EntityCommonData
+	encodeErr                           error
+	openErr                             error
+	tickName                            string
 	ticks, releases, destroys           int
 }
 
@@ -30,11 +34,34 @@ func (r *managedEntityRuntimeStub) EntityDecodeNBT(_ uint64, common native.Entit
 }
 
 func (r *managedEntityRuntimeStub) EntityEncodeNBT(_ native.EntityInstanceID, common native.EntityCommonData) ([]byte, native.EntityCommonData, error) {
+	if r.encodeErr != nil {
+		return nil, common, r.encodeErr
+	}
 	encoded, _ := host.MarshalNBT(map[string]any{"value": int32(7)})
 	return encoded, common, nil
 }
 
+func TestManagedEntityEncodeNBTFallsBackToLastValidState(t *testing.T) {
+	runtime := &managedEntityRuntimeStub{}
+	entityType := &managedEntityType{
+		definition: native.EntityTypeDefinition{SaveID: "example:marker"},
+		services:   foreignEntityServices{runtime: runtime},
+	}
+	data := &world.EntityData{Data: &managedEntityState{runtime: runtime, instance: 11}}
+
+	if value := entityType.EncodeNBT(data)["value"]; value != int32(7) {
+		t.Fatalf("initial NBT value = %#v", value)
+	}
+	runtime.encodeErr = errors.New("plugin callback unavailable")
+	if value := entityType.EncodeNBT(data)["value"]; value != int32(7) {
+		t.Fatalf("fallback NBT value = %#v", value)
+	}
+}
+
 func (r *managedEntityRuntimeStub) EntityOpen(_ native.EntityInstanceID, _ native.InvocationID, handle native.EntityHandleID, common native.EntityCommonData) (native.EntityOpenID, uint32, native.EntityCommonData, error) {
+	if r.openErr != nil {
+		return 0, 0, common, r.openErr
+	}
 	r.nextOpen++
 	if r.handles == nil {
 		r.handles = map[native.EntityOpenID]native.EntityHandleID{}
@@ -66,11 +93,21 @@ func (r *managedEntityRuntimeStub) EntityRotation(_ native.EntityOpenID, _ nativ
 
 func (r *managedEntityRuntimeStub) EntityTickExact(_ native.EntityOpenID, _ native.InvocationID, _ int64, common native.EntityCommonData) (native.EntityCommonData, error) {
 	r.ticks++
+	if r.tickName != "" {
+		common.Name = r.tickName
+	}
 	return common, nil
 }
 
 func (r *managedEntityRuntimeStub) EntityReleaseOpen(native.EntityOpenID) { r.releases++ }
 func (r *managedEntityRuntimeStub) EntityDestroy(native.EntityInstanceID) { r.destroys++ }
+
+type managedEntityViewer struct {
+	world.NopViewer
+	stateUpdates int
+}
+
+func (v *managedEntityViewer) ViewEntityState(world.Entity) { v.stateUpdates++ }
 
 func TestManagedEntityRegistryUsesEncodedIdentityOnly(t *testing.T) {
 	registry, err := buildEntityRegistry(entity.DefaultRegistry, []native.EntityTypeDefinition{{
@@ -123,6 +160,10 @@ func TestManagedEntityWorldlessLifecycleUsesExactCallbacks(t *testing.T) {
 	}
 
 	if err := openedWorld.Do(func(tx *world.Tx) {
+		viewer := &managedEntityViewer{}
+		loader := world.NewLoader(1, openedWorld, viewer)
+		loader.Load(tx, 9)
+		defer loader.Close(tx)
 		invocation, end := players.BeginInvocation(tx)
 		defer end()
 		entityID, ok := manager.AddEntity(invocation, handleID, nil)
@@ -136,10 +177,43 @@ func TestManagedEntityWorldlessLifecycleUsesExactCallbacks(t *testing.T) {
 		if current.Position() != (mgl64.Vec3{1, 65, 2}) || current.Rotation() != (cube.Rotation{45, -10}) {
 			t.Fatalf("transform = %v, %v", current.Position(), current.Rotation())
 		}
+		named, ok := current.(nameTagEntity)
+		if !ok {
+			t.Fatal("name tag capability was not preserved")
+		}
+		if named.NameTag() != "Marker" {
+			t.Fatalf("name tag = %q", named.NameTag())
+		}
+		named.SetNameTag("Renamed marker")
+		if named.NameTag() != "Renamed marker" {
+			t.Fatalf("updated name tag = %q", named.NameTag())
+		}
+		moving, ok := current.(velocityEntity)
+		if !ok {
+			t.Fatal("velocity capability was not preserved")
+		}
+		if moving.Velocity() != (mgl64.Vec3{0.25, 0, 0}) {
+			t.Fatalf("velocity = %v", moving.Velocity())
+		}
+		moving.SetVelocity(mgl64.Vec3{0, 0.5, 0})
+		teleporting, ok := current.(teleportEntity)
+		if !ok {
+			t.Fatal("teleport capability was not preserved")
+		}
+		teleporting.Teleport(mgl64.Vec3{4, 70, 5})
+		if current.Position() != (mgl64.Vec3{4, 70, 5}) {
+			t.Fatalf("teleported position = %v", current.Position())
+		}
+		teleporting.Teleport(mgl64.Vec3{1, 65, 2})
 		if _, ok := current.(world.TickerEntity); !ok {
 			t.Fatal("C# ticker capability was not preserved")
 		}
+		viewer.stateUpdates = 0
+		runtime.tickName = "Ticked marker"
 		current.(world.TickerEntity).Tick(tx, 42)
+		if named.NameTag() != "Ticked marker" || viewer.stateUpdates != 1 {
+			t.Fatalf("ticked name tag = %q, state updates=%d", named.NameTag(), viewer.stateUpdates)
+		}
 		entityType := current.H().Type()
 		if got := entityType.BBox(current); got != cube.Box(-0.25, 0, -0.25, 0.25, 0.75, 0.25) {
 			t.Fatalf("BBox() = %v", got)
@@ -155,5 +229,29 @@ func TestManagedEntityWorldlessLifecycleUsesExactCallbacks(t *testing.T) {
 	}
 	if !manager.CloseEntityHandle(handleID) || runtime.destroys != 1 {
 		t.Fatalf("close result/destroys = %d", runtime.destroys)
+	}
+
+	shutdownHandle, ok := manager.NewEntity(native.EntitySpawnOptions{
+		Position: native.Vec3{X: 1, Y: 65, Z: 2}, NameTag: "Shutdown marker",
+		Type: "example:marker", Plugin: 0xface, LocalType: 9, Opaque: 0xcafe,
+	})
+	if !ok {
+		t.Fatal("shutdown entity could not be created")
+	}
+	if err := openedWorld.Do(func(tx *world.Tx) {
+		invocation, end := players.BeginInvocation(tx)
+		defer end()
+		if _, ok := manager.AddEntity(invocation, shutdownHandle, nil); !ok {
+			t.Fatal("shutdown entity could not be added")
+		}
+	}).Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	runtime.openErr = errors.New("plugin callback unavailable")
+	if err := openedWorld.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.destroys != 2 {
+		t.Fatalf("shutdown fallback destroys = %d", runtime.destroys)
 	}
 }
